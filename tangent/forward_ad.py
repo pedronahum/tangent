@@ -492,7 +492,8 @@ class ForwardAD(transformers.TreeTransformer):
         template=template_,
         replace_grad=template.Replace.TANGENT,
         namer=self.namer,
-        x=node,
+        x=node.value,
+        i=node.slice,
         z=self.target)
     return tangent_node
 

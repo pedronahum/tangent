@@ -114,6 +114,9 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
     super(ReplaceGradTransformer, self).__init__()
 
   def visit_Subscript(self, node):
+    # First recursively process the value (e.g., for nested subscripts like d[x][i])
+    node.value = self.visit(node.value)
+
     # Check if node.value is a Name with id 'd' (gast.Constant doesn't have .id)
     if isinstance(node.value, gast.Name) and node.value.id == 'd':
       # In Python 3.9+, gast.Index was removed - slice is used directly
@@ -141,6 +144,9 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
         for elt in new_node.elts:
           elt.ctx = node.ctx
       node = new_node
+    else:
+      # Not a d[...] pattern, just process the slice normally
+      node.slice = self.visit(node.slice)
     return node
 
 

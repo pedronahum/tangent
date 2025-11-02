@@ -583,7 +583,7 @@ class ReverseAD(object):
   def visit_Subscript(self, node):
     adjoint = template.replace('d[x[i]] = d[y]', namer=self.namer,
                                y=self.target, x=node.value,
-                               i=node.slice.value)
+                               i=node.slice)
     return node, adjoint
 
   def visit_Name(self, node):

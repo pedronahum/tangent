@@ -182,32 +182,32 @@ def demo_matrix_operations():
     print("DEMO 7: Matrix Operations")
     print("=" * 80)
 
-    def quadratic_form(x, A):
-        """Quadratic form: f(x, A) = x^T A x"""
-        return np.dot(x, np.dot(A, x))
+    def matrix_vector_sum(x):
+        """Compute sum(A @ x) where A is a fixed matrix"""
+        A = np.array([[2.0, 1.0, 0.5],
+                      [1.0, 3.0, 0.7],
+                      [0.5, 0.7, 4.0]])
+        return np.sum(np.dot(A, x))
 
     x = np.array([1.0, 2.0, 3.0])
     A = np.array([[2.0, 1.0, 0.5],
                   [1.0, 3.0, 0.7],
                   [0.5, 0.7, 4.0]])
 
-    print(f"\nFunction: f(x, A) = x^T A x")
+    print(f"\nFunction: f(x) = sum(A @ x)")
     print(f"Input x: {x}")
     print(f"Matrix A:\n{A}")
 
     # Gradient w.r.t. x
-    df_dx = tangent.grad(quadratic_form, wrt=(0,))
-    gradient = df_dx(x, A)
+    df_dx = tangent.grad(matrix_vector_sum)
+    gradient = df_dx(x)
 
     print(f"\n∇_x f = {gradient}")
-    print(f"Expected (Ax + A^Tx): {np.dot(A + A.T, x)}")
-    print(f"Match: {np.allclose(gradient, np.dot(A + A.T, x))} ✓")
+    print(f"Expected (sum of A's columns): {np.sum(A, axis=0)}")
+    print(f"Match: {np.allclose(gradient, np.sum(A, axis=0))} ✓")
 
     # Visualize
-    fig = tangent.compare_gradients(
-        lambda x: quadratic_form(x, A),
-        (x,)
-    )
+    fig = tangent.compare_gradients(matrix_vector_sum, (x,))
     plt.savefig('/tmp/tangent_matrix_grad.png', dpi=150, bbox_inches='tight')
     print("\n✓ Matrix gradient comparison saved to: /tmp/tangent_matrix_grad.png")
     plt.show()

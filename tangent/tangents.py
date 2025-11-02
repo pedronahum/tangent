@@ -71,8 +71,8 @@ def tattr(z, x):
 
 
 @tangent_(gast.Subscript)
-def tsubscript(z, x):
-  d[z] = d[x]
+def tsubscript(z, x, i):
+  d[z] = d[x][i]
 
 
 # For a reference for primitive tangents, see:
