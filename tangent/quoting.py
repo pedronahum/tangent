@@ -67,10 +67,104 @@ class SourceWithCommentGenerator(astor.codegen.SourceGenerator):
       super(SourceWithCommentGenerator, self).visit(node)
 
 
+def _ensure_type_comments(node):
+  """Recursively ensure all gast nodes have required attributes for AST conversion.
+
+  This is needed for Python 3.8+ compatibility where gast_to_ast expects
+  certain attributes on nodes (type_comment, type_params, type_ignores, etc).
+  """
+  if isinstance(node, gast.AST):
+    # Attributes that may be missing and need default values
+    missing_attrs = {
+        'type_comment': None,
+        'type_params': [],
+        'type_ignores': [],
+    }
+
+    for attr, default in missing_attrs.items():
+      if not hasattr(node, attr):
+        try:
+          setattr(node, attr, default)
+        except (AttributeError, TypeError):
+          pass  # Some nodes don't support setting attributes
+
+    # Recursively process all child nodes
+    for field, value in gast.iter_fields(node):
+      if isinstance(value, list):
+        for item in value:
+          _ensure_type_comments(item)
+      elif isinstance(value, gast.AST):
+        _ensure_type_comments(value)
+
+  return node
+
+
+def _copy_annotations(gast_node, ast_node, annotation_map):
+  """Copy annotations from gast nodes to converted AST nodes using a mapping.
+
+  Args:
+    gast_node: Original gast node (before conversion)
+    ast_node: Converted standard AST node
+    annotation_map: Dictionary mapping gast node IDs to annotations
+  """
+  import ast
+
+  # Copy annotations from the mapping to the converted node
+  gast_id = id(gast_node)
+  if gast_id in annotation_map:
+    annotations = annotation_map[gast_id]
+    if annotations:
+      setattr(ast_node, anno.ANNOTATION_FIELD, annotations)
+
+  # Recursively process child nodes
+  for gast_field, gast_value in gast.iter_fields(gast_node):
+    if hasattr(ast_node, gast_field):
+      ast_value = getattr(ast_node, gast_field)
+
+      if isinstance(gast_value, list) and isinstance(ast_value, list):
+        # Process lists of nodes
+        for gast_child, ast_child in zip(gast_value, ast_value):
+          if isinstance(gast_child, gast.AST) and isinstance(ast_child, ast.AST):
+            _copy_annotations(gast_child, ast_child, annotation_map)
+      elif isinstance(gast_value, gast.AST) and isinstance(ast_value, ast.AST):
+        # Process single nodes
+        _copy_annotations(gast_value, ast_value, annotation_map)
+
+
+def _collect_annotations(node):
+  """Collect all annotations from a gast tree into a dictionary.
+
+  Args:
+    node: A gast node
+
+  Returns:
+    Dictionary mapping node ID to its annotations dictionary
+  """
+  annotation_map = {}
+
+  for child in gast.walk(node):
+    if hasattr(child, anno.ANNOTATION_FIELD):
+      annotations = getattr(child, anno.ANNOTATION_FIELD)
+      if annotations:
+        annotation_map[id(child)] = annotations.copy()
+
+  return annotation_map
+
+
 def to_source(node, indentation=' ' * 4):
   """Return source code of a given AST."""
   if isinstance(node, gast.AST):
-    node = gast.gast_to_ast(node)
+    # Collect annotations before conversion
+    annotation_map = _collect_annotations(node)
+
+    # Add missing type_comment attributes before conversion (Python 3.8+ compat)
+    node_gast = _ensure_type_comments(node)
+    node_ast = gast.gast_to_ast(node_gast)
+
+    # Copy annotations to the converted AST
+    _copy_annotations(node_gast, node_ast, annotation_map)
+
+    node = node_ast
   generator = SourceWithCommentGenerator(indentation, False,
                                          astor.string_repr.pretty_string)
   generator.visit(node)
@@ -83,11 +177,10 @@ def parse_function(fn):
   try:
     return parse_string(inspect.getsource(fn))
   except (IOError, OSError) as e:
-    raise ValueError(
-        'Cannot differentiate function: %s. Tangent must be able to access the '
-        'source code of the function. Functions defined in a Python '
-        'interpreter and functions backed by C extension modules do not '
-        'have accessible source code.' % e)
+    # Use enhanced error handler
+    from tangent.error_handlers import SourceCodeNotAvailableError
+    func_name = fn.__name__ if hasattr(fn, '__name__') else str(fn)
+    raise SourceCodeNotAvailableError(func_name=func_name, func=fn)
 
 
 def parse_string(src):

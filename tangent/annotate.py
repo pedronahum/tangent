@@ -35,11 +35,17 @@ class ResolveCalls(gast.NodeVisitor):
 
   def __init__(self, func):
     self.func = func
-    self.namespace = six.get_function_globals(func)
-    if six.get_function_closure(func):
+    # Unwrap JAX JIT functions to access __globals__ and __code__
+    import types
+    unwrapped = func
+    while not isinstance(unwrapped, types.FunctionType) and hasattr(unwrapped, '__wrapped__'):
+      unwrapped = unwrapped.__wrapped__
+
+    self.namespace = six.get_function_globals(unwrapped)
+    if six.get_function_closure(unwrapped):
       self.namespace.update(dict(zip(
-          func.__code__.co_freevars,
-          (cell.cell_contents for cell in six.get_function_closure(func)))))
+          unwrapped.__code__.co_freevars,
+          (cell.cell_contents for cell in six.get_function_closure(unwrapped)))))
 
   def visit_FunctionDef(self, node):
     self.generic_visit(node)
@@ -144,7 +150,8 @@ class FindStackOps(gast.NodeVisitor):
         _, _, op_id_node = node.args
       elif fn_handle in [utils.pop, utils.pop_stack]:
         _, op_id_node = node.args
-      op_id = op_id_node.s
+      # gast.Str.s was replaced with gast.Constant.value
+      op_id = op_id_node.value if hasattr(op_id_node, 'value') else op_id_node.s
       if op_id not in self.push_pop_pairs:
         self.push_pop_pairs[op_id] = dict()
       assert fn_handle not in self.push_pop_pairs, (
@@ -198,7 +205,8 @@ class AnnotateStacks(gast.NodeVisitor):
       # Retrieve the op_id, e.g. val = tangent.pop(_stack,'abc')
       #                                                    ^^^
       _, op_id_node = node.value.args
-      op_id = op_id_node.s
+      # gast.Str.s was replaced with gast.Constant.value
+      op_id = op_id_node.value if hasattr(op_id_node, 'value') else op_id_node.s
       anno.setanno(node, 'pop_var', node.targets[0])
 
       if op_id not in self.push_pop_pairs:
@@ -229,7 +237,9 @@ class AnnotateStacks(gast.NodeVisitor):
     if isinstance(node.value, gast.Call):
       fn_handle = _get_stack_op_handle(node.value)
       if fn_handle and fn_handle in [utils.push, utils.push_stack]:
-        op_id = node.value.args[-1].s
+        # gast.Str.s was replaced with gast.Constant.value
+        op_id_node = node.value.args[-1]
+        op_id = op_id_node.value if hasattr(op_id_node, 'value') else op_id_node.s
         anno.setanno(node, 'push_var', node.value.args[1])
         try:
           matching_pop = self.push_pop_pairs[op_id][self.fn_map[fn_handle]]
@@ -293,7 +303,7 @@ class Unused(gast.NodeVisitor):
     if anno.hasanno(node, 'definitions_gen'):
       self.definitions.update(anno.getanno(node, 'definitions_gen'))
       self.reaching_definitions = anno.getanno(node, 'definitions_in')
-    if isinstance(node, gast.Name) and isinstance(node.ctx, gast.Load):
+    if isinstance(node, gast.Name) and isinstance(node.ctx, gast.Load) and self.reaching_definitions is not None:
       self.used.update(def_ for def_ in self.reaching_definitions
                        if def_[0] == node.id)
     super(Unused, self).visit(node)

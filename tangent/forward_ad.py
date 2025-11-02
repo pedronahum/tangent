@@ -505,8 +505,8 @@ class ForwardAD(transformers.TreeTransformer):
         grad_node = create.create_grad(_node, self.namer, tangent=True)
         grad_node.ctx = node.ctx
         elts.append(grad_node)
-      elif isinstance(_node, gast.Num):
-        elts.append(gast.Num(0))
+      elif isinstance(_node, gast.Constant) and isinstance(_node.value, (int, float)):
+        elts.append(gast.Constant(value=0, kind=None))
       elif isinstance(_node, (gast.List, gast.Tuple)):
         elts.append(self.create_grad_list(_node.elts))
       else:

@@ -604,7 +604,7 @@ class ReverseAD(object):
     adjoint = []
     for i, elt in enumerate(node.elts):
       adjoint.append(template.replace('d[x] = d[t[i]]', namer=self.namer,
-                                      t=self.target, i=gast.Num(n=i), x=elt))
+                                      t=self.target, i=gast.Constant(value=i, kind=None), x=elt))
     return node, adjoint
 
   def visit_Pass(self, node):
@@ -706,8 +706,10 @@ class ReverseAD(object):
     # If we don't have an adjoint, we will have to step into the called
     # function and differentiate it
     if func not in grads.adjoints:
+      # Only consider Name nodes as potential active arguments
+      # Other node types (Constant, Compare, etc.) are not differentiable
       active_args = tuple(i for i, arg in enumerate(node.args)
-                          if arg.id in self.active_variables)
+                          if isinstance(arg, gast.Name) and arg.id in self.active_variables)
 
       already_counted = False
       for f, a in self.required:
@@ -737,7 +739,7 @@ class ReverseAD(object):
       adjoint = [template.replace('dxs = dfx', namer=self.namer, dfx=adj_call)]
       for j, i in enumerate(active_args):
         adjoint.append(template.replace('d[x] = dxs[i]', namer=self.namer,
-                                        x=node.args[i].id, i=gast.Num(n=j)))
+                                        x=node.args[i].id, i=gast.Constant(value=j, kind=None)))
       return pri_call, adjoint
 
     # We have a template for the gradient that we need to fill in

@@ -27,4 +27,5 @@ setup(
         'deep-learning'
     ],
     install_requires=reqs,
+    python_requires='>=3.8',
 )

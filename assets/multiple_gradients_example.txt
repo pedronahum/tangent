@@ -1,0 +1,13 @@
+>>> import tangent
+>>>
+>>> def f(x, y):
+...     return x * x * y + x * y * y
+...
+>>> # Compute gradients w.r.t. both x and y
+>>> df = tangent.grad(f, wrt=(0, 1))
+>>> grad_x, grad_y = df(2.0, 3.0)
+>>>
+>>> print(f"∂f/∂x = {grad_x}")  # Expected: 2xy + y² = 21
+∂f/∂x = 21.0
+>>> print(f"∂f/∂y = {grad_y}")  # Expected: x² + 2xy = 16
+∂f/∂y = 16.0

@@ -118,7 +118,8 @@ class ANF(transformers.TreeTransformer):
                           node.step]],
           keywords=[])
       return gast.Name(id=name, ctx=gast.Load(), annotation=None)
-    elif isinstance(node, gast.ExtSlice):
+    # gast.ExtSlice removed in Python 3.9+ - check if it exists for backwards compat
+    elif hasattr(gast, 'ExtSlice') and isinstance(node, gast.ExtSlice):
       name = self.namer.name(node)
       target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
       stmt = gast.Assign(targets=[target], value=None)
@@ -128,15 +129,23 @@ class ANF(transformers.TreeTransformer):
           gast.Name(id=n, ctx=gast.Load(), annotation=None)
           for n in dim_names], ctx=gast.Load())
       return gast.Name(id=name, ctx=gast.Load(), annotation=None)
-    elif isinstance(node, gast.Index):
+    # gast.Index removed in Python 3.9+ - check if it exists for backwards compat
+    elif hasattr(gast, 'Index') and isinstance(node, gast.Index):
       return self.trivialize(node.value)
+    # In Python 3.9+, slice values can be any expression (Constant, Name, Call, etc.)
+    # Just trivialize whatever we get
     else:
-      raise ValueError(node)
+      return self.trivialize(node)
 
   def visit_Subscript(self, node):
     if self.trivializing:
       node.value = self.trivialize(node.value)
-      node.slice = gast.Index(value=self.trivialize_slice(node.slice))
+      # In Python 3.9+, gast.Index was removed - slice is used directly
+      trivialized_slice = self.trivialize_slice(node.slice)
+      if hasattr(gast, 'Index'):
+        node.slice = gast.Index(value=trivialized_slice)
+      else:
+        node.slice = trivialized_slice
     return node
 
   def visit_Tuple(self, node):
@@ -178,12 +187,17 @@ class ANF(transformers.TreeTransformer):
       name = self.namer.name(node.targets[0])
       target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
       for i, elt in enumerate(node.targets[0].elts):
+        # In Python 3.9+, gast.Index was removed - slice is used directly
+        slice_node = gast.Constant(value=i, kind=None)
+        if hasattr(gast, 'Index'):
+          slice_node = gast.Index(value=slice_node)
+
         stmt = gast.Assign(
             targets=[elt],
             value=gast.Subscript(
                 value=gast.Name(id=name, ctx=gast.Load(),
                                 annotation=None),
-                slice=gast.Index(value=gast.Num(n=i)),
+                slice=slice_node,
                 ctx=gast.Load()))
         self.mark(stmt)
         self.append(stmt)

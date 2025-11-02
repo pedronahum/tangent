@@ -1,0 +1,22 @@
+>>> import tangent
+>>> import time
+>>>
+>>> def expensive_function(x):
+...     return x ** 10
+...
+>>> # First call: compiles
+>>> start = time.time()
+>>> df = tangent.grad(expensive_function)
+>>> first_time = time.time() - start
+>>> print(f"First call:  {first_time*1000:.2f}ms")
+First call:  11.12ms
+
+>>> # Subsequent calls: cached
+>>> start = time.time()
+>>> df = tangent.grad(expensive_function)
+>>> cached_time = time.time() - start
+>>> print(f"Cached call: {cached_time*1000:.2f}ms")
+Cached call: 0.12ms
+
+>>> print(f"Speedup:     {first_time/cached_time:.0f}x")
+Speedup:     95x

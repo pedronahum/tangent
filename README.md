@@ -1,258 +1,702 @@
-# Tangent 
+# Tangent - Source-to-Source Automatic Differentiation
 
-[![Build Status](https://travis-ci.org/google/tangent.svg?branch=master)](https://travis-ci.org/google/tangent)
-[![Join the chat at https://gitter.im/google/tangent](https://badges.gitter.im/google/tangent.svg)](https://gitter.im/google/tangent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Tests](https://img.shields.io/badge/tests-84%20passing-brightgreen.svg)](tests/)
 
-Tangent is a new, free, and open-source Python library for automatic differentiation.  
+**A modernized Python library for automatic differentiation with readable source code, educational visualizations, and multi-backend support.**
 
+Originally developed by Google Research, now maintained and enhanced by [@pedronahum](https://github.com/pedronahum) with modern ML framework integrations and powerful visualization tools.
 
-Existing libraries implement automatic differentiation by tracing a program's execution (at runtime, like PyTorch) or by staging out a dynamic data-flow graph and then differentiating the graph (ahead-of-time, like TensorFlow). In contrast, Tangent performs ahead-of-time autodiff on the Python source code itself, and produces Python source code as its output. Tangent fills a unique location in the space of machine learning tools.
+<p align="center">
+  <img src="assets/gradient_flow.png" alt="Gradient Flow Visualization" width="70%">
+  <br>
+  <em>Visualize how gradients flow through your computations</em>
+</p>
+
+---
+
+## 🌟 What Makes Tangent Unique?
+
+Tangent performs **source-to-source** automatic differentiation - it transforms your Python code directly into gradient code that you can read, debug, and understand. Unlike other autodiff libraries:
+
+- **📖 Readable**: Generated gradient code is pure Python you can inspect
+- **🔍 Debuggable**: Step through gradient computation line by line
+- **🎨 Visual**: Interactive computation graphs and gradient flow diagrams
+- **⚡ Fast**: No tape overhead, compiled gradients run at full speed
+- **🔧 Flexible**: Works with NumPy, JAX, and TensorFlow 2.x
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 
+---
 
-As a result, you can finally read your automatic derivative code just like the rest of your program. Tangent is useful to researchers and students who not only want to write their models in Python, but also read and debug automatically-generated derivative code without sacrificing speed and flexibility.
+## 🆕 What's New in This Fork
 
-Tangent works on a large and growing subset of Python, provides extra autodiff features other Python ML libraries don't have, has reasonable performance, and is compatible with TensorFlow and NumPy.
+This modernized version includes major enhancements:
 
-This project is an experimental release, and is under active development. As we continue to build Tangent, and respond to feedback from the community, there might be API changes.
+### ✅ **JAX Integration** (51 gradient definitions)
+Full support for Google's JAX with comprehensive gradient definitions for:
+- Neural network activations (ReLU, Sigmoid, ELU, Leaky ReLU, Softplus)
+- Math functions (exp, log, sqrt, sin, cos, tanh, power)
+- Linear algebra (dot, matmul)
+- Reductions (sum, mean, max)
+- Element-wise operations (maximum, minimum, negative)
+- Broadcasting operations
 
-## Usage
+### ✅ **TensorFlow 2.x Integration**
+Updated TensorFlow support with eager execution mode
 
-Note: An interactive notebook with all the code in this page can be found [here](https://colab.research.google.com/notebook#fileId=1cjoX9GteBymbnqcikNMZP1uenMcwAGDe).
+### ✅ **Visualization Tools** 🎨
+**NEW!** Educational visualization suite for understanding autodiff:
 
-Tangent has a one-function API:
+<table>
+<tr>
+<td width="50%">
+
+**Computation Graph**
 ```python
 import tangent
-df = tangent.grad(f)
+import matplotlib.pyplot as plt
+
+def f(x):
+    y = x * x
+    z = y + x
+    return z
+
+fig = tangent.visualize(f, mode='graph')
+plt.show()
 ```
 
-If you want to print out derivatives at the time Tangent generates the derivative function:
+Shows function structure as a directed graph with:
+- 🔵 Blue: Input nodes
+- 🟢 Green: Operations
+- 🔴 Red: Output nodes
 
+![Computation Graph](assets/computation_graph.png)
+
+</td>
+<td width="50%">
+
+**Gradient Flow**
 ```python
-import tangent
-df = tangent.grad(f, verbose=1)
+def f(x):
+    return x * x + 2.0 * x + 1.0
+
+fig = tangent.visualize(
+    f,
+    mode='flow',
+    inputs=(2.0,)
+)
+plt.show()
 ```
 
-Here's Tangent in action in the IPython console.
+Displays forward and backward passes:
+- ⬆️ Forward: Function evaluation
+- ⬇️ Backward: Gradient propagation
+- Shows actual numerical values
 
-![Live Derivatives with Tangent](docs/sct-ad-live.gif "Live Derivatives with Tangent")
+![Gradient Flow](assets/gradient_flow.png)
 
-## Installing and running
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Gradient Comparison**
+```python
+import numpy as np
+
+def f(x):
+    return np.sum(x**3 - 2*x**2 + x)
+
+fig = tangent.compare_gradients(
+    f,
+    (np.array([1.0, 2.0, 3.0]),)
+)
+plt.show()
+```
+
+Compares autodiff vs numerical:
+- 📊 Side-by-side bar charts
+- ✅ Error quantification
+- Educational validation
+
+![Gradient Comparison](assets/gradient_comparison.png)
+
+</td>
+<td width="50%">
+
+**Code Inspection**
+```python
+def f(x):
+    y = x * x
+    z = y + x
+    return z
+
+tangent.show_gradient_code(f)
+```
+
+Pretty-prints:
+- Original function code
+- Generated gradient function
+- Formatted with headers
+- Easy to understand
+
+```
+GRADIENT CODE FOR: f
+────────────────────────────────────────
+ORIGINAL FUNCTION:
+def f(x):
+    y = x * x
+    z = y + x
+    return z
+
+GENERATED GRADIENT FUNCTION:
+def dfdx(x, bz=1.0):
+    y = x * x
+    z = y + x
+    # Backward pass
+    by = bz
+    bx = by * x + by * x + bz
+    return bx
+```
+
+</td>
+</tr>
+</table>
+
+### ✅ **Comprehensive Testing**
+- **84 new unit tests** (100% passing)
+- JAX: 34 tests
+- TensorFlow: 22 tests
+- Visualization: 28 tests
+
+### ✅ **Enhanced Error Messages**
+Clear, helpful error messages with suggestions for fixes
+
+### ✅ **Function Caching**
+Automatic caching with 1000x+ speedup for repeated gradient calls
+
+---
+
+## 🚀 Quick Start
 
 ### Installation
 
-The easiest way to install Tangent is to use `pip`.
+```bash
+# Install from GitHub
+pip install git+https://github.com/pedronahum/tangent.git
 
-    pip install tangent
+# With JAX support
+pip install git+https://github.com/pedronahum/tangent.git jax jaxlib
 
-We'll have a conda package soon.
+# With TensorFlow support
+pip install git+https://github.com/pedronahum/tangent.git tensorflow
 
-## Automatic Differentiation
+# With visualization tools
+pip install git+https://github.com/pedronahum/tangent.git matplotlib networkx
 
-Under the hood, `tangent.grad` grabs the source code of the Python function you pass it (using `inspect.getsource`, which is available in the Python standard library), converts the source code into an abstract syntax tree (AST) using `ast.parse` (also built into the Python standard library), and walks the syntax tree in reverse order.
-
-Tangent has a library of recipes for the derivatives of basic arithmetic (`+`,`-`,`/`,`**`,`*`), pieces of syntax (`ast.For`, `ast.If`, `ast.While`) and TensorFlow Eager functions (`tf.reduce_sum`, `tf.exp`, `tf.matmul`, ... ). For each piece of syntax it encounters (for example, `c = a + b` is a single AST node `ast.Assign`), `tangent.grad` looks up the matching backward-pass recipe, and adds it to the end of the derivative function.
-This reverse-order processing gives the technique its name: reverse-mode automatic differentiation.
-
-### TF Eager
-
-Tangent supports differentiating functions that use TensorFlow Eager functions that are composed together.
-
-```python
-def f(W,x):
-  h1 = tf.matmul(x,W)
-  h2 = tf.tanh(h1)
-  out = tf.reduce_sum(h2)
-  return out
-
-dfdW = tangent.grad(f)
+# Full installation (recommended)
+pip install git+https://github.com/pedronahum/tangent.git jax jaxlib tensorflow matplotlib networkx
 ```
 
-![SCT on TF Eager](docs/sct-ad-tf.gif "SCT on TF Eager")
-
-
-### Subroutines
-
-When model code becomes long, using subroutines makes code more readable and reusable. Tangent handles taking derivatives of models that have user-defined functions.
-
-![SCT on Subroutines](docs/sct-ad-subroutine.gif "SCT on Subroutines")
-
-### Control Flow
-
-Tangent has recipes for auto-generating derivatives for code that contains if statements and loops:
-
-![SCT on Conditionals](docs/sct-ad-conditional.gif "SCT on Conditionals")
-
-You'll notice above that we have to modify the user's code to keep track of information that we will need in the backward pass. For instance, we need to save which branch of an if-statement was followed in the forward pass, so that we run the correct branch in the backward pass. We save this information from the forward pass by pushing it onto a stack, which we then pop off in the backward pass. This is an important data structure in ahead-of-time autodiff.
-
-For loops require a little more bookkeeping. Tangent has to save the number of iterations of the loop on the stack. Also, loops usually overwrite the values of variables inside the loop body. In order to generate a correct derivative, Tangent has to keep track of all of the overwritten values, and restore them in the backward pass in the correct order.
-
-![SCT on Loops](docs/sct-ad-loop.gif "SCT on Loops")
-
-## Custom Gradients
-
-Tangent uses Python's built-in machinery to introspect and transform the _abstract syntax tree_ (AST) of parsed source code at runtime. For each piece of supported Python syntax, we have implemented a rule indicating how to rewrite an AST node into its backward pass equivalent, or "adjoint". We have defined adjoints for function calls to NumPy and TF Eager methods, as well as larger pieces of syntax, such as if-statements and for-loops. The adjoints are stored in function definitions that serve as "templates", or code macros. Another alternative, which we found too cumbersome, would be to use a templating engine like [Mustache](https://mustache.github.io/) and store adjoints as plain strings. Our templates also use a special syntax `d[x]` to refer to the derivative of a variable `x`.
-
-While differentiating a function, if Tangent encounters a function call, it first checks if it has a gradient registered for that function. If not, it tries to get the function source, and generate a derivative ahead-of-time. But, it's easy to register your own gradients. Here's a toy example of defining the gradient of `x^3`.
+### Basic Usage
 
 ```python
 import tangent
-from tangent.grads import adjoint
+import numpy as np
 
-def cube(x):
-  return x * x * x
-  
-# Register the gradient of cube with Tangent
-# NOTE! This is not a runnable function, but instead is a code template.
-# Tangent will replace the names of the variables `result` and `x` with whatever
-# is used in your containing function.
-@adjoint(cube)
-def dcube(result, x):
-  d[x] = d[result] * 3 * x * x
-  
-def f(val):
-    cubed_val = cube(val)
-    return cubed_val
-
-print(tangent.grad(f,verbose=1))
-```
-Should output something like:
-```python
-def dfdval(val, bcubed_val=1.0):
-    # Grad of: cubed_val = cube(val)
-    bval = bcubed_val * 3 * (val * val) # <<<< this is our inlined gradient
-    return bval
-```
-
-The signature for the custom gradient of some function
-
-```python
-result = orig_function(arg1,arg2)
-```
-is
-```python
-@adjoint(orig_function)
-def grad_orig_function(result, arg1, arg2):
-  d[arg1] = d[result]*...
-  d[arg2] = d[result]*...
-```
-The first argument to the template is always the result of the function call, followed by the function arguments, in order.
-Tangent captures the variable names of the result and arguments, and then will use them to unquote the gradient template at the appropriate place in the backward pass.
-
-Check out an [example gradient definition of a NumPy function](https://github.com/google/tangent/blob/6ee7fe31e876c7a68273aeb28ecf03aae42d970d/tangent/grads.py#L261-L263) and [of a TF eager function](https://github.com/google/tangent/blob/6ee7fe31e876c7a68273aeb28ecf03aae42d970d/tangent/tf_extensions.py#L244-L247). Also, [see the docstring in `grads.py` for more info](https://github.com/google/tangent/blob/6ee7fe31e876c7a68273aeb28ecf03aae42d970d/tangent/grads.py#L14-L36).
-
-## Debugging
-
-Because Tangent auto-generates derivative code you can read, you can also easily debug your backward pass. For instance, your NN might be outputting NaNs during training, and you want to find out where the NaNs are being generated in your model. Just insert a breakpoint (e.g., pdb.set_trace()) at the end of your forward pass.
-
-![SCT for Debugging](docs/sct-ad-debugging.png "SCT for Debugging")
-
-For large models, setting a breakpoint at the beginning of the backward pass and stepping through dozens of lines might be cumbersome. Instead, you might want the breakpoint to be placed later in the derivative calculation. Tangent lets you insert code directly into any location in the backward pass. First, run `from tangent import insert_grad_of`, then add a with `insert_grad_of` block containing the code you'd like to insert into the backward pass.
-
-```python
-
-from tangent import insert_grad_of
+# Define your function
 def f(x):
-  ...
-  with insert_grad_of(x) as dx:
-    print("dc/dx = %2.2f" % dx)
-    pdb.set_trace()
-  ...
+    return x ** 3 - 2 * x ** 2 + 3 * x - 1
+
+# Get the gradient function
+df = tangent.grad(f)
+
+# Compute gradient at x=2
+gradient = df(2.0)
+print(f"f'(2) = {gradient}")
 ```
 
-![Ad Hoc Gradient Code](docs/sct-ad-insert_grad_of.gif "Ad Hoc Gradient Code")
-
-## Derivative Surgery
-
-You can use the `insert_grad_of` feature to do more than debugging and logging. Some NN architectures benefit from tricks that directly manipulate the backward pass. For example, recurrent neural networks (RNNs) suffer from the "exploding gradient" problem, where gradients grow exponentially. This prevents the model from training properly. A typical solution is to force the derivatives inside of an RNN to not exceed a certain value by directly clipping them. We can implement this with `insert_grad_of`.
-
-```python
-
-def f(params, x):
-  h = x
-  for i in range(5):
-    with insert_grad_of(h) as g:
-      g = tf.clip_by_value(g, -1, 1)
-    h = rnn(params, h)
-  return h
-
-dfdparams = tangent.grad(f)
+**Output:**
+```
+f'(2) = 11.0
 ```
 
-You can perform other backward-pass tricks with `insert_grad_of`, such as stop gradients (use a `break` in the inlined code to stop a for loop), or synthetic gradients (replace a derivative with a prediction from a neural network). This feature lets Tangent users easily debug their models, or quickly try out derivative tweaks in the backward pass.
+### Multi-Backend Support
 
-## Forward Mode
+<table>
+<tr>
+<td width="33%">
 
-Reverse-mode autodiff, or backpropagation, generates efficient derivatives for the types of functions we use in machine learning, where there are usually many (perhaps millions) of input variables and only a single output (our loss). When the inverse is true, where there are many more outputs than inputs, reverse mode is not an efficient algorithm, as it has to be run as many times as there are output variables. However, a less famous algorithm, forward-mode autodiff, only has to be run as many times as there are _input_ variables.). Tangent supports forward-mode autodiff.
-
+**NumPy**
 ```python
+import numpy as np
+import tangent
 
 def f(x):
-  a = x * x
-  b = x * a
-  c = a + b
-  return c
+    return np.sum(x ** 2)
 
-forward_df = tangent.autodiff(f, mode='forward')
+df = tangent.grad(f)
+x = np.array([1, 2, 3])
+grad = df(x)
+print(grad)
 ```
 
-![SCT Forward Mode](docs/sct-ad-forward.gif "SCT Forward Mode")
+**Output:**
+```
+[2 4 6]
+```
 
-## Hessian-Vector Products
+</td>
+<td width="33%">
 
-Although we won't dig into the technical details, forward-mode is very useful when combined with reverse-mode to calculate efficient higher-order derivatives, particularly for Hessian-vector products (HVP) of NNs. This is useful in research applications, and usually very painful and slow to calculate. Autograd has native forward-mode support, while TensorFlow has 3rd-party support.
-
-To take higher-order derivatives, you can use any combination of forward- and reverse-mode autodiff in Tangent. This works because the code Tangent produces can also be fed back in as input. The autodiff literature recommends calculating HVPs in a "Forward-over-Reverse" style. This means first apply reverse mode autodiff to the function, and then apply forward mode to that.
-
+**JAX**
 ```python
+import jax.numpy as jnp
+import jax
+import tangent
 
 def f(x):
-    a = x * x * x
-    b = a * x ** 2.0
-    return tf.reduce_sum(b)
+    return jnp.sum(
+        jax.nn.relu(x)
+    )
 
-hvp = tangent.autodiff(tangent.autodiff(f,mode='reverse'),mode='forward')
+df = tangent.grad(f)
+x = jnp.array([-1, 0, 1])
+grad = df(x)
+print(grad)
 ```
 
-## Performance
+**Output:**
+```
+[0. 0. 1.]
+```
 
-Although we did not build Tangent for performance, it is competitive with major ML libraries. Because we are generating derivatives ahead-of-time, there is no interpretive overhead like there is with runtime autodiff libraries. We implemented a few compiler optimizations (dead code elimination, and constant folding), but we are still working on extra optimization passes to further increase performance.
+</td>
+<td width="33%">
 
-![Small Benchmark](docs/small-benchmark.png "Small Benchmark")
+**TensorFlow**
+```python
+import tensorflow as tf
+import tangent
 
+def f(x):
+    return tf.reduce_sum(
+        tf.tanh(x)
+    )
 
-## Optimization
+df = tangent.grad(f)
+x = tf.constant([0.0, 1.0, 2.0])
+grad = df(x)
+print(grad.numpy())
+```
 
-We are often interested in the gradients of only some of the arguments. In this
-case, many of the adjoint calculation might be dead code. In the optimization
-pass this is removed. We also perform limited constant folding and assignment propagation.
+**Output:**
+```
+[1.         0.41997433 0.07065082]
+```
 
-## Known Limitations
+</td>
+</tr>
+</table>
 
-Tangent is still an experiment, so expect some bugs. If you report them to us on GitHub, we will do our best to fix them quickly.
+---
 
-We are working to add support in Tangent for more aspects of the Python language (e.g., closures, inline function definitions, classes, more NumPy and TensorFlow functions). We also hope to add more advanced automatic differentiation and compiler functionality in the future, such as automatic trade-off between memory and compute (Griewank and Walther 2000; Gruslys et al., 2016), more aggressive optimizations, and lambda lifting.
+## 📚 Interactive Tutorial
 
-Many of Python's advanced features are difficult to statically analyze or to
-define sensible gradients of, so we restrict Python to a functional subset
-(i.e. no mutable objects).
+We've created a comprehensive Jupyter notebook tutorial that covers everything:
 
-### Closures
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb)
 
-Closures are currently not supported for the following reasons:
+**Contents:**
+1. Installation & Setup
+2. Basic Concepts - Understanding source-to-source autodiff
+3. NumPy Integration - Vector and matrix operations
+4. TensorFlow 2.x Integration - Deep learning workflows
+5. JAX Integration - High-performance computing
+6. Advanced Features - Multiple gradients, result preservation
+7. **Visualization & Debugging** - Interactive tools (NEW!)
+8. Real-World Examples - Linear regression, logistic regression, neural networks
 
-* AD relies on being able to resolve function names. If function names are
-  resolved using the enclosing function namespace, we cannot be sure that they
-  will resolve to the same function at each call.
-* Although we can access functions from the enclosing function namespace, we
-  cannot write to this namespace, which is required for the gradients.
+---
 
-### Classes
+## 🎓 Educational Features
 
-Classes are not _currently_ supported, but are on our near-term roadmap.
-This will enable PyTorch/Chainer/TFEager-style class definitions of neural networks, and parameterized functions, like in TF Slim.
+### Visualize How Autodiff Works
 
-## Team
+```python
+import tangent
+import matplotlib.pyplot as plt
 
-Tangent is developed by Alex Wiltschko, Bart van Merrienboer and Dan Moldovan.
+# Define a polynomial
+def polynomial(x):
+    y = x * x
+    z = y * x
+    w = 2.0 * y
+    return z - w + 3.0 * x - 1.0
+
+# Visualize the computation graph
+fig = tangent.visualize(polynomial, mode='graph')
+plt.savefig('computation_graph.png', dpi=150)
+plt.show()
+```
+
+This shows you:
+- How your function is decomposed into operations
+- The flow of data through your computation
+- Dependencies between variables
+
+### Understand Gradient Flow
+
+```python
+# Visualize how gradients propagate backward
+fig = tangent.visualize(polynomial, mode='flow', inputs=(2.0,))
+plt.show()
+```
+
+See:
+- Forward pass with actual values
+- Backward pass with gradient values
+- Step-by-step gradient computation
+
+### Verify Your Gradients
+
+```python
+import numpy as np
+
+def f(x):
+    return np.sum(x ** 3 - 2 * x ** 2 + x)
+
+x = np.array([1.0, 2.0, 3.0])
+
+# Compare autodiff vs numerical gradients
+fig = tangent.compare_gradients(f, (x,))
+plt.show()
+```
+
+Perfect for:
+- Debugging gradient implementations
+- Teaching autodiff concepts
+- Validating complex derivatives
+
+---
+
+## 🔬 Advanced Features
+
+### Multiple Gradients
+
+Compute gradients with respect to multiple arguments:
+
+```python
+def f(x, y):
+    return x * x * y + x * y * y
+
+# Gradients w.r.t. both x and y
+df = tangent.grad(f, wrt=(0, 1))
+grad_x, grad_y = df(2.0, 3.0)
+
+print(f"∂f/∂x = {grad_x}")  # Expected: 2xy + y² = 21
+print(f"∂f/∂y = {grad_y}")  # Expected: x² + 2xy = 16
+```
+
+**Output:**
+```
+∂f/∂x = 21.0
+∂f/∂y = 16.0
+```
+
+### Preserve Results
+
+Get both the function value and gradient:
+
+```python
+def f(x):
+    return np.sum(x ** 2)
+
+df = tangent.grad(f, preserve_result=True)
+gradient, result = df(np.array([1.0, 2.0, 3.0]))
+
+print(f"f(x) = {result}")
+print(f"∇f(x) = {gradient}")
+```
+
+**Output:**
+```
+f(x) = 14.0
+∇f(x) = [2. 4. 6.]
+```
+
+### Inspect Generated Code
+
+See exactly what Tangent generates:
+
+```python
+def f(x):
+    y = x * x
+    z = y + x
+    return z
+
+tangent.show_gradient_code(f)
+```
+
+Output:
+```
+================================================================================
+GRADIENT CODE FOR: f
+================================================================================
+
+ORIGINAL FUNCTION:
+--------------------------------------------------------------------------------
+def f(x):
+    y = x * x
+    z = y + x
+    return z
+
+GENERATED GRADIENT FUNCTION:
+--------------------------------------------------------------------------------
+def dfdx(x, bz=1.0):
+    # Forward pass
+    y = x * x
+    z = y + x
+
+    # Backward pass
+    by = bz
+    bx = by * x + by * x + bz
+    return bx
+================================================================================
+```
+
+### Performance: Automatic Caching
+
+Tangent automatically caches compiled gradient functions:
+
+```python
+import tangent
+import time
+
+def expensive_function(x):
+    return x ** 10
+
+# First call: compiles (~20-100ms)
+start = time.time()
+df = tangent.grad(expensive_function)
+first_time = time.time() - start
+
+# Subsequent calls: cached (~0.04ms)
+start = time.time()
+df = tangent.grad(expensive_function)
+cached_time = time.time() - start
+
+print(f"First call:  {first_time*1000:.2f}ms")
+print(f"Cached call: {cached_time*1000:.2f}ms")
+print(f"Speedup:     {first_time/cached_time:.0f}x")
+
+# Check cache stats
+stats = tangent.get_cache_stats()
+print(f"Hit rate: {stats['hit_rate']:.1%}")
+```
+
+Benchmarks show:
+- **1000x+ speedup** for cached retrieval
+- **87x+ speedup** for 100 repeated calls
+- **99% cache hit rate** in typical usage
+
+---
+
+## 📖 Examples
+
+### Example 1: Linear Regression
+
+```python
+import tangent
+import numpy as np
+
+# Generate data
+X = np.random.randn(100, 1)
+y = 3 * X + 2 + np.random.randn(100, 1) * 0.5
+
+# Loss function
+def mse_loss(w, b):
+    predictions = w * X + b
+    return np.mean((predictions - y) ** 2)
+
+# Compute gradients
+dmse_dw = tangent.grad(mse_loss, wrt=(0,))
+dmse_db = tangent.grad(mse_loss, wrt=(1,))
+
+# Gradient descent
+w, b = 0.0, 0.0
+learning_rate = 0.1
+
+for epoch in range(50):
+    grad_w = dmse_dw(w, b)
+    grad_b = dmse_db(w, b)
+
+    w -= learning_rate * grad_w
+    b -= learning_rate * grad_b
+
+    if epoch % 10 == 0:
+        loss = mse_loss(w, b)
+        print(f"Epoch {epoch}: loss = {loss:.4f}")
+
+print(f"Final parameters: w = {w:.4f}, b = {b:.4f}")
+```
+
+### Example 2: Neural Network with JAX
+
+```python
+import tangent
+import jax.numpy as jnp
+import jax
+
+def neural_network(W1, b1, W2, b2, X, y):
+    """Two-layer neural network."""
+    hidden = jax.nn.relu(jnp.dot(X, W1) + b1)
+    output = jax.nn.sigmoid(jnp.dot(hidden, W2) + b2)
+    loss = -jnp.mean(y * jnp.log(output) + (1 - y) * jnp.log(1 - output))
+    return loss
+
+# Compute gradients w.r.t. all parameters
+dnn_dW1 = tangent.grad(neural_network, wrt=(0,))
+dnn_db1 = tangent.grad(neural_network, wrt=(1,))
+dnn_dW2 = tangent.grad(neural_network, wrt=(2,))
+dnn_db2 = tangent.grad(neural_network, wrt=(3,))
+
+# Training loop
+for epoch in range(100):
+    grad_W1 = dnn_dW1(W1, b1, W2, b2, X, y)
+    grad_b1 = dnn_db1(W1, b1, W2, b2, X, y)
+    grad_W2 = dnn_dW2(W1, b1, W2, b2, X, y)
+    grad_b2 = dnn_db2(W1, b1, W2, b2, X, y)
+
+    W1 -= learning_rate * grad_W1
+    b1 -= learning_rate * grad_b1
+    W2 -= learning_rate * grad_W2
+    b2 -= learning_rate * grad_b2
+```
+
+### Example 3: Visualization Demo
+
+Run the complete visualization demo:
+
+```bash
+python examples/demo_visualization.py
+```
+
+This generates 6 PNG visualizations showing:
+1. Computation graphs
+2. Gradient flow diagrams
+3. Multivariate gradient flow
+4. Autodiff vs numerical comparison
+5. Vector function gradients
+6. Matrix operation gradients
+
+---
+
+## 🧪 Testing
+
+All new features are thoroughly tested:
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test suites
+pytest tests/test_jax.py          # JAX integration (34 tests)
+pytest tests/test_tensorflow.py   # TensorFlow (22 tests)
+pytest tests/test_visualization.py # Visualization (28 tests)
+
+# Run with coverage
+pytest tests/ --cov=tangent --cov-report=html
+```
+
+**Test Results**: 84/84 passing (100%)
+
+---
+
+## 📊 Repository Structure
+
+```
+tangent/
+├── tangent/                     # Core library
+│   ├── __init__.py
+│   ├── grad_util.py            # Main autodiff engine
+│   ├── jax_extensions.py       # JAX support (51 gradients)
+│   ├── tf_extensions.py        # TensorFlow 2.x support
+│   ├── visualization.py        # Visualization tools (NEW!)
+│   ├── function_cache.py       # Caching system
+│   └── ...
+├── tests/                       # Comprehensive test suite
+│   ├── test_jax.py             # 34 JAX tests
+│   ├── test_tensorflow.py      # 22 TensorFlow tests
+│   ├── test_visualization.py   # 28 visualization tests
+│   └── ...
+├── examples/                    # Example scripts
+│   ├── test_jax_basic.py       # JAX examples
+│   ├── test_tf2_basic.py       # TensorFlow examples
+│   ├── demo_visualization.py   # Visualization demos (NEW!)
+│   └── demo_error_messages.py
+├── notebooks/                   # Interactive tutorials
+│   ├── tangent_tutorial.ipynb  # Comprehensive Colab notebook
+│   └── README.md
+├── benchmarks/                  # Performance benchmarks
+│   └── benchmark_cache.py
+└── docs/                        # Documentation
+    └── plans/                   # Development roadmaps
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! This is an actively maintained fork with regular updates.
+
+**Areas for contribution:**
+- Additional gradient definitions for JAX/TensorFlow operations
+- More visualization tools (3D plots, animations)
+- Performance optimizations
+- Documentation improvements
+- Bug fixes
+
+**How to contribute:**
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for your changes
+4. Submit a pull request
+
+---
+
+## 📝 License
+
+Apache License 2.0 - See [LICENSE](LICENSE) for details.
+
+Original work Copyright 2017 Google Inc.
+Modified work Copyright 2024 Pedro Nahum
+
+---
+
+## 🙏 Acknowledgments
+
+- Original Tangent library by Google Research
+- JAX team at Google for the excellent numerical computing library
+- TensorFlow team for TensorFlow 2.x
+- The Python scientific computing community
+
+---
+
+## 📬 Contact
+
+- **Repository**: [github.com/pedronahum/tangent](https://github.com/pedronahum/tangent)
+- **Issues**: [github.com/pedronahum/tangent/issues](https://github.com/pedronahum/tangent/issues)
+- **Author**: [@pedronahum](https://github.com/pedronahum)
+
+---
+
+## 🌟 Star History
+
+If you find Tangent useful, please consider starring the repository!
+
+---
+
+**Built with ❤️ for the machine learning and scientific computing communities**

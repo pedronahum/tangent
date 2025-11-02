@@ -55,8 +55,8 @@ def tassign(temp, tangent, target, value):
   target = temp
 
 
-@tangent_(gast.Num)
-def tnum(z, x):
+@tangent_(gast.Constant)
+def tconstant(z, x):
   d[z] = tangent.init_grad(x)
 
 

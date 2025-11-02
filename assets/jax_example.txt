@@ -1,0 +1,12 @@
+>>> import jax.numpy as jnp
+>>> import jax
+>>> import tangent
+>>>
+>>> def f(x):
+...     return jnp.sum(jax.nn.relu(x))
+...
+>>> df = tangent.grad(f)
+>>> x = jnp.array([-1, 0, 1])
+>>> grad = df(x)
+>>> print(grad)
+[0. 0. 1.]

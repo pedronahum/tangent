@@ -1,0 +1,11 @@
+>>> import tensorflow as tf
+>>> import tangent
+>>>
+>>> def f(x):
+...     return tf.reduce_sum(tf.tanh(x))
+...
+>>> df = tangent.grad(f)
+>>> x = tf.constant([0.0, 1.0, 2.0])
+>>> grad = df(x)
+>>> print(grad.numpy())
+[1.         0.41997433 0.07065082]

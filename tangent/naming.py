@@ -30,17 +30,44 @@ SUBSTACK_NAME = '_substack'
 
 def primal_name(func, wrt):
   """Name for the primal of a function."""
+  # Unwrap JAX JIT-compiled and custom derivative functions
+  # JAX uses __wrapped__ to store the original function
+  unwrapped = func
   if not isinstance(func, types.FunctionType):
-    raise TypeError(func)
-  varnames = six.get_function_code(func).co_varnames
-  return PRIMAL_NAME.format(func.__name__, ''.join(varnames[i] for i in wrt))
+    # Try to unwrap JAX custom_jvp, custom_vjp, PjitFunction, etc.
+    if hasattr(func, '__wrapped__'):
+      unwrapped = func.__wrapped__
+      # PjitFunction may be wrapped multiple times
+      while hasattr(unwrapped, '__wrapped__') and not isinstance(unwrapped, types.FunctionType):
+        unwrapped = unwrapped.__wrapped__
+    # If still not a function type after unwrapping, raise error
+    if not isinstance(unwrapped, types.FunctionType):
+      raise TypeError(func)
+
+  varnames = six.get_function_code(unwrapped).co_varnames
+  # Use the original function's name for consistency
+  func_name = func.__name__ if hasattr(func, '__name__') else unwrapped.__name__
+  return PRIMAL_NAME.format(func_name, ''.join(varnames[i] for i in wrt))
 
 
 def _adjoint_name(func, wrt, template):
+  # Unwrap JAX JIT-compiled and custom derivative functions
+  unwrapped = func
   if not isinstance(func, types.FunctionType):
-    raise TypeError
-  varnames = six.get_function_code(func).co_varnames
-  return template.format(func.__name__, ''.join(varnames[i] for i in wrt))
+    # Try to unwrap JAX custom_jvp, custom_vjp, PjitFunction, etc.
+    if hasattr(func, '__wrapped__'):
+      unwrapped = func.__wrapped__
+      # PjitFunction may be wrapped multiple times
+      while hasattr(unwrapped, '__wrapped__') and not isinstance(unwrapped, types.FunctionType):
+        unwrapped = unwrapped.__wrapped__
+    # If still not a function type after unwrapping, raise error
+    if not isinstance(unwrapped, types.FunctionType):
+      raise TypeError
+
+  varnames = six.get_function_code(unwrapped).co_varnames
+  # Use the original function's name for consistency
+  func_name = func.__name__ if hasattr(func, '__name__') else unwrapped.__name__
+  return template.format(func_name, ''.join(varnames[i] for i in wrt))
 
 
 def joint_name(func, wrt):
@@ -278,6 +305,29 @@ class Namer(object):
 
   def name_Str(self, node):
     return node.s
+
+  def name_Constant(self, node):
+    """Handle gast.Constant nodes (Python 3.8+).
+
+    gast.Constant replaces Num, Str, Bytes, NameConstant, Ellipsis.
+    """
+    value = node.value
+    if isinstance(value, (int, float)):
+      # Handle numeric constants like old name_Num
+      num_str = str(value)
+      num_str = num_str.replace('.', '_')
+      num_str = num_str.replace('-', 'neg')
+      num_str = num_str.replace('+', 'plus')
+      return num_str
+    elif isinstance(value, str):
+      # Handle string constants like old name_Str
+      return value
+    elif value is None or isinstance(value, bool):
+      # Handle None, True, False
+      return str(value)
+    else:
+      # Fallback for other constant types
+      return repr(value)
 
   BINOP_NAMES = {
       gast.Add: 'plus',

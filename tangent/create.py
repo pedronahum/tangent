@@ -40,7 +40,8 @@ def create_grad(node, namer, tangent=False):
         Node has an `adjoint_var` annotation referring to the node it is an
         adjoint of.
   """
-  if not isinstance(node, (gast.Subscript, gast.Name, gast.Str)):
+  # gast.Constant replaces gast.Str in gast >= 0.3.0
+  if not isinstance(node, (gast.Subscript, gast.Name, gast.Constant)):
     raise TypeError
 
   if anno.hasanno(node, 'temp_var'):
@@ -59,10 +60,10 @@ def create_grad(node, namer, tangent=False):
     grad_node = create_grad(node.value, namer, tangent=tangent)
     grad_node.ctx = gast.Load()
     return gast.Subscript(value=grad_node, slice=node.slice, ctx=None)
-  elif isinstance(node, gast.Str):
+  elif isinstance(node, gast.Constant) and isinstance(node.value, str):
     grad_node = create_grad(
-        gast.Name(id=node.s, ctx=None, annotation=None), namer, tangent=tangent)
-    return gast.Str(grad_node.id)
+        gast.Name(id=node.value, ctx=None, annotation=None), namer, tangent=tangent)
+    return gast.Constant(value=grad_node.id, kind=None)
   else:
     return _name_grad(node)
 

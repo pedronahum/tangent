@@ -1,0 +1,15 @@
+$ python3
+>>> import tangent
+>>> import numpy as np
+>>>
+>>> # Define your function
+>>> def f(x):
+...     return x ** 3 - 2 * x ** 2 + 3 * x - 1
+...
+>>> # Get the gradient function
+>>> df = tangent.grad(f)
+>>>
+>>> # Compute gradient at x=2
+>>> gradient = df(2.0)
+>>> print(f"f'(2) = {gradient}")
+f'(2) = 7.0

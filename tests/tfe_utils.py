@@ -20,12 +20,46 @@ import utils
 
 try:
   import tensorflow as tf
-  from tensorflow.contrib.eager.python import tfe
+  # TF 2.x is eager by default, no need to enable
+  # tensorflow.contrib.eager was removed in TF 2.x
 except ImportError:
   tf = None
-  tfe = None
-else:
-  tfe.enable_eager_execution()
+
+
+def compute_gradient_tape(func, args, params=None):
+  """Compute gradients using TF 2.x GradientTape API.
+
+  Replacement for tfe.gradients_function that works with TF 2.x.
+
+  Args:
+    func: Function to differentiate
+    args: Input arguments
+    params: Indices of parameters to differentiate wrt (None means all)
+
+  Returns:
+    Gradients with respect to specified parameters
+  """
+  if params is None:
+    params = list(range(len(args)))
+
+  # Convert args to list for modification
+  args_list = list(args)
+  watch_vars = [args_list[i] for i in params]
+
+  with tf.GradientTape(persistent=True) as tape:
+    # Watch the input variables
+    for var in watch_vars:
+      tape.watch(var)
+    # Compute the function
+    result = func(*args_list)
+
+  # Compute gradients
+  grads = tape.gradient(result, watch_vars)
+
+  # Return single gradient or tuple
+  if len(params) == 1:
+    return grads[0] if isinstance(grads, (list, tuple)) else grads
+  return tuple(grads) if isinstance(grads, list) else grads
 
 
 def register_parametrizations(metafunc, short):
@@ -146,7 +180,7 @@ def test_forward_tensor(func, wrt, *args):
     return tensors_to_numpy(df(*args_))
 
   def reference_func():
-    return tensors_to_numpy(tfe.gradients_function(func, params=wrt)(*args))
+    return tensors_to_numpy(compute_gradient_tape(func, args, params=wrt))
 
   def backup_reference_func():
     func_ = as_numpy_sig(func)
@@ -169,7 +203,10 @@ def test_gradgrad_tensor(func, optimized, *args):
     return tuple(t.numpy() for t in dxx)
 
   def reference_func():
-    dxx = tfe.gradients_function(tfe.gradients_function(func))(*args)
+    # Compute second-order gradients using nested GradientTape
+    def grad_func(*args_inner):
+      return compute_gradient_tape(func, args_inner)
+    dxx = compute_gradient_tape(grad_func, args)
     return tensors_to_numpy(tuple(t.numpy() for t in dxx))
 
   def backup_reference_func():
@@ -206,7 +243,7 @@ def test_rev_tensor(func, motion, optimized, preserve_result, wrt, *args):
     return tensors_to_numpy(dx)
 
   def reference_func():
-    gradval = tensors_to_numpy(tfe.gradients_function(func, params=wrt)(*args))
+    gradval = tensors_to_numpy(compute_gradient_tape(func, args, params=wrt))
     if preserve_result:
       val = tensors_to_numpy(func(*args))
       if isinstance(gradval, (tuple)):

@@ -29,8 +29,9 @@ import tfe_utils
 def tf():
   try:
     import tensorflow as tf
+    return tf
   except ImportError:
-    pytest.skip()
+    pytest.skip("TensorFlow not installed")
 
 
 # This test function broke HVPs several times
@@ -52,7 +53,8 @@ def f_calltree(x):
   return np.sum(b)
 
 
-def tf_straightline(x, tf):
+def tf_straightline(x):
+  import tensorflow as tf
   a = x * x * x
   b = a * x ** 2.0
   return tf.reduce_sum(b)
@@ -83,7 +85,11 @@ def _test_hvp(func, optimized):
 
 
 def _test_tf_hvp(func, optimized, tf):
-  a = tf.random_normal(shape=(300,))
+  # TF 2.x: tf.random_normal → tf.random.normal
+  try:
+    a = tf.random.normal(shape=(300,))
+  except AttributeError:
+    a = tf.random_normal(shape=(300,))  # Fallback for TF 1.x
   v = tf.reshape(a, shape=(-1,))
 
   modes = ['forward', 'reverse']

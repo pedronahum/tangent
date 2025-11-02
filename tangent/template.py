@@ -114,22 +114,25 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
     super(ReplaceGradTransformer, self).__init__()
 
   def visit_Subscript(self, node):
-    if isinstance(node.value, (gast.Name, gast.Num)) and node.value.id == 'd':
-      if (not isinstance(node.slice, gast.Index) or
-          not isinstance(node.slice.value,
-                         (gast.Subscript, gast.Name, gast.Str))):
+    # Check if node.value is a Name with id 'd' (gast.Constant doesn't have .id)
+    if isinstance(node.value, gast.Name) and node.value.id == 'd':
+      # In Python 3.9+, gast.Index was removed - slice is used directly
+      # Get the actual slice value (handle both old Index wrapper and direct access)
+      slice_value = node.slice.value if hasattr(node.slice, 'value') else node.slice
+
+      if not isinstance(slice_value, (gast.Subscript, gast.Name, gast.Constant)):
         # This happens when the gradient of a constant is taken
         if self.replace_grad == Replace.TANGENT:
-          new_node = gast.Num(0)
+          new_node = gast.Constant(value=0, kind=None)
         else:
           new_node = gast.Name(id='_', ctx=None, annotation=None)
           self.remove(new_node)
       elif (self.replace_grad in (Replace.FULL, Replace.TANGENT) or
             isinstance(node.ctx, gast.Load)):
-        new_node = create.create_grad(node.slice.value, self.namer,
+        new_node = create.create_grad(slice_value, self.namer,
                                       self.tangent)
       elif isinstance(node.ctx, gast.Store):
-        new_node = create.create_temp_grad(node.slice.value, self.namer,
+        new_node = create.create_temp_grad(slice_value, self.namer,
                                            self.tangent)
       else:
         raise ValueError

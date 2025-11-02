@@ -43,9 +43,34 @@ from tangent.utils import unreduce_like
 # Imported last to avoid circular imports
 from tangent.grad_util import grad, autodiff, vjp, jvp
 from tangent.errors import *
+from tangent.function_cache import (clear_cache, get_cache_stats,
+                                     reset_cache_stats, set_cache_size,
+                                     get_cache_size)
 try:
   from tangent.tf_extensions import *
-except ImportError:
+except (ImportError, AttributeError) as e:
+  # TensorFlow extensions are optional and may not work with TensorFlow 2.x
+  # Tangent was designed for TensorFlow 1.x
+  import warnings
+  warnings.warn(f"TensorFlow extensions not available: {e}. Core autodiff functionality still works.")
+  pass
+
+# JAX extensions (optional)
+try:
+  from tangent.jax_extensions import *
+except (ImportError, AttributeError) as e:
+  # JAX is optional
+  import warnings
+  warnings.warn(f"JAX extensions not available: {e}. Install JAX with: pip install jax jaxlib")
+  pass
+
+# Visualization tools (optional)
+try:
+  from tangent.visualization import visualize, compare_gradients, show_gradient_code
+except ImportError as e:
+  # Visualization requires matplotlib and networkx
+  import warnings
+  warnings.warn(f"Visualization tools not available: {e}. Install with: pip install matplotlib networkx")
   pass
 
 

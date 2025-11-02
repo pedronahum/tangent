@@ -1,0 +1,36 @@
+================================================================================
+GRADIENT CODE FOR: simple_func
+================================================================================
+
+ORIGINAL FUNCTION:
+--------------------------------------------------------------------------------
+def simple_func(x):
+    y = x * x
+    z = y + x
+    return z
+
+
+GENERATED GRADIENT FUNCTION:
+--------------------------------------------------------------------------------
+def dsimple_funcdx(x, bz=1.0):
+    y = x * x
+    z = y + x
+    assert tangent.shapes_match(z, bz
+        ), 'Shape mismatch between return value (%s) and seed derivative (%s)' % (
+        numpy.shape(z), numpy.shape(bz))
+
+    # Grad of: z = y + x
+    _by = tangent.unbroadcast(bz, y)
+    _bx3 = tangent.unbroadcast(bz, x)
+    by = _by
+    bx = _bx3
+
+    # Grad of: y = x * x
+    _bx = tangent.unbroadcast(by * x, x)
+    _bx2 = tangent.unbroadcast(by * x, x)
+    bx = tangent.add_grad(bx, _bx)
+    bx = tangent.add_grad(bx, _bx2)
+    return bx
+
+
+================================================================================

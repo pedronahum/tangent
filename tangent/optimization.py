@@ -27,9 +27,12 @@ def fixed_point(f):
 
   def _fp(node):
     while True:
-      before = quoting.to_source(node)
+      # Use gast.dump instead of to_source to avoid gast_to_ast conversion issues
+      # This is faster and avoids Python 3.8+ compatibility issues with type_comment
+      import gast
+      before = gast.dump(node)
       node = f(node)
-      after = quoting.to_source(node)
+      after = gast.dump(node)
       if before == after:
         break
     return node
@@ -105,7 +108,7 @@ class ReadCounts(gast.NodeVisitor):
       self.reaching_definitions = None
 
   def visit_Name(self, node):
-    if isinstance(node.ctx, gast.Load):
+    if isinstance(node.ctx, gast.Load) and self.reaching_definitions is not None:
       for def_ in self.reaching_definitions:
         if def_[0] == node.id:
           self.n_read[def_[1]] += 1
@@ -178,53 +181,54 @@ class ConstantFolding(gast.NodeTransformer):
     self.generic_visit(node)
     left_val = node.left
     right_val = node.right
-    left_is_num = isinstance(left_val, gast.Num)
-    right_is_num = isinstance(right_val, gast.Num)
+    # gast.Constant replaces gast.Num in gast >= 0.3.0
+    left_is_num = isinstance(left_val, gast.Constant) and isinstance(left_val.value, (int, float))
+    right_is_num = isinstance(right_val, gast.Constant) and isinstance(right_val.value, (int, float))
 
     if isinstance(node.op, gast.Mult):
       if left_is_num and right_is_num:
-        return gast.Num(left_val.n * right_val.n)
+        return gast.Constant(value=left_val.value * right_val.value, kind=None)
       if left_is_num:
-        if left_val.n == 0:
-          return gast.Num(0)
-        elif left_val.n == 1:
+        if left_val.value == 0:
+          return gast.Constant(value=0, kind=None)
+        elif left_val.value == 1:
           return right_val
       if right_is_num:
-        if right_val.n == 0:
-          return gast.Num(0)
-        elif right_val.n == 1:
+        if right_val.value == 0:
+          return gast.Constant(value=0, kind=None)
+        elif right_val.value == 1:
           return left_val
     elif isinstance(node.op, gast.Add):
       if left_is_num and right_is_num:
-        return gast.Num(left_val.n + right_val.n)
-      if left_is_num and left_val.n == 0:
+        return gast.Constant(value=left_val.value + right_val.value, kind=None)
+      if left_is_num and left_val.value == 0:
         return right_val
-      if right_is_num and right_val.n == 0:
+      if right_is_num and right_val.value == 0:
         return left_val
     elif isinstance(node.op, gast.Sub):
       if left_is_num and right_is_num:
-        return gast.Num(left_val.n - right_val.n)
-      if left_is_num and left_val.n == 0:
+        return gast.Constant(value=left_val.value - right_val.value, kind=None)
+      if left_is_num and left_val.value == 0:
         return gast.UnaryOp(op=gast.USub(), operand=right_val)
-      if right_is_num and right_val.n == 0:
+      if right_is_num and right_val.value == 0:
         return left_val
     elif isinstance(node.op, gast.Div):
       if left_is_num and right_is_num:
-        return gast.Num(left_val.n / right_val.n)
-      if right_is_num and right_val.n == 1:
+        return gast.Constant(value=left_val.value / right_val.value, kind=None)
+      if right_is_num and right_val.value == 1:
         return left_val
     elif isinstance(node.op, gast.Pow):
       if left_is_num and right_is_num:
-        return gast.Num(left_val.n ** right_val.n)
+        return gast.Constant(value=left_val.value ** right_val.value, kind=None)
       if left_is_num:
-        if left_val.n == 0:
-          return gast.Num(0)
-        elif left_val.n == 1:
-          return gast.Num(1)
+        if left_val.value == 0:
+          return gast.Constant(value=0, kind=None)
+        elif left_val.value == 1:
+          return gast.Constant(value=1, kind=None)
       if right_is_num:
-        if right_val.n == 0:
-          return gast.Num(1)
-        elif right_val.n == 1:
+        if right_val.value == 0:
+          return gast.Constant(value=1, kind=None)
+        elif right_val.value == 1:
           return left_val
     return node
 

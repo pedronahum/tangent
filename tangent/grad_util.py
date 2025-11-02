@@ -73,6 +73,33 @@ from tangent import reverse_ad
 INPUT_DERIVATIVE = enum.Enum('InputDerivative',
                              ('Required', 'DefaultOne', 'DefaultOnes'))
 
+# Import caching utilities
+from tangent.function_cache import cached_autodiff, cached_grad
+
+
+def unwrap_function(func):
+  """Unwrap JAX JIT-compiled and custom derivative functions.
+
+  JAX uses __wrapped__ to store the original function in objects like:
+  - custom_jvp
+  - custom_vjp
+  - PjitFunction
+
+  This function recursively unwraps until we get to a regular FunctionType.
+
+  Args:
+    func: A function that may be wrapped
+
+  Returns:
+    The unwrapped function if it has __wrapped__, otherwise the original func
+  """
+  import types
+  unwrapped = func
+  # Unwrap if it's not already a FunctionType and has __wrapped__
+  while not isinstance(unwrapped, types.FunctionType) and hasattr(unwrapped, '__wrapped__'):
+    unwrapped = unwrapped.__wrapped__
+  return unwrapped
+
 
 def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose):
   """Perform AD on a single function and return the AST.
@@ -153,7 +180,9 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
 
   while to_do:
     func, wrt = to_do.pop()
-    namespace.update(six.get_function_globals(func))
+    # Unwrap JAX JIT functions to access __globals__
+    unwrapped_func = unwrap_function(func)
+    namespace.update(six.get_function_globals(unwrapped_func))
 
     node, required = autodiff_ast(
         func=func,
@@ -183,7 +212,7 @@ def vjp(func,
   See `autodiff` for function arguments.
   Uses reverse-mode joint-motion autodiff to produce the VJP.
   """
-  return autodiff(
+  return _autodiff_uncached(
       func,
       wrt=wrt,
       motion='joint',
@@ -206,7 +235,7 @@ def jvp(func,
   See `autodiff` for function arguments.
   Uses forward-mode autodiff to produce the JVP.
   """
-  return autodiff(
+  return _autodiff_uncached(
       func,
       wrt=wrt,
       mode='forward',
@@ -217,7 +246,7 @@ def jvp(func,
       verbose=verbose)
 
 
-def autodiff(func,
+def _autodiff_uncached(func,
              wrt=(0,),
              optimized=True,
              motion='joint',
@@ -332,7 +361,7 @@ def autodiff(func,
     return df
 
 
-def grad(func,
+def _grad_uncached(func,
          wrt=(0,),
          optimized=True,
          preserve_result=False,
@@ -376,7 +405,7 @@ def grad(func,
         `preserve_result` is True, the function will also return the original
         result of `func`.
   """
-  return autodiff(
+  return _autodiff_uncached(
       func,
       wrt=wrt,
       motion='joint',
@@ -451,3 +480,8 @@ def _create_forward(out_node):
   if len(retval.value.elts) == 1:
     retval.value = retval.value.elts[0]
   return out_node
+
+
+# Apply caching decorators to create the public API functions
+autodiff = cached_autodiff(_autodiff_uncached)
+grad = cached_grad(_grad_uncached)
