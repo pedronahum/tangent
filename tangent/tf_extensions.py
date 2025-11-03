@@ -28,6 +28,7 @@ try:
     from tangent.grads import adjoint
     from tangent.tangents import tangent_
     from tangent.utils import array_shapes_match
+    from tangent.utils import register_add_grad
     from tangent.utils import register_all_add_grad
     from tangent.utils import register_all_shape_checker
     from tangent.utils import register_init_grad
@@ -127,6 +128,53 @@ try:
     register_all_shape_checker(
         tensor_shapes_match,
         tensor_and_numeric_types)
+except ValueError as e:
+    # Already registered, skip
+    if "already mapped" not in str(e):
+        raise
+
+# Type mixing support: NumPy <-> TensorFlow conversion
+# This handles cases where Python's ** operator returns NumPy arrays
+# when operating on TensorFlow tensors
+
+def add_grad_numpy_to_tensor(left, right):
+    """Add NumPy array to TensorFlow tensor by converting to TensorFlow.
+
+    This is needed because Python's ** operator on TF tensors returns NumPy arrays,
+    causing type mixing in gradient accumulation.
+
+    Args:
+        left: NumPy array
+        right: TensorFlow tensor
+
+    Returns:
+        TensorFlow tensor (sum)
+    """
+    # Convert NumPy array to TensorFlow tensor, matching the dtype of right
+    left_tf = tf.constant(left, dtype=right.dtype)
+    return tf.add(left_tf, right)
+
+def add_grad_tensor_to_numpy(left, right):
+    """Add TensorFlow tensor to NumPy array by converting to TensorFlow.
+
+    Args:
+        left: TensorFlow tensor
+        right: NumPy array
+
+    Returns:
+        TensorFlow tensor (sum)
+    """
+    # Convert NumPy array to TensorFlow tensor, matching the dtype of left
+    right_tf = tf.constant(right, dtype=left.dtype)
+    return tf.add(left, right_tf)
+
+# Register NumPy <-> TensorFlow conversions
+try:
+    register_add_grad(np.ndarray, TensorType, add_grad_numpy_to_tensor)
+    register_add_grad(TensorType, np.ndarray, add_grad_tensor_to_numpy)
+    # Also register for Variable type
+    register_add_grad(np.ndarray, VariableType, add_grad_numpy_to_tensor)
+    register_add_grad(VariableType, np.ndarray, add_grad_tensor_to_numpy)
 except ValueError as e:
     # Already registered, skip
     if "already mapped" not in str(e):
@@ -376,6 +424,29 @@ def dtfdivide(z, x, y):
       tf.negative(tf.divide(tf.multiply(d[z], x), tf.multiply(y, y))), y)
 
 
+@adjoint(tf.pow)
+def dtfpow(z, x, y):
+  """Gradient of tf.pow(x, y) = x^y
+
+  d/dx[x^y] = y * x^(y-1)
+  d/dy[x^y] = x^y * log(x)
+  """
+  d[x] = tangent.unbroadcast(d[z] * y * tf.pow(x, y - 1), x)
+  d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
+
+
+# Also register tf.math.pow if it exists (TF 2.x compatibility)
+try:
+    @adjoint(tf.math.pow)
+    def dtfmathpow(z, x, y):
+      """Gradient of tf.math.pow(x, y) = x^y"""
+      d[x] = tangent.unbroadcast(d[z] * y * tf.math.pow(x, y - 1), x)
+      d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
+except AttributeError:
+    # tf.math.pow may not exist in some TF versions
+    pass
+
+
 @adjoint(tf.maximum)
 def dtfmaximum(z, x, y):
   d[x] = tf.multiply(d[z], tf.cast(tf.equal(z, x), tf.float32))
@@ -538,6 +609,34 @@ def ttfdivide(z, x, y):
   d[z] = tf.divide(
           tf.subtract(tf.multiply(d[x], y), tf.multiply(x, d[y])),
           tf.multiply(y, y))
+
+
+@tangent_(tf.pow)
+def ttfpow(z, x, y):
+  """Forward mode gradient of tf.pow(x, y) = x^y
+
+  Using the product rule:
+  d[z] = d[x] * (∂z/∂x) + d[y] * (∂z/∂y)
+       = d[x] * y * x^(y-1) + d[y] * x^y * log(x)
+  """
+  d[z] = tf.add(
+      tf.multiply(d[x], tf.multiply(y, tf.pow(x, y - 1))),
+      tf.multiply(d[y], tf.multiply(z, tf.math.log(x)))
+  )
+
+
+# Also register tf.math.pow if it exists (TF 2.x compatibility)
+try:
+    @tangent_(tf.math.pow)
+    def ttfmathpow(z, x, y):
+      """Forward mode gradient of tf.math.pow(x, y)"""
+      d[z] = tf.add(
+          tf.multiply(d[x], tf.multiply(y, tf.math.pow(x, y - 1))),
+          tf.multiply(d[y], tf.multiply(z, tf.math.log(x)))
+      )
+except AttributeError:
+    # tf.math.pow may not exist in some TF versions
+    pass
 
 
 @tangent_(tf.maximum)

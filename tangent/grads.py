@@ -326,6 +326,79 @@ def maximum(ans, x, y):
   d[y] = d[ans] * tangent.balanced_eq(y, ans, x)
 
 
+#
+# Neural Network Activation Functions
+#
+
+def numpy_relu(x):
+  """ReLU activation: max(0, x)."""
+  return numpy.maximum(0, x)
+
+
+@adjoint(numpy_relu)
+def arelu(y, x):
+  """Gradient of ReLU: 1 where x > 0, else 0."""
+  d[x] = d[y] * (x > 0).astype(x.dtype)
+
+
+def numpy_sigmoid(x):
+  """Sigmoid activation: 1/(1 + exp(-x))."""
+  return 1.0 / (1.0 + numpy.exp(-x))
+
+
+@adjoint(numpy_sigmoid)
+def asigmoid(y, x):
+  """Gradient of sigmoid: sigmoid(x) * (1 - sigmoid(x))."""
+  d[x] = d[y] * y * (1.0 - y)
+
+
+def numpy_tanh(x):
+  """Hyperbolic tangent activation (alias to numpy.tanh)."""
+  return numpy.tanh(x)
+
+
+# Note: numpy.tanh gradient is already defined above
+
+
+def numpy_leaky_relu(x, alpha=0.01):
+  """Leaky ReLU: x if x > 0 else alpha * x."""
+  return numpy.where(x > 0, x, alpha * x)
+
+
+@adjoint(numpy_leaky_relu)
+def aleaky_relu(y, x, alpha=0.01):
+  """Gradient of Leaky ReLU: 1 where x > 0, else alpha."""
+  d[x] = d[y] * numpy.where(x > 0, 1.0, alpha)
+
+
+def numpy_elu(x, alpha=1.0):
+  """ELU activation: x if x > 0 else alpha * (exp(x) - 1)."""
+  return numpy.where(x > 0, x, alpha * (numpy.exp(x) - 1.0))
+
+
+@adjoint(numpy_elu)
+def aelu(y, x, alpha=1.0):
+  """Gradient of ELU: 1 if x > 0 else alpha * exp(x)."""
+  d[x] = d[y] * numpy.where(x > 0, 1.0, alpha * numpy.exp(x))
+
+
+def numpy_softplus(x):
+  """Softplus activation: log(1 + exp(x))."""
+  return numpy.log(1.0 + numpy.exp(x))
+
+
+@adjoint(numpy_softplus)
+def asoftplus(y, x):
+  """Gradient of softplus: sigmoid(x) = 1/(1 + exp(-x))."""
+  # Gradient is sigmoid(x)
+  sigmoid_x = 1.0 / (1.0 + numpy.exp(-x))
+  d[x] = d[y] * sigmoid_x
+
+
+# Activation functions are defined above and will be imported by __init__.py
+# No need to export them here - they're already module-level functions
+
+
 @adjoint(numpy.array)
 def aarray(ans,x):
   d[x] = tangent.astype(d[ans],x)

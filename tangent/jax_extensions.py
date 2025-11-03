@@ -139,6 +139,51 @@ for num_type in [float, int, Number]:
     except ValueError:
         pass  # Already registered
 
+# Type mixing support: NumPy <-> JAX conversion
+# This handles cases where Python operators (like **) return NumPy arrays
+# when operating on JAX arrays, causing type mixing in gradient accumulation
+def add_grad_numpy_to_jax(left, right):
+    """Add NumPy array to JAX array by converting to JAX.
+
+    This is needed because Python's ** operator on JAX arrays can return NumPy arrays,
+    causing type mixing in gradient accumulation.
+
+    Args:
+        left: NumPy array
+        right: JAX array
+
+    Returns:
+        JAX array (sum)
+    """
+    # Convert NumPy array to JAX array
+    left_jax = jnp.array(left)
+    return jnp.add(left_jax, right)
+
+
+def add_grad_jax_to_numpy(left, right):
+    """Add JAX array to NumPy array by converting to JAX.
+
+    Args:
+        left: JAX array
+        right: NumPy array
+
+    Returns:
+        JAX array (sum)
+    """
+    # Convert NumPy array to JAX array
+    right_jax = jnp.array(right)
+    return jnp.add(left, right_jax)
+
+
+# Register NumPy <-> JAX conversions
+try:
+    _utils.register_add_grad(np.ndarray, ArrayType, add_grad_numpy_to_jax)
+    _utils.register_add_grad(ArrayType, np.ndarray, add_grad_jax_to_numpy)
+except ValueError as e:
+    # Already registered, skip
+    if "already mapped" not in str(e):
+        raise
+
 # JAX-specific unbroadcast and unreduce functions
 def jax_unbroadcast_to(array, shape):
     """Reverse the broadcasting operation for JAX arrays."""
@@ -286,6 +331,25 @@ def adjoint_cos(y, x):
 def adjoint_tan(y, x):
     """Adjoint for jnp.tan: ∂L/∂x = sec²(x)·∂L/∂z = ∂L/∂z/cos²(x)"""
     d[x] = d[y] / (jnp.cos(x) ** 2)
+
+
+# Inverse trigonometric functions
+@adjoint(jnp.arcsin)
+def adjoint_arcsin(y, x):
+    """Adjoint for jnp.arcsin: ∂L/∂x = ∂L/∂z/√(1-x²)"""
+    d[x] = d[y] / jnp.sqrt(1.0 - x**2)
+
+
+@adjoint(jnp.arccos)
+def adjoint_arccos(y, x):
+    """Adjoint for jnp.arccos: ∂L/∂x = -∂L/∂z/√(1-x²)"""
+    d[x] = -d[y] / jnp.sqrt(1.0 - x**2)
+
+
+@adjoint(jnp.arctan)
+def adjoint_arctan(y, x):
+    """Adjoint for jnp.arctan: ∂L/∂x = ∂L/∂z/(1+x²)"""
+    d[x] = d[y] / (1.0 + x**2)
 
 
 # Hyperbolic functions
@@ -577,6 +641,355 @@ def adjoint_jax_gelu(y, x, approximate=True):
     # Use JAX to compute the gradient
     _, vjp_fn = jax.vjp(gelu_fn, x)
     d[x] = vjp_fn(d[y])[0]
+
+
+#
+# Forward Mode (Tangent) Definitions
+#
+
+# Arithmetic Operations
+@tangent_(jnp.add)
+def tangent_jnp_add(z, x, y):
+    """Forward mode for jnp.add."""
+    d[z] = jnp.add(d[x], d[y])
+
+
+@tangent_(jnp.subtract)
+def tangent_jnp_subtract(z, x, y):
+    """Forward mode for jnp.subtract."""
+    d[z] = jnp.subtract(d[x], d[y])
+
+
+@tangent_(jnp.multiply)
+def tangent_jnp_multiply(z, x, y):
+    """Forward mode for jnp.multiply: d[z] = d[x]*y + x*d[y]."""
+    d[z] = jnp.add(jnp.multiply(d[x], y), jnp.multiply(x, d[y]))
+
+
+@tangent_(jnp.divide)
+def tangent_jnp_divide(z, x, y):
+    """Forward mode for jnp.divide: d[z] = (d[x]*y - x*d[y]) / y^2."""
+    d[z] = jnp.divide(
+        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])),
+        jnp.multiply(y, y)
+    )
+
+
+@tangent_(jnp.true_divide)
+def tangent_jnp_true_divide(z, x, y):
+    """Forward mode for jnp.true_divide."""
+    d[z] = jnp.divide(
+        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])),
+        jnp.multiply(y, y)
+    )
+
+
+@tangent_(jnp.power)
+def tangent_jnp_power(z, x, y):
+    """Forward mode for jnp.power: d[z] = d[x]*y*x^(y-1) + d[y]*x^y*log(x)."""
+    d[z] = jnp.add(
+        jnp.multiply(d[x], jnp.multiply(y, jnp.power(x, y - 1))),
+        jnp.multiply(d[y], jnp.multiply(z, jnp.log(x)))
+    )
+
+
+@tangent_(jnp.negative)
+def tangent_jnp_negative(y, x):
+    """Forward mode for jnp.negative."""
+    d[y] = jnp.negative(d[x])
+
+
+# Exponential and Logarithmic Functions
+@tangent_(jnp.exp)
+def tangent_jnp_exp(y, x):
+    """Forward mode for jnp.exp: d[y] = d[x] * exp(x)."""
+    d[y] = jnp.multiply(d[x], y)
+
+
+@tangent_(jnp.log)
+def tangent_jnp_log(y, x):
+    """Forward mode for jnp.log: d[y] = d[x] / x."""
+    d[y] = jnp.divide(d[x], x)
+
+
+@tangent_(jnp.log10)
+def tangent_jnp_log10(y, x):
+    """Forward mode for jnp.log10: d[y] = d[x] / (x * ln(10))."""
+    d[y] = jnp.divide(d[x], jnp.multiply(x, jnp.log(10.0)))
+
+
+@tangent_(jnp.log2)
+def tangent_jnp_log2(y, x):
+    """Forward mode for jnp.log2: d[y] = d[x] / (x * ln(2))."""
+    d[y] = jnp.divide(d[x], jnp.multiply(x, jnp.log(2.0)))
+
+
+@tangent_(jnp.sqrt)
+def tangent_jnp_sqrt(y, x):
+    """Forward mode for jnp.sqrt: d[y] = d[x] / (2*sqrt(x))."""
+    d[y] = jnp.divide(d[x], jnp.multiply(2.0, y))
+
+
+@tangent_(jnp.square)
+def tangent_jnp_square(y, x):
+    """Forward mode for jnp.square: d[y] = 2*x*d[x]."""
+    d[y] = jnp.multiply(jnp.multiply(2.0, x), d[x])
+
+
+# Trigonometric Functions
+@tangent_(jnp.sin)
+def tangent_jnp_sin(y, x):
+    """Forward mode for jnp.sin: d[y] = d[x] * cos(x)."""
+    d[y] = jnp.multiply(d[x], jnp.cos(x))
+
+
+@tangent_(jnp.cos)
+def tangent_jnp_cos(y, x):
+    """Forward mode for jnp.cos: d[y] = -d[x] * sin(x)."""
+    d[y] = jnp.negative(jnp.multiply(d[x], jnp.sin(x)))
+
+
+@tangent_(jnp.tan)
+def tangent_jnp_tan(y, x):
+    """Forward mode for jnp.tan: d[y] = d[x] / cos^2(x)."""
+    cx = jnp.cos(x)
+    d[y] = jnp.divide(d[x], jnp.multiply(cx, cx))
+
+
+# Inverse Trigonometric Functions
+@tangent_(jnp.arcsin)
+def tangent_jnp_arcsin(y, x):
+    """Forward mode for jnp.arcsin: d[y] = d[x] / √(1-x²)."""
+    d[y] = jnp.divide(d[x], jnp.sqrt(1.0 - x**2))
+
+
+@tangent_(jnp.arccos)
+def tangent_jnp_arccos(y, x):
+    """Forward mode for jnp.arccos: d[y] = -d[x] / √(1-x²)."""
+    d[y] = jnp.negative(jnp.divide(d[x], jnp.sqrt(1.0 - x**2)))
+
+
+@tangent_(jnp.arctan)
+def tangent_jnp_arctan(y, x):
+    """Forward mode for jnp.arctan: d[y] = d[x] / (1+x²)."""
+    d[y] = jnp.divide(d[x], 1.0 + x**2)
+
+
+# Hyperbolic Functions
+@tangent_(jnp.sinh)
+def tangent_jnp_sinh(y, x):
+    """Forward mode for jnp.sinh: d[y] = d[x] * cosh(x)."""
+    d[y] = jnp.multiply(d[x], jnp.cosh(x))
+
+
+@tangent_(jnp.cosh)
+def tangent_jnp_cosh(y, x):
+    """Forward mode for jnp.cosh: d[y] = d[x] * sinh(x)."""
+    d[y] = jnp.multiply(d[x], jnp.sinh(x))
+
+
+@tangent_(jnp.tanh)
+def tangent_jnp_tanh(y, x):
+    """Forward mode for jnp.tanh: d[y] = d[x] / cosh^2(x)."""
+    cx = jnp.cosh(x)
+    d[y] = jnp.divide(d[x], jnp.multiply(cx, cx))
+
+
+# Reduction Operations
+@tangent_(jnp.sum)
+def tangent_jnp_sum(y, x, axis=None, dtype=None, keepdims=False):
+    """Forward mode for jnp.sum."""
+    d[y] = jnp.sum(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
+
+
+@tangent_(jnp.mean)
+def tangent_jnp_mean(y, x, axis=None, dtype=None, keepdims=False):
+    """Forward mode for jnp.mean."""
+    d[y] = jnp.mean(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
+
+
+@tangent_(jnp.max)
+def tangent_jnp_max(y, x, axis=None, keepdims=False):
+    """Forward mode for jnp.max."""
+    # Create mask where x equals the maximum
+    if axis is None:
+        mask = jnp.equal(x, y)
+    else:
+        y_expanded = jnp.expand_dims(y, axis) if not keepdims else y
+        mask = jnp.equal(x, y_expanded)
+    d[y] = jnp.sum(jnp.multiply(d[x], mask), axis=axis, keepdims=keepdims)
+
+
+@tangent_(jnp.min)
+def tangent_jnp_min(y, x, axis=None, keepdims=False):
+    """Forward mode for jnp.min."""
+    # Create mask where x equals the minimum
+    if axis is None:
+        mask = jnp.equal(x, y)
+    else:
+        y_expanded = jnp.expand_dims(y, axis) if not keepdims else y
+        mask = jnp.equal(x, y_expanded)
+    d[y] = jnp.sum(jnp.multiply(d[x], mask), axis=axis, keepdims=keepdims)
+
+
+# Linear Algebra Operations
+@tangent_(jnp.dot)
+def tangent_jnp_dot(z, x, y):
+    """Forward mode for jnp.dot: d[z] = dot(d[x], y) + dot(x, d[y])."""
+    d[z] = jnp.add(jnp.dot(d[x], y), jnp.dot(x, d[y]))
+
+
+@tangent_(jnp.matmul)
+def tangent_jnp_matmul(z, x, y):
+    """Forward mode for jnp.matmul."""
+    d[z] = jnp.add(jnp.matmul(d[x], y), jnp.matmul(x, d[y]))
+
+
+# Shape Manipulation
+@tangent_(jnp.transpose)
+def tangent_jnp_transpose(y, x, axes=None):
+    """Forward mode for jnp.transpose."""
+    d[y] = jnp.transpose(d[x], axes=axes)
+
+
+@tangent_(jnp.reshape)
+def tangent_jnp_reshape(y, x, shape):
+    """Forward mode for jnp.reshape."""
+    d[y] = jnp.reshape(d[x], shape)
+
+
+@tangent_(jnp.squeeze)
+def tangent_jnp_squeeze(y, x, axis=None):
+    """Forward mode for jnp.squeeze."""
+    d[y] = jnp.squeeze(d[x], axis=axis)
+
+
+@tangent_(jnp.expand_dims)
+def tangent_jnp_expand_dims(y, x, axis):
+    """Forward mode for jnp.expand_dims."""
+    d[y] = jnp.expand_dims(d[x], axis=axis)
+
+
+# Comparison and Selection
+@tangent_(jnp.abs)
+def tangent_jnp_abs(y, x):
+    """Forward mode for jnp.abs: d[y] = d[x] * sign(x)."""
+    d[y] = jnp.multiply(d[x], jnp.sign(x))
+
+
+@tangent_(jnp.maximum)
+def tangent_jnp_maximum(z, x, y):
+    """Forward mode for jnp.maximum."""
+    d[z] = jnp.add(
+        jnp.multiply(d[x], jnp.where(jnp.greater(x, y), 1.0, 0.0)),
+        jnp.multiply(d[y], jnp.where(jnp.greater(y, x), 1.0, 0.0))
+    )
+
+
+@tangent_(jnp.minimum)
+def tangent_jnp_minimum(z, x, y):
+    """Forward mode for jnp.minimum."""
+    d[z] = jnp.add(
+        jnp.multiply(d[x], jnp.where(jnp.less(x, y), 1.0, 0.0)),
+        jnp.multiply(d[y], jnp.where(jnp.less(y, x), 1.0, 0.0))
+    )
+
+
+@tangent_(jnp.clip)
+def tangent_jnp_clip(y, x, a_min=None, a_max=None):
+    """Forward mode for jnp.clip."""
+    # Gradient is zero where clipped, d[x] elsewhere
+    mask = jnp.ones_like(x)
+    if a_min is not None:
+        mask = jnp.where(jnp.less(x, a_min), 0.0, mask)
+    if a_max is not None:
+        mask = jnp.where(jnp.greater(x, a_max), 0.0, mask)
+    d[y] = jnp.multiply(d[x], mask)
+
+
+@tangent_(jnp.where)
+def tangent_jnp_where(result, condition, x, y):
+    """Forward mode for jnp.where."""
+    d[result] = jnp.where(condition, d[x], d[y])
+
+
+# Array Construction and Manipulation
+@tangent_(jnp.concatenate)
+def tangent_jnp_concatenate(result, arrays, axis=0):
+    """Forward mode for jnp.concatenate."""
+    # Get tangents of all input arrays
+    tangent_arrays = [d[arr] for arr in arrays]
+    d[result] = jnp.concatenate(tangent_arrays, axis=axis)
+
+
+@tangent_(jnp.stack)
+def tangent_jnp_stack(result, arrays, axis=0):
+    """Forward mode for jnp.stack."""
+    tangent_arrays = [d[arr] for arr in arrays]
+    d[result] = jnp.stack(tangent_arrays, axis=axis)
+
+
+# Neural Network Activation Functions
+@tangent_(jax.nn.relu)
+def tangent_jax_relu(y, x):
+    """Forward mode for jax.nn.relu: d[y] = d[x] where x > 0, else 0."""
+    d[y] = jnp.where(jnp.greater(x, 0), d[x], 0.0)
+
+
+@tangent_(jax.nn.sigmoid)
+def tangent_jax_sigmoid(y, x):
+    """Forward mode for jax.nn.sigmoid: d[y] = d[x] * sigmoid(x) * (1 - sigmoid(x))."""
+    d[y] = jnp.multiply(d[x], jnp.multiply(y, 1.0 - y))
+
+
+@tangent_(jax.nn.softplus)
+def tangent_jax_softplus(y, x):
+    """Forward mode for jax.nn.softplus: d[y] = d[x] * sigmoid(x)."""
+    d[y] = jnp.multiply(d[x], jax.nn.sigmoid(x))
+
+
+@tangent_(jax.nn.log_sigmoid)
+def tangent_jax_log_sigmoid(y, x):
+    """Forward mode for jax.nn.log_sigmoid: d[y] = d[x] * (1 - sigmoid(x))."""
+    d[y] = jnp.multiply(d[x], 1.0 - jax.nn.sigmoid(x))
+
+
+@tangent_(jax.nn.elu)
+def tangent_jax_elu(y, x, alpha=1.0):
+    """Forward mode for jax.nn.elu."""
+    # ELU gradient: 1 if x > 0, else alpha * exp(x)
+    grad = jnp.where(jnp.greater(x, 0), 1.0, alpha * jnp.exp(x))
+    d[y] = jnp.multiply(d[x], grad)
+
+
+@tangent_(jax.nn.leaky_relu)
+def tangent_jax_leaky_relu(y, x, negative_slope=0.01):
+    """Forward mode for jax.nn.leaky_relu."""
+    grad = jnp.where(jnp.greater(x, 0), 1.0, negative_slope)
+    d[y] = jnp.multiply(d[x], grad)
+
+
+@tangent_(jax.nn.selu)
+def tangent_jax_selu(y, x):
+    """Forward mode for jax.nn.selu."""
+    # SELU constants
+    alpha = 1.67326324
+    scale = 1.05070098
+    # Gradient
+    grad = jnp.where(jnp.greater(x, 0), scale, scale * alpha * jnp.exp(x))
+    d[y] = jnp.multiply(d[x], grad)
+
+
+@tangent_(jax.nn.gelu)
+def tangent_jax_gelu(y, x, approximate=True):
+    """Forward mode for jax.nn.gelu."""
+    # Use JAX's built-in gradient
+    import jax
+    def gelu_fn(x_):
+        return jax.nn.gelu(x_, approximate=approximate)
+    # Compute JVP
+    _, jvp_result = jax.jvp(gelu_fn, (x,), (d[x],))
+    d[y] = jvp_result
 
 
 print(f"✓ JAX extensions loaded successfully (JAX {jax.__version__})")

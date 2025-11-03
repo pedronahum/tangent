@@ -265,6 +265,49 @@ def tarray(z, x):
 
 
 #
+# Neural Network Activation Functions (Forward Mode)
+#
+
+# Import activation functions from grads module
+from tangent.grads import (
+    numpy_relu, numpy_sigmoid, numpy_tanh,
+    numpy_leaky_relu, numpy_elu, numpy_softplus
+)
+
+
+@tangent_(numpy_relu)
+def trelu(y, x):
+  """Forward mode for ReLU."""
+  d[y] = d[x] * (x > 0).astype(x.dtype)
+
+
+@tangent_(numpy_sigmoid)
+def tsigmoid(y, x):
+  """Forward mode for sigmoid."""
+  # d[y] = d[x] * sigmoid(x) * (1 - sigmoid(x))
+  d[y] = d[x] * y * (1.0 - y)
+
+
+@tangent_(numpy_leaky_relu)
+def tleaky_relu(y, x, alpha=0.01):
+  """Forward mode for Leaky ReLU."""
+  d[y] = d[x] * numpy.where(x > 0, 1.0, alpha)
+
+
+@tangent_(numpy_elu)
+def telu(y, x, alpha=1.0):
+  """Forward mode for ELU."""
+  d[y] = d[x] * numpy.where(x > 0, 1.0, alpha * numpy.exp(x))
+
+
+@tangent_(numpy_softplus)
+def tsoftplus(y, x):
+  """Forward mode for softplus."""
+  sigmoid_x = 1.0 / (1.0 + numpy.exp(-x))
+  d[y] = d[x] * sigmoid_x
+
+
+#
 # Tangent tangents
 #
 

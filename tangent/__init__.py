@@ -40,6 +40,16 @@ from tangent.utils import unbroadcast
 from tangent.utils import unreduce
 from tangent.utils import unreduce_like
 
+# NumPy activation functions for neural networks
+from tangent.grads import (
+    numpy_relu,
+    numpy_sigmoid,
+    numpy_tanh,
+    numpy_leaky_relu,
+    numpy_elu,
+    numpy_softplus
+)
+
 # Imported last to avoid circular imports
 from tangent.grad_util import grad, autodiff, vjp, jvp
 from tangent.errors import *
