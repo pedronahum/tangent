@@ -121,11 +121,13 @@ class ReverseAD(object):
         global namespace.
   """
 
-  def __init__(self, wrt, preserve_result, check_dims):
+  def __init__(self, wrt, preserve_result, check_dims, checkpoint_config=None):
     self.required = []
     self.wrt = wrt
     self.preserve_result = preserve_result
     self.check_dims = check_dims
+    # Phase 2: Checkpointing configuration
+    self.checkpoint_config = checkpoint_config or {}
 
   def visit(self, node):
     """Visit a node.
@@ -312,33 +314,145 @@ class ReverseAD(object):
     push_target, pop_target, op_id_target = get_push_pop()
     tmp_target = create.create_temp(node.target, self.namer)
 
-    primal_template = grads.primals[gast.For]
-    primal = template.replace(
-        primal_template,
-        body=body,
-        i=counter,
-        push=push,
-        target=node.target,
-        iter_=node.iter,
-        push_target=push_target,
-        _target=tmp_target,
-        _stack=self.stack,
-        op_id_iter=op_id,
-        op_id_target=op_id_target)
+    # Phase 2: Check if we should use checkpointing for this loop
+    use_checkpointing = self._should_checkpoint_loop(node)
 
-    adjoint_template = grads.adjoints[gast.For]
-    adjoint = template.replace(
-        adjoint_template,
-        adjoint_body=adjoint_body,
-        i=counter,
-        pop=pop,
-        pop_target=pop_target,
-        target=ast_.copy_node(node.target),
-        _stack=self.stack,
-        op_id_iter=op_id,
-        op_id_target=op_id_target)
+    if use_checkpointing:
+      # Use checkpointed templates - Phase 3++: selective storage
+      # Create variables for checkpoint management
+      checkpoint_dict_var = create.create_temp(gast.Name(id='checkpoint_dict'), self.namer)
+      checkpoint_positions_var = create.create_temp(gast.Name(id='checkpoint_positions'), self.namer)
+
+      primal_template = grads.primals_checkpointed[gast.For]
+      primal = template.replace(
+          primal_template,
+          body=body,
+          i=counter,
+          push=push,
+          target=node.target,
+          iter_=node.iter,
+          push_target=push_target,
+          _target=tmp_target,
+          _stack=self.stack,
+          op_id_iter=op_id,
+          op_id_target=op_id_target,
+          _checkpoint_dict=checkpoint_dict_var,
+          _checkpoint_positions_list=checkpoint_positions_var)
+
+      adjoint_template = grads.adjoints_checkpointed[gast.For]
+      adjoint = template.replace(
+          adjoint_template,
+          adjoint_body=adjoint_body,
+          i=counter,
+          pop=pop,
+          pop_target=pop_target,
+          target=ast_.copy_node(node.target),
+          _stack=self.stack,
+          op_id_iter=op_id,
+          op_id_target=op_id_target,
+          _checkpoint_dict=checkpoint_dict_var,
+          _checkpoint_positions_list=checkpoint_positions_var)
+    else:
+      # Use standard templates
+      primal_template = grads.primals[gast.For]
+      primal = template.replace(
+          primal_template,
+          body=body,
+          i=counter,
+          push=push,
+          target=node.target,
+          iter_=node.iter,
+          push_target=push_target,
+          _target=tmp_target,
+          _stack=self.stack,
+          op_id_iter=op_id,
+          op_id_target=op_id_target)
+
+      adjoint_template = grads.adjoints[gast.For]
+      adjoint = template.replace(
+          adjoint_template,
+          adjoint_body=adjoint_body,
+          i=counter,
+          pop=pop,
+          pop_target=pop_target,
+          target=ast_.copy_node(node.target),
+          _stack=self.stack,
+          op_id_iter=op_id,
+          op_id_target=op_id_target)
 
     return primal, adjoint
+
+  def _should_checkpoint_loop(self, node):
+    """Decide if this loop should use checkpointing.
+
+    Phase 2: Conservative approach - only checkpoint if explicitly enabled
+    and loop length can be determined.
+
+    Args:
+      node: AST For node
+
+    Returns:
+      bool: True if checkpointing should be used
+    """
+    # Check if checkpointing is enabled
+    if not self.checkpoint_config.get('enabled', False):
+      return False
+
+    # Try to estimate loop length
+    loop_length = self._estimate_loop_length(node.iter)
+
+    if loop_length is None:
+      # Unknown length - don't checkpoint in Phase 2 (conservative)
+      return False
+
+    # Use checkpointing if length exceeds threshold
+    threshold = self.checkpoint_config.get('min_length', 100)
+    return loop_length >= threshold
+
+  def _estimate_loop_length(self, iter_node):
+    """Try to statically determine loop length from range() calls.
+
+    Args:
+      iter_node: AST node representing the loop iterator
+
+    Returns:
+      int or None: Estimated loop length, or None if unknown
+    """
+    # Handle range(n) calls
+    if isinstance(iter_node, gast.Call):
+      if isinstance(iter_node.func, gast.Name) and iter_node.func.id == 'range':
+        if len(iter_node.args) == 1:
+          # range(n)
+          # Python 3.8+ uses gast.Constant, older versions use gast.Num
+          arg = iter_node.args[0]
+          if hasattr(gast, 'Num') and isinstance(arg, gast.Num):
+            return arg.n
+          elif isinstance(arg, gast.Constant):
+            return arg.value
+        elif len(iter_node.args) == 2:
+          # range(start, stop)
+          stop_val = None
+          start_val = 0
+
+          # Get stop value
+          stop_arg = iter_node.args[1]
+          if hasattr(gast, 'Num') and isinstance(stop_arg, gast.Num):
+            stop_val = stop_arg.n
+          elif isinstance(stop_arg, gast.Constant):
+            stop_val = stop_arg.value
+
+          # Get start value
+          start_arg = iter_node.args[0]
+          if hasattr(gast, 'Num') and isinstance(start_arg, gast.Num):
+            start_val = start_arg.n
+          elif isinstance(start_arg, gast.Constant):
+            start_val = start_arg.value
+
+          if stop_val is not None:
+            return stop_val - start_val
+
+    # Unknown length
+    return None
 
   def visit_While(self, node):
     if node.orelse:
@@ -423,6 +537,112 @@ class ReverseAD(object):
         pop=pop,
         _stack=self.stack,
         op_id=op_id)
+    return primal, adjoint
+
+  def visit_IfExp(self, node):
+    """Handle conditional expressions (ternary operator): body if test else orelse."""
+    # Store the condition on the stack so we can use it in the adjoint
+    cond_var = self.namer.cond()
+    push, pop, op_id = get_push_pop()
+
+    # Save the current target and create temps for each branch
+    saved_target = self.target
+    saved_orig_target = self.orig_target
+
+    # Visit body branch - the result goes into orig_target
+    self.target = create.create_temp(self.orig_target, self.namer)
+    self.orig_target = saved_orig_target
+    body_result, body_adjoint = self.visit(node.body)
+    body_temp = self.target
+
+    # Visit orelse branch - the result goes into orig_target
+    self.target = create.create_temp(self.orig_target, self.namer)
+    self.orig_target = saved_orig_target
+    orelse_result, orelse_adjoint = self.visit(node.orelse)
+    orelse_temp = self.target
+
+    # Restore target
+    self.target = saved_target
+    self.orig_target = saved_orig_target
+
+    # Extract the expression and preparatory statements from the visited branches
+    # If the result is a list (from visiting nested IfExp), the last element should be
+    # an Assign node, and we need the RHS expression
+    body_stmts = []
+    if isinstance(body_result, list):
+      body_stmts = body_result[:-1]  # All but last
+      # Last item should be an Assign, extract its value
+      if isinstance(body_result[-1], gast.Assign):
+        body_expr = body_result[-1].value
+      else:
+        body_expr = body_result[-1]
+    else:
+      body_expr = body_result
+
+    orelse_stmts = []
+    if isinstance(orelse_result, list):
+      orelse_stmts = orelse_result[:-1]  # All but last
+      # Last item should be an Assign, extract its value
+      if isinstance(orelse_result[-1], gast.Assign):
+        orelse_expr = orelse_result[-1].value
+      else:
+        orelse_expr = orelse_result[-1]
+    else:
+      orelse_expr = orelse_result
+
+    # Primal: save condition, compute ternary, push condition
+    save_cond = template.replace('cond = test', cond=cond_var, test=node.test)
+    push_cond = template.replace('push(_stack, cond, op_id)',
+                                 push=push, _stack=self.stack,
+                                 cond=cond_var, op_id=op_id)
+
+    # Create IfExp using the saved condition
+    ifexp_expr = gast.IfExp(
+        test=gast.Name(id=cond_var, ctx=gast.Load(), annotation=None),
+        body=body_expr,
+        orelse=orelse_expr)
+
+    # Create the assignment
+    assign = gast.Assign(
+        targets=[ast_.copy_node(self.orig_target)],
+        value=ifexp_expr)
+
+    # Combine all primal statements
+    primal = body_stmts + orelse_stmts + [save_cond, push_cond, assign]
+
+    # Adjoint: pop condition, then conditionally execute the branch adjoints
+    # The gradient of the result needs to be routed to the chosen branch
+    pop_cond = template.replace('cond = pop(_stack, op_id)',
+                                cond=cond_var, pop=pop,
+                                _stack=self.stack, op_id=op_id)
+
+    # Create conditional adjoint: if cond was true, execute body_adjoint, else orelse_adjoint
+    # Also need to initialize the branch temp gradients from the result gradient
+    init_body_grad = template.replace(
+        'd[body_temp] = d[result]',
+        namer=self.namer,
+        replace_grad=template.Replace.FULL,
+        body_temp=body_temp,
+        result=self.target)
+
+    init_orelse_grad = template.replace(
+        'd[orelse_temp] = d[result]',
+        namer=self.namer,
+        replace_grad=template.Replace.FULL,
+        orelse_temp=orelse_temp,
+        result=self.target)
+
+    # Ensure adjoints are lists and filter out any that are empty lists
+    body_adj_list = body_adjoint if isinstance(body_adjoint, list) else ([body_adjoint] if body_adjoint else [])
+    orelse_adj_list = orelse_adjoint if isinstance(orelse_adjoint, list) else ([orelse_adjoint] if orelse_adjoint else [])
+
+    adj_if = gast.If(
+        test=gast.Name(id=cond_var, ctx=gast.Load(), annotation=None),
+        body=[init_body_grad] + body_adj_list,
+        orelse=[init_orelse_grad] + orelse_adj_list)
+
+    adjoint = [pop_cond, adj_if]
+
     return primal, adjoint
 
   def visit_Attribute(self, node):
@@ -581,9 +801,26 @@ class ReverseAD(object):
     return node, []
 
   def visit_Subscript(self, node):
-    adjoint = template.replace('d[x[i]] = d[y]', namer=self.namer,
-                               y=self.target, x=node.value,
-                               i=node.slice)
+    """Handle subscript access in reverse mode.
+
+    For `result = container[i]`, the adjoint is `d_container[i] = d_result`.
+    This assigns the gradient of the result to element i of the container's gradient.
+    """
+    # Create the gradient of the container for LHS: d_container[i]
+    grad_container = create.create_grad(node.value, self.namer)
+    grad_container.ctx = gast.Load()  # Will be changed to Store when used as LHS
+    lhs_subscript = gast.Subscript(
+        value=grad_container,
+        slice=node.slice,
+        ctx=gast.Store())
+
+    # Create the gradient of the result for RHS: d_result
+    rhs_grad = create.create_grad(self.target, self.namer)
+    rhs_grad.ctx = gast.Load()
+
+    # Create the assignment: d_container[i] = d_result
+    adjoint = gast.Assign(targets=[lhs_subscript], value=rhs_grad)
+
     return node, adjoint
 
   def visit_Name(self, node):
@@ -594,21 +831,154 @@ class ReverseAD(object):
   def visit_Num(self, node):
     return node, []
 
+  def visit_Constant(self, node):
+    """Handle gast.Constant nodes (Python 3.8+)."""
+    return node, []
+
   def visit_Tuple(self, node):
     return self.visit_container(node)
 
   def visit_List(self, node):
     return self.visit_container(node)
 
+  def visit_Dict(self, node):
+    """Handle dictionary construction.
+
+    For `result = {'a': x, 'b': y}`, we propagate gradients:
+    d[x] = d_result['a']
+    d[y] = d_result['b']
+
+    Thanks to ANF transformation, ALL dict values (including nested dicts
+    and complex expressions) are extracted to temp variables first.
+    So all values here are simple Names.
+    """
+    adjoint = []
+
+    for key_node, value_node in zip(node.keys, node.values):
+      # Create d_result[key] for RHS: gradient of dict element
+      grad_target = create.create_grad(self.target, self.namer)
+      grad_target.ctx = gast.Load()
+      grad_subscript = gast.Subscript(
+          value=grad_target,
+          slice=key_node,
+          ctx=gast.Load())
+
+      # Create the assignment: d_value = d_result[key]
+      adjoint.append(template.replace('d[x] = rhs', namer=self.namer,
+                                      x=value_node, rhs=grad_subscript))
+
+    return node, adjoint
+
   def visit_container(self, node):
+    """Handle tuple/list unpacking in reverse mode.
+
+    For assignments like `a, b = x**2, x*3`, we need to propagate gradients
+    from each element to its corresponding value. The gradient of the container
+    is accessed by index: d[x] = d[container][i]
+    """
     adjoint = []
     for i, elt in enumerate(node.elts):
-      adjoint.append(template.replace('d[x] = d[t[i]]', namer=self.namer,
-                                      t=self.target, i=gast.Constant(value=i, kind=None), x=elt))
+      # Create d[t][i] manually: subscript the gradient of the whole container
+      grad_target = create.create_grad(self.target, self.namer)
+      grad_target.ctx = gast.Load()
+      index_node = gast.Constant(value=i, kind=None)
+      grad_target_subscript = gast.Subscript(
+          value=grad_target,
+          slice=index_node,
+          ctx=gast.Load())
+
+      # Now create the assignment: d[x] = d[t][i]
+      adjoint.append(template.replace('d[x] = rhs', namer=self.namer,
+                                      x=elt, rhs=grad_target_subscript))
     return node, adjoint
 
   def visit_Pass(self, node):
     return node, []
+
+  def visit_Break(self, node):
+    """Handle break statements.
+
+    Break statements are preserved in the primal but have no adjoint.
+    The loop unwinding will handle the control flow correctly.
+    """
+    return node, []
+
+  def visit_Continue(self, node):
+    """Handle continue statements.
+
+    Continue statements are preserved in the primal but have no adjoint.
+    The loop unwinding will handle the control flow correctly.
+    """
+    return node, []
+
+  def visit_Try(self, node):
+    """Handle try/except/finally blocks.
+
+    This is a basic implementation that processes the try body and handlers,
+    but does not capture exception state on the stack. This means gradients
+    will flow through whichever path was actually executed at runtime.
+
+    Limitations:
+    - Does not checkpoint which handler was executed
+    - Finally blocks run in both forward and backward pass
+    - Exception state is not preserved for the adjoint
+    """
+    # Visit the try body
+    body, adjoint_body = self.visit_statements(node.body)
+
+    # Visit exception handlers
+    handlers = []
+    adjoint_handlers = []
+    for handler in node.handlers:
+      handler_body, handler_adjoint = self.visit_statements(handler.body)
+      # Ensure bodies are not empty (Python syntax requirement)
+      if not handler_body:
+        handler_body = [gast.Pass()]
+      if not handler_adjoint:
+        handler_adjoint = [gast.Pass()]
+
+      # Create new handler with transformed body
+      new_handler = gast.ExceptHandler(
+          type=handler.type,
+          name=handler.name,
+          body=handler_body)
+      handlers.append(new_handler)
+
+      # Create adjoint handler
+      adjoint_handler = gast.ExceptHandler(
+          type=handler.type,
+          name=handler.name,
+          body=handler_adjoint)
+      adjoint_handlers.append(adjoint_handler)
+
+    # Visit orelse (executed if no exception)
+    orelse, adjoint_orelse = self.visit_statements(node.orelse)
+
+    # Visit finally block
+    finalbody, adjoint_finalbody = self.visit_statements(node.finalbody)
+
+    # Ensure no empty blocks
+    if not body:
+      body = [gast.Pass()]
+    if not adjoint_body:
+      adjoint_body = [gast.Pass()]
+
+    # Build primal try statement
+    primal = gast.Try(
+        body=body,
+        handlers=handlers,
+        orelse=orelse,
+        finalbody=finalbody)
+
+    # Build adjoint try statement
+    # Note: The adjoint also uses try/except structure to mirror the primal's control flow
+    adjoint = gast.Try(
+        body=adjoint_body,
+        handlers=adjoint_handlers,
+        orelse=adjoint_orelse,
+        finalbody=adjoint_finalbody)
+
+    return primal, adjoint
 
   def visit_BinOp(self, node):
     op = type(node.op)
@@ -630,6 +1000,10 @@ class ReverseAD(object):
     return node, adjoint
 
   def visit_Compare(self, node):
+    return node, []
+
+  def visit_BoolOp(self, node):
+    """Boolean operations (and, or) are not differentiable."""
     return node, []
 
   def visit_Assert(self, node):
@@ -817,7 +1191,7 @@ class ReverseAD(object):
     return node, adjoint
 
 
-def reverse_ad(node, wrt, preserve_result, check_dims):
+def reverse_ad(node, wrt, preserve_result, check_dims, checkpoint_config=None):
   """Perform reverse-mode AD on an AST.
 
   This function analyses the AST to determine which variables are active and
@@ -832,6 +1206,8 @@ def reverse_ad(node, wrt, preserve_result, check_dims):
         derivative function should also return the original return value.
     check_dims: A boolean indicating whether the seed derivatives should have
         their dimensions checked to match their primal counterpart.
+    checkpoint_config: Optional dictionary with checkpointing configuration.
+        Keys: 'enabled' (bool), 'min_length' (int), 'num_checkpoints' (int or None)
 
 
   Returns:
@@ -845,7 +1221,7 @@ def reverse_ad(node, wrt, preserve_result, check_dims):
   # Activity analysis
   cfg.forward(node, cfg.Active(wrt))
 
-  ad = ReverseAD(wrt, preserve_result, check_dims)
+  ad = ReverseAD(wrt, preserve_result, check_dims, checkpoint_config)
   pri, adj = ad.visit(node)
   mod = gast.Module(body=[pri, adj])
   mod = annotate.find_stacks(mod)

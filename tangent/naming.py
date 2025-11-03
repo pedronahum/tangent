@@ -273,6 +273,9 @@ class Namer(object):
   def name_List(self, node):
     return 'l'
 
+  def name_Dict(self, node):
+    return 'd'
+
   def name_Call(self, node):
     if len(node.args) <= 2:
       return (self._name(node.func) + '_' +
@@ -354,3 +357,48 @@ class Namer(object):
   def name_UnaryOp(self, node):
     return '{op}_{operand}'.format(op=self.UNARYOP_NAMES[type(node.op)],
                                    operand=self._name(node.operand))
+
+  CMPOP_NAMES = {
+      gast.Eq: 'eq',
+      gast.NotEq: 'neq',
+      gast.Lt: 'lt',
+      gast.LtE: 'lte',
+      gast.Gt: 'gt',
+      gast.GtE: 'gte',
+      gast.Is: 'is',
+      gast.IsNot: 'isnot',
+      gast.In: 'in',
+      gast.NotIn: 'notin'
+  }
+
+  def name_Compare(self, node):
+    """Name for comparison expressions."""
+    # For simplicity, handle single comparisons (most common case)
+    # e.g., x > 0 becomes "x_gt_0"
+    if len(node.ops) == 1:
+      left = self._name(node.left)
+      op = self.CMPOP_NAMES[type(node.ops[0])]
+      right = self._name(node.comparators[0])
+      return '{left}_{op}_{right}'.format(left=left, op=op, right=right)
+    else:
+      # For chained comparisons like a < b < c, just use "cmp"
+      return 'cmp'
+
+  BOOLOP_NAMES = {
+      gast.And: 'and',
+      gast.Or: 'or'
+  }
+
+  def name_BoolOp(self, node):
+    """Name for boolean operations (and, or)."""
+    # For multiple values: a and b and c becomes "a_and_b_and_c"
+    op_name = self.BOOLOP_NAMES[type(node.op)]
+    value_names = [self._name(v) for v in node.values]
+    return ('_' + op_name + '_').join(value_names)
+
+  def name_IfExp(self, node):
+    """Name for conditional expressions (ternary operator)."""
+    return '{test}_if_{body}_else_{orelse}'.format(
+        test=self._name(node.test),
+        body=self._name(node.body),
+        orelse=self._name(node.orelse))

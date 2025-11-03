@@ -69,21 +69,82 @@ class ResolveCalls(gast.NodeVisitor):
                 'Failed to resolve name "%s" used by "%s".'% (
                     node.id, self.func.__name__))
 
-    func = resolve(node.func)
-    # If the user has used the @tangent.trace decorator,
-    # then we'll switch to tracing the function.
-    if hasattr(func, 'should_trace'):
-      func = tracing.Traceable
-    elif hasattr(func, 'fun'):
-      # TODO: use a less dicey API to check if a function is autograd-wrapped
-      # Autograd primitives keep around their original wrapped function.
-      # We need that to be the func annotation, otherwise we'd have to
-      # redefine derivatives for all autograd wrapped versions of NumPy.
-      # Beyond that, autograd wrapped functions only have fn(*args,**kwargs)
-      # for their signature. We need access tothe default values of functions
-      # for proper code generation.
-      func = func.fun
-    anno.setanno(node, 'func', func)
+    # Map NumPy array methods to their function equivalents BEFORE resolution
+    # This allows arr.sum() to work just like numpy.sum(arr)
+    # BUT don't transform if it's already numpy.sum() or np.sum()
+    if isinstance(node.func, gast.Attribute):
+      # Check if this is already a module.function call (like np.sum or numpy.sum)
+      is_module_call = isinstance(node.func.value, gast.Name) and node.func.value.id in ('numpy', 'np')
+
+      if not is_module_call:
+        import numpy
+        # Common NumPy array methods that have function equivalents
+        numpy_method_map = {
+            'sum': numpy.sum,
+            'mean': numpy.mean,
+            'prod': numpy.prod,
+            'min': numpy.min,
+            'max': numpy.max,
+            'argmin': numpy.argmin,
+            'argmax': numpy.argmax,
+            'cumsum': numpy.cumsum,
+            'cumprod': numpy.cumprod,
+            'std': numpy.std,
+            'var': numpy.var,
+            'transpose': numpy.transpose,
+            'reshape': numpy.reshape,
+            'flatten': numpy.ndarray.flatten,
+            'ravel': numpy.ravel,
+            'squeeze': numpy.squeeze,
+            'clip': numpy.clip,
+            'round': numpy.round,
+            'conj': numpy.conj,
+            'conjugate': numpy.conjugate,
+            'real': numpy.real,
+            'imag': numpy.imag,
+        }
+
+        method_name = node.func.attr
+        if method_name in numpy_method_map:
+          # Map this method to its function equivalent
+          # Transform arr.sum() to numpy.sum(arr) in the AST
+          func = numpy_method_map[method_name]
+          anno.setanno(node, 'func', func)
+
+          # Transform the AST: move the object from func.value to first argument
+          # arr.sum(axis=0) -> numpy.sum(arr, axis=0)
+          obj = node.func.value
+          # Create numpy.method_name as an Attribute node
+          node.func = gast.Attribute(
+              value=gast.Name(id='numpy', ctx=gast.Load(), annotation=None),
+              attr=method_name,
+              ctx=gast.Load())
+          node.args = [obj] + node.args
+
+          # Return early - we've handled this case
+          return
+
+    try:
+      func = resolve(node.func)
+
+      # If the user has used the @tangent.trace decorator,
+      # then we'll switch to tracing the function.
+      if hasattr(func, 'should_trace'):
+        func = tracing.Traceable
+      elif hasattr(func, 'fun'):
+        # TODO: use a less dicey API to check if a function is autograd-wrapped
+        # Autograd primitives keep around their original wrapped function.
+        # We need that to be the func annotation, otherwise we'd have to
+        # redefine derivatives for all autograd wrapped versions of NumPy.
+        # Beyond that, autograd wrapped functions only have fn(*args,**kwargs)
+        # for their signature. We need access tothe default values of functions
+        # for proper code generation.
+        func = func.fun
+      anno.setanno(node, 'func', func)
+    except AttributeError:
+      # Can't resolve this call (e.g., method on a local variable like list.append)
+      # Annotate with None to indicate it's not differentiable
+      anno.setanno(node, 'func', None)
 
 
 def resolve_calls(func):

@@ -74,10 +74,17 @@ class ANF(transformers.TreeTransformer):
 
   def visit_Call(self, node):
     if self.trivializing:
+      # Trivialize arguments
       for i, arg in enumerate(node.args):
         node.args[i] = self.trivialize(arg)
       for keyword in node.keywords:
         keyword.value = self.trivialize(keyword.value)
+
+      # Trivialize method calls: obj.method() should trivialize obj
+      # This handles cases like arr[1:3].sum() where arr[1:3] needs extraction
+      if isinstance(node.func, gast.Attribute):
+        node.func.value = self.trivialize(node.func.value)
+
     return node
 
   def visit_FunctionDef(self, node):
@@ -156,6 +163,13 @@ class ANF(transformers.TreeTransformer):
   def visit_List(self, node):
     if self.trivializing:
       node.elts = [self.trivialize(elt) for elt in node.elts]
+    return node
+
+  def visit_Dict(self, node):
+    if self.trivializing:
+      # Trivialize ALL dict values (including nested dicts and complex expressions)
+      # This ensures each value is a simple Name after ANF transformation
+      node.values = [self.trivialize(val) for val in node.values]
     return node
 
   def visit_AugAssign(self, node):

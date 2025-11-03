@@ -156,7 +156,7 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_Not(self, node):
-    self._reject(node, 'Not operator is not supported')
+    self._allow_and_continue(node)
 
   def visit_Invert(self, node):
     self._reject(node, 'Invert operator is not supported')
@@ -253,7 +253,7 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_IfExp(self, node):
-    self._reject(node, 'Conditional Expressions are not supported')
+    self._allow_and_continue(node)
 
   def visit_Attribute(self, node):
     self._allow_and_continue(node)
@@ -340,7 +340,10 @@ class LanguageFence(ast.NodeVisitor):
       self._allow_and_continue(node)
 
   def visit_Continue(self, node):
-    self._reject(node, 'Continue statements are not supported')
+    if self._strict:
+      self._reject(node, 'Continue statements are not supported in strict mode')
+    else:
+      self._allow_and_continue(node)
 
   def visit_Try(self, node):
     self._allow_and_continue(node)

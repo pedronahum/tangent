@@ -95,8 +95,8 @@ def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
                     val = cell.cell_contents
                     # Try to hash the value
                     closure_values.append(hash(val))
-                except (ValueError, AttributeError):
-                    # If unhashable, use id
+                except (ValueError, AttributeError, TypeError):
+                    # If unhashable (e.g., numpy arrays), use id
                     closure_values.append(id(val))
         except (AttributeError, ValueError):
             pass
@@ -319,10 +319,18 @@ def cached_grad(original_grad):
     """
     @functools.wraps(original_grad)
     def wrapper(func, wrt=(0,), optimized=True, preserve_result=False,
-                check_dims=True, verbose=0):
+                check_dims=True, verbose=0, checkpoint=False, checkpoint_config=None):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
+
+        # For now, disable caching when checkpointing is enabled
+        # Phase 3 will add proper cache key generation for checkpoint configs
+        if checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)):
+            if verbose >= 1:
+                print(f"[Cache] Bypassing cache (checkpointing enabled)")
+            return original_grad(func, wrt, optimized, preserve_result, check_dims,
+                               verbose, checkpoint, checkpoint_config)
 
         # Generate cache key (grad uses specific default parameters)
         cache_key = _generate_cache_key(
@@ -343,11 +351,13 @@ def cached_grad(original_grad):
 
         result = original_grad(
             func, wrt=wrt, optimized=optimized, preserve_result=preserve_result,
-            check_dims=check_dims, verbose=verbose
+            check_dims=check_dims, verbose=verbose, checkpoint=checkpoint,
+            checkpoint_config=checkpoint_config
         )
 
-        # Add to cache
-        _add_to_cache(cache_key, result)
+        # Add to cache (only if not using checkpointing)
+        if not (checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False))):
+            _add_to_cache(cache_key, result)
 
         return result
 

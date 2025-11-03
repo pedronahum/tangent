@@ -62,13 +62,17 @@ from tangent import annotate
 from tangent import ast as ast_
 from tangent import comments
 from tangent import compile as compile_
+from tangent import control_flow_validator
 from tangent import desugar
 from tangent import fence
 from tangent import forward_ad
+from tangent import lambda_desugar
+from tangent import listcomp_desugar
 from tangent import naming
 from tangent import optimization
 from tangent import quoting
 from tangent import reverse_ad
+from tangent import class_desugar
 
 INPUT_DERIVATIVE = enum.Enum('InputDerivative',
                              ('Required', 'DefaultOne', 'DefaultOnes'))
@@ -101,11 +105,13 @@ def unwrap_function(func):
   return unwrapped
 
 
-def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose):
+def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
+                checkpoint_config=None):
   """Perform AD on a single function and return the AST.
 
   Args:
     See `grad`.
+    checkpoint_config: Optional dictionary with checkpointing configuration.
 
   Returns:
     node: The AST of a module containing the adjoint and primal function
@@ -114,16 +120,33 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose):
         of which the primals and adjoints need to be made available in order
         for the returned function to run.
   """
-  node = annotate.resolve_calls(func)
+  # Parse the function and desugar classes, lambdas and list comprehensions first
+  node = quoting.parse_function(func)
+  node = class_desugar.inline_class_methods(node, func)  # Pass func for __globals__
+  node = lambda_desugar.desugar_lambdas(node)
+  node = listcomp_desugar.desugar_listcomps(node)
+
+  # Now resolve calls on the transformed AST
+  annotate.ResolveCalls(func).visit(node)
+
   node = desugar.explicit_loop_indexes(node)
   fence.validate(node, inspect.getsource(func))
   node = anf_.anf(node)
   if verbose >= 2:
     print('ANF')
     print(quoting.to_source(node))
+
+  # Validate control flow patterns after ANF transformation
+  try:
+    source = inspect.getsource(func)
+  except:
+    source = ''
+  control_flow_validator.validate_control_flow(node, source, verbose=verbose >= 1)
+
   if mode == 'reverse':
     node, required, stack = reverse_ad.reverse_ad(node.body[0], wrt,
-                                                  preserve_result, check_dims)
+                                                  preserve_result, check_dims,
+                                                  checkpoint_config)
     if verbose >= 2:
       print('RAW')
       print(quoting.to_source(node))
@@ -141,7 +164,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose):
 
 
 def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
-                  verbose):
+                  verbose, checkpoint_config=None):
   """Perform AD on all functions in a call tree.
 
   This function walks the call tree and differentiates each function in it. It
@@ -153,6 +176,7 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
 
   Args:
     See `grad`.
+    checkpoint_config: Optional dictionary with checkpointing configuration.
 
   Returns:
     final: A single module which contains the primals and adjoints of all the
@@ -169,8 +193,14 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
   final = gast.Module(body=[])
   namespace.update(six.get_function_globals(func))
 
+  # Add closure variables to namespace
+  if six.get_function_closure(func):
+    namespace.update(dict(zip(
+        func.__code__.co_freevars,
+        (cell.cell_contents for cell in six.get_function_closure(func)))))
+
   node, required = autodiff_ast(func, wrt, motion, mode, preserve_result,
-                                check_dims, verbose)
+                                check_dims, verbose, checkpoint_config)
   final.body.extend(node.body)
 
   to_do = set(required)
@@ -184,6 +214,12 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
     unwrapped_func = unwrap_function(func)
     namespace.update(six.get_function_globals(unwrapped_func))
 
+    # Add closure variables to namespace
+    if six.get_function_closure(unwrapped_func):
+      namespace.update(dict(zip(
+          unwrapped_func.__code__.co_freevars,
+          (cell.cell_contents for cell in six.get_function_closure(unwrapped_func)))))
+
     node, required = autodiff_ast(
         func=func,
         wrt=wrt,
@@ -191,7 +227,8 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
         mode=mode,
         preserve_result=True,
         check_dims=False,
-        verbose=verbose)
+        verbose=verbose,
+        checkpoint_config=checkpoint_config)
 
     final.body.extend(node.body)
     done.add((func, wrt))
@@ -254,7 +291,8 @@ def _autodiff_uncached(func,
              preserve_result=False,
              check_dims=True,
              input_derivative=INPUT_DERIVATIVE.Required,
-             verbose=0):
+             verbose=0,
+             checkpoint_config=None):
   """Build the vector-Jacobian or Jacobian-vector product of a function `func`.
 
   For a vector-Jacobian product (reverse-mode autodiff):
@@ -302,6 +340,8 @@ def _autodiff_uncached(func,
     verbose: If 1 the source code of the generated functions will be
         output to stdout at various stages of the process for debugging
         purposes. If > 1, all intermediate code generation steps will print.
+    checkpoint_config: Optional dictionary with checkpointing configuration.
+        Keys: 'enabled' (bool), 'min_length' (int), 'num_checkpoints' (int or None)
 
   Returns:
     df: A function that calculates a derivative (see file-level documentation
@@ -318,7 +358,7 @@ def _autodiff_uncached(func,
 
   # Generate the derivative
   node, namespace = autodiff_tree(func, wrt, motion, mode, preserve_result,
-                                  check_dims, verbose)
+                                  check_dims, verbose, checkpoint_config)
 
   if mode == 'reverse' and motion == 'joint':
     # Pull the stack definition and initial gradient into the function body
@@ -366,7 +406,9 @@ def _grad_uncached(func,
          optimized=True,
          preserve_result=False,
          check_dims=True,
-         verbose=0):
+         verbose=0,
+         checkpoint=False,
+         checkpoint_config=None):
   """Return the gradient of a function `func`.
   Args:
     func: The function to take the gradient of.
@@ -396,6 +438,12 @@ def _grad_uncached(func,
     verbose: If 1 the source code of the generated functions will be
         output to stdout at various stages of the process for debugging
         purposes. If > 1, all intermediate code generation steps will print.
+    checkpoint: Enable automatic checkpointing for loops (default: False).
+        This reduces memory usage for long sequences at the cost of recomputation.
+    checkpoint_config: Dictionary with checkpointing configuration:
+        - 'enabled': Enable checkpointing (default: value of checkpoint param)
+        - 'min_length': Minimum loop length to checkpoint (default: 100)
+        - 'num_checkpoints': Number of checkpoints or None for auto (default: None)
 
   Returns:
     df: A function that calculates the gradient with respect to arguments
@@ -405,6 +453,21 @@ def _grad_uncached(func,
         `preserve_result` is True, the function will also return the original
         result of `func`.
   """
+  # Prepare checkpoint configuration
+  if checkpoint_config is None:
+    checkpoint_config = {}
+  if checkpoint is True:
+    checkpoint_config.setdefault('enabled', True)
+
+  # Phase 3++: Disable optimization when checkpointing to preserve checkpoint dict
+  # The optimizer's dead code elimination removes checkpoint dict push statements
+  # while keeping pop statements, causing stack mismatches.
+  # TODO: Future enhancement - add persistent metadata to avoid disabling all optimizations
+  if checkpoint or checkpoint_config.get('enabled', False):
+    if optimized and verbose >= 1:
+      print("[Checkpointing] Disabling optimization to preserve checkpoint data structures")
+    optimized = False
+
   return _autodiff_uncached(
       func,
       wrt=wrt,
@@ -414,7 +477,8 @@ def _grad_uncached(func,
       preserve_result=preserve_result,
       check_dims=check_dims,
       input_derivative=INPUT_DERIVATIVE.DefaultOne,
-      verbose=verbose)
+      verbose=verbose,
+      checkpoint_config=checkpoint_config)
 
 
 # TODO: these are utility functions, designed only for internal use.
@@ -460,7 +524,45 @@ def _create_joint(fwdbwd, func, wrt, input_derivative):
   # Allow the initial gradient to be passed as a keyword argument
   fwdbwd = ast_.append_args(fwdbwd, [grad_name])
   if input_derivative == INPUT_DERIVATIVE.DefaultOne:
-    fwdbwd.args.defaults.append(quoting.quote('1.0'))
+    # Check if the function returns a tuple by looking at the primal code
+    # Find the first assignment to the result variable (the return value)
+    returns_tuple = False
+    tuple_size = 0
+
+    # Look through the function body for the return value assignment
+    for stmt in fwdbwd.body:
+      if isinstance(stmt, gast.Assign):
+        # Check if this assigns to a tuple (e.g., "t = a, b")
+        if (isinstance(stmt.value, gast.Tuple) and
+            len(stmt.targets) == 1 and
+            isinstance(stmt.targets[0], gast.Name)):
+          # This might be the return value - check if it's used in shapes_match
+          var_name = stmt.targets[0].id
+          # Look for assert with shapes_match using this variable
+          for check_stmt in fwdbwd.body:
+            if isinstance(check_stmt, gast.Assert):
+              # Check if this assert uses our variable
+              if (isinstance(check_stmt.test, gast.Call) and
+                  hasattr(check_stmt.test.func, 'attr') and
+                  check_stmt.test.func.attr == 'shapes_match' and
+                  len(check_stmt.test.args) >= 2 and
+                  isinstance(check_stmt.test.args[0], gast.Name) and
+                  check_stmt.test.args[0].id == var_name):
+                # This is the return value and it's a tuple!
+                returns_tuple = True
+                tuple_size = len(stmt.value.elts)
+                break
+          if returns_tuple:
+            break
+
+    # Set appropriate default based on return type
+    if returns_tuple and tuple_size > 0:
+      # Create tuple of ones: (1.0, 1.0, ...)
+      default_str = '(' + ', '.join(['1.0'] * tuple_size) + ')'
+      fwdbwd.args.defaults.append(quoting.quote(default_str))
+    else:
+      # Scalar return
+      fwdbwd.args.defaults.append(quoting.quote('1.0'))
   return fwdbwd
 
 

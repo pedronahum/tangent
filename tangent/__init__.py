@@ -50,6 +50,28 @@ from tangent.grads import (
     numpy_softplus
 )
 
+# Checkpointing for memory-efficient gradient computation
+from tangent.checkpointing_simple import (
+    compute_checkpoint_positions,
+    checkpointed_loop,
+    get_memory_savings
+)
+from tangent.grad_checkpoint import (
+    grad_with_checkpointing,
+    estimate_checkpoint_savings,
+    should_checkpoint
+)
+from tangent.checkpoint_helpers import (
+    compute_optimal_checkpoints,
+    find_nearest_checkpoint,
+    is_checkpoint_iteration,
+    store_checkpoint,
+    restore_checkpoint,
+    estimate_memory_savings as estimate_memory_savings_helper,
+    get_checkpoint_info,
+    CheckpointAwareStack
+)
+
 # Imported last to avoid circular imports
 from tangent.grad_util import grad, autodiff, vjp, jvp
 from tangent.errors import *
@@ -72,6 +94,22 @@ except (ImportError, AttributeError) as e:
   # JAX is optional
   import warnings
   warnings.warn(f"JAX extensions not available: {e}. Install JAX with: pip install jax jaxlib")
+  pass
+
+# Extended NumPy gradients
+try:
+  from tangent import numpy_extended
+except (ImportError, AttributeError) as e:
+  import warnings
+  warnings.warn(f"Extended NumPy gradients not available: {e}")
+  pass
+
+# Extended TensorFlow gradients
+try:
+  from tangent import tf_extended
+except (ImportError, AttributeError) as e:
+  import warnings
+  warnings.warn(f"Extended TensorFlow gradients not available: {e}")
   pass
 
 # Visualization tools (optional)

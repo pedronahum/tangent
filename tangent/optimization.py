@@ -80,8 +80,19 @@ def dead_code_elimination(node):
   Returns:
     The optimized AST.
   """
+  # Find all statements that are inside exception handlers - these should not be removed
+  # because they may execute when an exception is raised
+  statements_in_handlers = set()
+  for try_node in gast.walk(node):
+    if isinstance(try_node, gast.Try):
+      for handler in try_node.handlers:
+        for stmt in gast.walk(handler):
+          if isinstance(stmt, gast.stmt):
+            statements_in_handlers.add(stmt)
+
   to_remove = set(def_[1] for def_ in annotate.unused(node)
-                  if not isinstance(def_[1], (gast.arguments, gast.For)))
+                  if not isinstance(def_[1], (gast.arguments, gast.For))
+                  and def_[1] not in statements_in_handlers)
   for n in list(to_remove):
     for succ in gast.walk(n):
       if anno.getanno(succ, 'push', False):
