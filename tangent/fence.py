@@ -132,7 +132,7 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_Set(self, node):
-    self._reject(node, 'Sets not are supported')
+    self._reject(node, 'Sets are not supported')
 
   def visit_Dict(self, node):
     self._allow_and_continue(node)
