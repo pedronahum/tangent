@@ -293,8 +293,22 @@ class Namer(object):
     return self._name(node.value)
 
   def name_Slice(self, node):
-    return ''.join(self._name(i) if i else ''
-                   for i in (node.lower, node.upper, node.step))
+    # Build name from slice components
+    parts = []
+    for component in (node.lower, node.upper, node.step):
+      if component:
+        parts.append(self._name(component))
+      else:
+        parts.append('')
+
+    result = ''.join(parts)
+
+    # FIX: If completely empty (the ':' case), use a valid placeholder
+    # This handles cases like x[0, :] or x[:, 0] where ':' creates an empty slice
+    if not result:
+      return 'colon'
+
+    return result
 
   def name_ExtSlice(self, node):
     return '_'.join(self._name(d) for d in node.dims)

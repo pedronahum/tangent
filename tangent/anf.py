@@ -63,6 +63,10 @@ class ANF(transformers.TreeTransformer):
   def trivialize(self, node):
     if isinstance(node, (gast.Name, type(None)) + grammar.LITERALS):
       return node
+    # FIX: Handle Slice nodes specially to avoid generating invalid code like "colon = :"
+    # Slices need to be converted to slice() calls, not assigned directly
+    if isinstance(node, gast.Slice):
+      return self.trivialize_slice(node)
     name = self.namer.name(node)
     stmt = gast.Assign(
         targets=[gast.Name(annotation=None, id=name, ctx=gast.Store())],

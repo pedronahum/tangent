@@ -31,6 +31,46 @@ Tangent performs **source-to-source** automatic differentiation - it transforms 
 
 ---
 
+## 🎨 Gallery of Gradients: See the Magic
+
+**The killer feature: Readable gradient code!** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Gallery_of_Gradients.ipynb)
+
+Unlike black-box autodiff libraries, Tangent shows you **exactly** how gradients are computed. Our curated gallery demonstrates this with 8 beautiful examples:
+
+```python
+# Your function
+def f(x):
+    result = 0.0
+    for i in range(1, 6):
+        result += x ** i
+    return result
+
+# See the gradient code!
+df = tangent.grad(f, verbose=1)  # Prints the generated code
+```
+
+**What you'll see:**
+- 🔢 Polynomial derivatives (chain rule basics)
+- 🔄 For loops that run **in reverse** during backprop
+- 🌀 While loops with stack-based tape recording
+- 🔀 Conditional branching (if/else)
+- 📊 NumPy array operations and broadcasting
+- 📦 Nested function inlining
+- 🔢 Matrix operations with colon slicing
+- ⚡ Optimization comparison (before/after)
+
+Each example shows: **Original function → Generated gradient code → Why it looks that way → Verification**
+
+**Perfect for:**
+- 🎓 Learning how autodiff really works
+- 🐛 Debugging gradient computations
+- 👨‍🏫 Teaching calculus or ML concepts
+- 🔬 Research and algorithm development
+
+**[→ Explore the Gallery](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Gallery_of_Gradients.ipynb)** | [📖 Documentation](examples/README_GALLERY.md)
+
+---
+
 ## 🚀 Quick Start: Building Energy Optimization
 
 **Try it now in Colab!** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)

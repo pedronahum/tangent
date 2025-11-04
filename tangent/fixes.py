@@ -59,6 +59,13 @@ class FixStack(transformers.TreeTransformer):
   def visit(self, node):
     if anno.hasanno(node, 'push_var'):
       varname = ast_.get_name(anno.getanno(node, 'push_var'))
+
+      # FIX: Validate variable name before using it
+      # Empty strings or strings that start with digits are not valid Python identifiers
+      if not varname or not varname.isidentifier():
+        # Generate a safe fallback name using node's memory address
+        varname = '_slice_var_{:x}'.format(id(node) & 0xFFFFFFFF)
+
       if varname not in anno.getanno(node, 'defined_in'):
         self.insert_top(quoting.quote('{} = None'.format(varname)))
     return super(FixStack, self).visit(node)
