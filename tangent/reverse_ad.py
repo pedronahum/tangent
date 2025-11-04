@@ -805,21 +805,36 @@ class ReverseAD(object):
 
     For `result = container[i]`, the adjoint is `d_container[i] = d_result`.
     This assigns the gradient of the result to element i of the container's gradient.
-    """
-    # Create the gradient of the container for LHS: d_container[i]
-    grad_container = create.create_grad(node.value, self.namer)
-    grad_container.ctx = gast.Load()  # Will be changed to Store when used as LHS
-    lhs_subscript = gast.Subscript(
-        value=grad_container,
-        slice=node.slice,
-        ctx=gast.Store())
 
-    # Create the gradient of the result for RHS: d_result
+    For immutable types (JAX, TensorFlow), we use tangent.update_grad_at_index()
+    which provides functional updates instead of in-place assignment.
+    """
+    # Create the gradient of the container: d_container
+    grad_container = create.create_grad(node.value, self.namer)
+    grad_container.ctx = gast.Load()
+
+    # Create the gradient of the result: d_result
     rhs_grad = create.create_grad(self.target, self.namer)
     rhs_grad.ctx = gast.Load()
 
-    # Create the assignment: d_container[i] = d_result
-    adjoint = gast.Assign(targets=[lhs_subscript], value=rhs_grad)
+    # Generate: d_container = tangent.update_grad_at_index(d_container, index, d_result)
+    # This handles both mutable (NumPy) and immutable (JAX, TensorFlow) types
+    update_call = gast.Call(
+        func=gast.Attribute(
+            value=gast.Name(id='tangent', ctx=gast.Load(), annotation=None),
+            attr='update_grad_at_index',
+            ctx=gast.Load()),
+        args=[
+            grad_container,  # grad_array parameter
+            node.slice,      # index parameter
+            rhs_grad         # value parameter
+        ],
+        keywords=[])
+
+    # Assign the result back to d_container
+    grad_container_store = create.create_grad(node.value, self.namer)
+    grad_container_store.ctx = gast.Store()
+    adjoint = gast.Assign(targets=[grad_container_store], value=update_call)
 
     return node, adjoint
 

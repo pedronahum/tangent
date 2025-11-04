@@ -72,9 +72,19 @@ class ResolveCalls(gast.NodeVisitor):
     # Map NumPy array methods to their function equivalents BEFORE resolution
     # This allows arr.sum() to work just like numpy.sum(arr)
     # BUT don't transform if it's already numpy.sum() or np.sum()
+    # ALSO don't transform JAX (jnp.sum, jax.numpy.sum) or TensorFlow (tf.reduce_sum)
     if isinstance(node.func, gast.Attribute):
-      # Check if this is already a module.function call (like np.sum or numpy.sum)
-      is_module_call = isinstance(node.func.value, gast.Name) and node.func.value.id in ('numpy', 'np')
+      # Check if this is already a module.function call (like np.sum, jnp.sum, tf.reshape)
+      # Support: numpy, np, jnp, jax (and jax.numpy), tf, tensorflow
+      is_module_call = isinstance(node.func.value, gast.Name) and node.func.value.id in (
+          'numpy', 'np', 'jnp', 'jax', 'tf', 'tensorflow'
+      )
+      # Also check for jax.numpy.sum() pattern
+      if not is_module_call and isinstance(node.func.value, gast.Attribute):
+        if (isinstance(node.func.value.value, gast.Name) and
+            node.func.value.value.id == 'jax' and
+            node.func.value.attr == 'numpy'):
+          is_module_call = True
 
       if not is_module_call:
         import numpy

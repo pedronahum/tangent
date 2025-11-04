@@ -568,20 +568,24 @@ import jax.nn
 @adjoint(jax.nn.relu)
 def adjoint_jax_relu(y, x):
     """Adjoint for jax.nn.relu: gradient flows where x > 0."""
-    d[x] = d[y] * (x > 0).astype(x.dtype)
+    # Use (x > 0) which JAX automatically converts to float in multiplication
+    # This works with both scalars and arrays without needing jnp.where
+    d[x] = d[y] * (x > 0)
 
 # Also register for the unwrapped versions
 if hasattr(jax.nn.relu, '__wrapped__'):
     @adjoint(jax.nn.relu.__wrapped__)
     def adjoint_jax_relu_pjit(y, x):
         """Adjoint for jax.nn.relu (PjitFunction version)."""
-        d[x] = d[y] * (x > 0).astype(x.dtype)
+        # Use (x > 0) which JAX automatically converts to float in multiplication
+        d[x] = d[y] * (x > 0)
 
     if hasattr(jax.nn.relu.__wrapped__, '__wrapped__'):
         @adjoint(jax.nn.relu.__wrapped__.__wrapped__)
         def adjoint_jax_relu_fn(y, x):
             """Adjoint for jax.nn.relu (unwrapped function)."""
-            d[x] = d[y] * (x > 0).astype(x.dtype)
+            # Use (x > 0) which JAX automatically converts to float in multiplication
+            d[x] = d[y] * (x > 0)
 
 
 @adjoint(jax.nn.sigmoid)

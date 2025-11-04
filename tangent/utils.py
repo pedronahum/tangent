@@ -784,3 +784,88 @@ def copy(source):
     if allow_lazy_init_grad:
       return source
   return native_copy(source)
+
+
+def update_grad_at_index(grad_array, index, value):
+  """Update gradient array at index, handling both mutable and immutable types.
+
+  This function provides a unified interface for updating gradient arrays that
+  works with NumPy (mutable), JAX (immutable), and TensorFlow (immutable).
+
+  Args:
+    grad_array: The gradient array to update (NumPy array, JAX array, or TF tensor)
+    index: The index or indices to update (can be int, slice, or tuple of indices)
+    value: The value to set at the given index
+
+  Returns:
+    The updated gradient array. For mutable types (NumPy), this is the same object
+    with modified contents. For immutable types (JAX, TensorFlow), this is a new
+    object with the update applied.
+
+  Examples:
+    # NumPy (mutable - in-place update)
+    grad = np.zeros(3)
+    grad = update_grad_at_index(grad, 0, 1.0)  # Returns modified grad
+
+    # JAX (immutable - functional update)
+    grad = jnp.zeros(3)
+    grad = update_grad_at_index(grad, 0, 1.0)  # Returns new array
+
+    # TensorFlow (immutable - functional update)
+    grad = tf.zeros([3])
+    grad = update_grad_at_index(grad, 0, 1.0)  # Returns new tensor
+  """
+  # Get the type name to detect backend
+  type_name = type(grad_array).__module__
+
+  # JAX arrays - use .at[].set() functional update
+  if 'jax' in type_name:
+    try:
+      # Convert index to tuple if it's not already
+      if not isinstance(index, tuple):
+        index = (index,)
+      # Use JAX's functional update syntax
+      return grad_array.at[index].set(value)
+    except Exception:
+      # Fallback: try without tuple wrapping
+      return grad_array.at[index].set(value)
+
+  # TensorFlow tensors - use tensor_scatter_nd_update
+  elif 'tensorflow' in type_name:
+    try:
+      import tensorflow as tf
+      # Convert index to the format TF expects: [[index]]
+      if isinstance(index, int):
+        indices = [[index]]
+      elif isinstance(index, tuple):
+        # For multi-dimensional indexing: (i, j) -> [[i, j]]
+        indices = [list(index)]
+      else:
+        # For slice objects, we need to handle differently
+        # For now, convert to list of indices
+        if isinstance(index, slice):
+          # This is complex - for now, raise an error
+          raise NotImplementedError(
+              "Slice updates for TensorFlow tensors not yet implemented. "
+              "Please use explicit integer indices."
+          )
+        indices = [[index]]
+
+      # Ensure value has correct shape
+      if not hasattr(value, 'shape'):
+        value = tf.constant(value)
+      if len(tf.shape(value)) == 0:
+        value = tf.expand_dims(value, 0)
+
+      return tf.tensor_scatter_nd_update(grad_array, indices, value)
+    except Exception as e:
+      # If TF update fails, provide helpful error
+      raise TypeError(
+          f"Failed to update TensorFlow tensor: {e}. "
+          "TensorFlow tensors are immutable and require special update syntax."
+      )
+
+  # NumPy arrays (default - mutable in-place update)
+  else:
+    grad_array[index] = value
+    return grad_array
