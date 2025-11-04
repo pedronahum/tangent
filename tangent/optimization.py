@@ -55,9 +55,171 @@ def optimize(node):
   Returns:
     The optimized AST.
   """
-  node = dead_code_elimination(node)
-  node = constant_folding(node)
-  node = assignment_propagation(node)
+  # Phase 1: Basic optimizations
+  node = constant_folding(node)  # Fold constants first (may enable more DCE)
+  node = dead_code_elimination(node)  # Remove simple dead code
+  node = assignment_propagation(node)  # Propagate single-use assignments
+
+  # These create a positive feedback loop:
+  # - constant_folding may create dead assignments
+  # - dead_code_elimination removes them
+  # - assignment_propagation creates more opportunities
+  # - repeat until fixed point
+
+  return node
+
+
+def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
+  """Enhanced optimization pipeline with advanced DCE.
+
+  This combines Tangent's standard optimizations with the advanced DCE
+  (activity analysis + control flow) for multiplicative benefits.
+
+  Optimization order:
+  1. Standard optimizations (constant folding, basic DCE, assignment propagation)
+  2. Advanced DCE (activity analysis + control flow-aware)
+  3. Standard optimizations again (to clean up after advanced DCE)
+
+  Args:
+    node: The AST to optimize
+    requested_grads: List of parameter names for gradient computation (optional)
+    verbose: Verbosity level
+
+  Returns:
+    The optimized AST
+  """
+  # Phase 1: Standard optimizations (fixed-point)
+  if verbose >= 2:
+    print("[Optimization] Phase 1: Standard optimizations")
+  node = optimize(node)
+
+  # Phase 2: Advanced DCE (if requested gradients provided)
+  if requested_grads is not None:
+    if verbose >= 2:
+      print(f"[Optimization] Phase 2: Advanced DCE for {requested_grads}")
+    try:
+      from tangent.optimizations.dce import apply_dce
+      # Apply advanced DCE to the gradient function
+      if hasattr(node, 'body') and len(node.body) > 0:
+        node.body[0] = apply_dce(node.body[0], requested_grads)
+    except Exception as e:
+      if verbose >= 1:
+        print(f"[Optimization] Warning: Advanced DCE failed: {e}")
+
+  # Phase 3: Standard optimizations again (fixed-point)
+  # Advanced DCE may create new opportunities for basic optimizations
+  if verbose >= 2:
+    print("[Optimization] Phase 3: Post-DCE cleanup")
+  node = optimize(node)
+
+  return node
+
+
+def optimize_with_symbolic(node, requested_grads=None, enable_cse=True,
+                           enable_algebraic=True, enable_strength_reduction=True,
+                           verbose=0):
+  """Enhanced optimization pipeline with symbolic optimizations.
+
+  This combines Tangent's standard optimizations with:
+  - Strength Reduction (expensive ops → cheap ops)
+  - Common Subexpression Elimination (CSE)
+  - Algebraic Simplification (using SymPy)
+  - Advanced DCE
+
+  Optimization order:
+  1. Standard optimizations (constant folding, basic DCE, assignment propagation)
+  2. Strength Reduction (x**2 → x*x, x/const → x*(1/const))
+  3. CSE (reduces redundant computations, benefits from strength reduction)
+  4. Algebraic Simplification (applies mathematical identities)
+  5. Advanced DCE (removes unused code)
+  6. Standard optimizations again (final cleanup)
+
+  Args:
+    node: The AST to optimize
+    requested_grads: List of parameter names for gradient computation (optional)
+    enable_strength_reduction: Whether to enable Strength Reduction
+    enable_cse: Whether to enable Common Subexpression Elimination
+    enable_algebraic: Whether to enable Algebraic Simplification
+    verbose: Verbosity level
+
+  Returns:
+    The optimized AST
+  """
+  # Phase 1: Standard optimizations (fixed-point)
+  if verbose >= 2:
+    print("[Optimization] Phase 1: Standard optimizations")
+  node = optimize(node)
+
+  # Phase 2: Strength Reduction (before CSE so CSE can optimize the results)
+  if enable_strength_reduction:
+    if verbose >= 2:
+      print("[Optimization] Phase 2: Strength Reduction")
+    try:
+      from tangent.optimizations.strength_reduction import apply_strength_reduction
+      # Apply strength reduction to each function
+      if hasattr(node, 'body') and len(node.body) > 0:
+        for i, func in enumerate(node.body):
+          if isinstance(func, gast.FunctionDef):
+            if verbose >= 3:
+              print(f"[Optimization]   - Applying strength reduction to {func.name}")
+            node.body[i] = apply_strength_reduction(func)
+    except Exception as e:
+      if verbose >= 1:
+        print(f"[Optimization] Warning: Strength reduction failed: {e}")
+
+  # Phase 3: Common Subexpression Elimination
+  if enable_cse:
+    if verbose >= 2:
+      print("[Optimization] Phase 3: Common Subexpression Elimination")
+    try:
+      from tangent.optimizations.cse import apply_cse
+      # Apply CSE to each function in the module
+      if hasattr(node, 'body') and len(node.body) > 0:
+        for i, func in enumerate(node.body):
+          if isinstance(func, gast.FunctionDef):
+            if verbose >= 3:
+              print(f"[Optimization]   - Applying CSE to {func.name}")
+            node.body[i] = apply_cse(func)
+    except Exception as e:
+      if verbose >= 1:
+        print(f"[Optimization] Warning: CSE failed: {e}")
+
+  # Phase 4: Algebraic Simplification
+  if enable_algebraic:
+    if verbose >= 2:
+      print("[Optimization] Phase 4: Algebraic Simplification")
+    try:
+      from tangent.optimizations.algebraic_simplification import apply_algebraic_simplification
+      # Apply algebraic simplification to each function
+      if hasattr(node, 'body') and len(node.body) > 0:
+        for i, func in enumerate(node.body):
+          if isinstance(func, gast.FunctionDef):
+            if verbose >= 3:
+              print(f"[Optimization]   - Applying algebraic simplification to {func.name}")
+            node.body[i] = apply_algebraic_simplification(func)
+    except Exception as e:
+      if verbose >= 1:
+        print(f"[Optimization] Warning: Algebraic simplification failed: {e}")
+
+  # Phase 5: Advanced DCE (if requested gradients provided)
+  if requested_grads is not None:
+    if verbose >= 2:
+      print(f"[Optimization] Phase 5: Advanced DCE for {requested_grads}")
+    try:
+      from tangent.optimizations.dce import apply_dce
+      # Apply advanced DCE to the gradient function
+      if hasattr(node, 'body') and len(node.body) > 0:
+        node.body[0] = apply_dce(node.body[0], requested_grads)
+    except Exception as e:
+      if verbose >= 1:
+        print(f"[Optimization] Warning: Advanced DCE failed: {e}")
+
+  # Phase 6: Standard optimizations again (fixed-point)
+  # Symbolic optimizations may create new opportunities for basic optimizations
+  if verbose >= 2:
+    print("[Optimization] Phase 6: Post-symbolic cleanup")
+  node = optimize(node)
+
   return node
 
 

@@ -25,6 +25,7 @@ from __future__ import division
 import gast as ast
 
 from tangent.errors import TangentParseError
+from tangent import error_suggestions
 
 
 def validate(node, source):
@@ -87,8 +88,22 @@ class LanguageFence(ast.NodeVisitor):
     self.generic_visit(node)
 
   def _reject(self, node, msg):
+    """Reject a node with an enhanced error message including suggestions."""
     self._track_location(node)
-    self._raise_error(msg)
+
+    # Extract feature name from message (e.g., "F-Strings are not supported" -> "F-Strings")
+    feature_name = msg.split(' are not supported')[0].split(' is not supported')[0]
+
+    # Get suggestion if available
+    suggestion = error_suggestions.get_suggestion(feature_name)
+
+    # Enhance the error message with suggestion
+    if suggestion:
+      enhanced_msg = f"{msg}\n\n💡 Suggestion:\n{suggestion}"
+    else:
+      enhanced_msg = msg
+
+    self._raise_error(enhanced_msg)
 
   def visit_Module(self, node):
     self._visited_top_module = True

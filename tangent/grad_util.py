@@ -292,7 +292,9 @@ def _autodiff_uncached(func,
              check_dims=True,
              input_derivative=INPUT_DERIVATIVE.Required,
              verbose=0,
-             checkpoint_config=None):
+             checkpoint_config=None,
+             optimizations=None,
+             grad_config=None):
   """Build the vector-Jacobian or Jacobian-vector product of a function `func`.
 
   For a vector-Jacobian product (reverse-mode autodiff):
@@ -363,15 +365,69 @@ def _autodiff_uncached(func,
   if mode == 'reverse' and motion == 'joint':
     # Pull the stack definition and initial gradient into the function body
     # TODO: Use first FunctionDef instead of first element
-    node.body[0] = _create_joint(node.body[0], func, wrt, input_derivative)
+    node.body[0] = _create_joint(node.body[0], func, wrt, input_derivative, grad_config)
     if verbose >= 2:
       print('INLINED')
       print(quoting.to_source(node))
   if mode == 'forward':
     node = _create_forward(node)
+
+  # Apply optimizations
   if optimized:
-    # Optimize the resulting functions
-    node = optimization.optimize(node)
+    # Determine which optimizations to use
+    if optimizations is None:
+      optimizations = {}
+
+    use_advanced_dce = optimizations.get('dce', True) and mode == 'reverse'
+    use_strength_reduction = optimizations.get('strength_reduction', False)  # Disabled by default
+    use_cse = optimizations.get('cse', False)  # CSE disabled by default for now
+    use_algebraic = optimizations.get('algebraic', False)  # Algebraic disabled by default for now
+
+    # Determine which pipeline to use
+    if use_strength_reduction or use_cse or use_algebraic:
+      # Use symbolic optimization pipeline (includes strength reduction, CSE, algebraic, and DCE)
+      # Extract parameter names from wrt indices for advanced DCE
+      import inspect
+      sig = inspect.signature(func)
+      param_names = list(sig.parameters.keys())
+      requested_grads = [param_names[i] for i in wrt if i < len(param_names)] if use_advanced_dce else None
+
+      if verbose >= 1:
+        enabled = []
+        if use_strength_reduction:
+          enabled.append('Strength')
+        if use_cse:
+          enabled.append('CSE')
+        if use_algebraic:
+          enabled.append('Algebraic')
+        if use_advanced_dce:
+          enabled.append('DCE')
+        print(f"[Optimization] Using symbolic pipeline with {', '.join(enabled)}")
+
+      node = optimization.optimize_with_symbolic(
+        node,
+        requested_grads=requested_grads,
+        enable_strength_reduction=use_strength_reduction,
+        enable_cse=use_cse,
+        enable_algebraic=use_algebraic,
+        verbose=verbose
+      )
+    elif use_advanced_dce:
+      # Use unified optimization pipeline with advanced DCE only
+      # Extract parameter names from wrt indices for advanced DCE
+      import inspect
+      sig = inspect.signature(func)
+      param_names = list(sig.parameters.keys())
+      requested_grads = [param_names[i] for i in wrt if i < len(param_names)]
+
+      # Use unified optimization pipeline with advanced DCE
+      if verbose >= 1:
+        print(f"[Optimization] Using unified pipeline with advanced DCE for {requested_grads}")
+      node = optimization.optimize_with_advanced_dce(node, requested_grads, verbose)
+    else:
+      # Use standard optimizations only
+      node = optimization.optimize(node)
+
   node = comments.remove_repeated_comments(node)
   if verbose >= 1:
     print(quoting.to_source(node))
@@ -408,7 +464,10 @@ def _grad_uncached(func,
          check_dims=True,
          verbose=0,
          checkpoint=False,
-         checkpoint_config=None):
+         checkpoint_config=None,
+         optimizations=None,
+         output_index=None,
+         output_weights=None):
   """Return the gradient of a function `func`.
   Args:
     func: The function to take the gradient of.
@@ -444,6 +503,19 @@ def _grad_uncached(func,
         - 'enabled': Enable checkpointing (default: value of checkpoint param)
         - 'min_length': Minimum loop length to checkpoint (default: 100)
         - 'num_checkpoints': Number of checkpoints or None for auto (default: None)
+    optimizations: Dictionary with optimization flags (default: {'dce': True}):
+        - 'dce': Enable dead code elimination (default: True)
+    output_index: Integer or None. For multi-output functions (returning tuples),
+        specifies which output to differentiate. If None (default), differentiates
+        the sum of all outputs. Example:
+        > def f(x): return x**2, x*3
+        > df = grad(f, output_index=0)  # Gradient of first output only
+        > grad = df(2.0)  # = 4.0 (gradient of x**2)
+    output_weights: Tuple of floats or None. For multi-output functions, specifies
+        weights for each output. If None (default), all weights are 1.0 (sum).
+        Example:
+        > df = grad(f, output_weights=(0.7, 0.3))  # 0.7*out1 + 0.3*out2
+        Cannot be used together with output_index.
 
   Returns:
     df: A function that calculates the gradient with respect to arguments
@@ -453,6 +525,15 @@ def _grad_uncached(func,
         `preserve_result` is True, the function will also return the original
         result of `func`.
   """
+  # Validate output_index and output_weights
+  if output_index is not None and output_weights is not None:
+    raise ValueError("Cannot specify both output_index and output_weights")
+
+  # Store these for use in _create_joint
+  grad_config = {
+      'output_index': output_index,
+      'output_weights': output_weights
+  }
   # Prepare checkpoint configuration
   if checkpoint_config is None:
     checkpoint_config = {}
@@ -478,12 +559,14 @@ def _grad_uncached(func,
       check_dims=check_dims,
       input_derivative=INPUT_DERIVATIVE.DefaultOne,
       verbose=verbose,
-      checkpoint_config=checkpoint_config)
+      checkpoint_config=checkpoint_config,
+      optimizations=optimizations,
+      grad_config=grad_config)
 
 
 # TODO: these are utility functions, designed only for internal use.
 # Should be moved to a separate file.
-def _create_joint(fwdbwd, func, wrt, input_derivative):
+def _create_joint(fwdbwd, func, wrt, input_derivative, grad_config=None):
   """Create a user-friendly gradient function.
 
   By default, gradient functions expect the stack to be passed to them
@@ -498,10 +581,14 @@ def _create_joint(fwdbwd, func, wrt, input_derivative):
     fwdbwd: An AST. The function definition of the joint primal and adjoint.
     func: A function handle. The original function that was differentiated.
     wrt: A tuple of integers. The arguments with respect to which we differentiated.
+    grad_config: Optional dict with 'output_index' and 'output_weights' for multi-output functions.
 
   Returns:
     The function definition of the new function.
   """
+  # Default grad_config if not provided
+  if grad_config is None:
+    grad_config = {'output_index': None, 'output_weights': None}
   # Correct return to be a non-tuple if there's only one element
   retval = fwdbwd.body[-1]
   if len(retval.value.elts) == 1:
@@ -555,11 +642,57 @@ def _create_joint(fwdbwd, func, wrt, input_derivative):
           if returns_tuple:
             break
 
-    # Set appropriate default based on return type
+    # Set appropriate default based on return type and grad_config
     if returns_tuple and tuple_size > 0:
-      # Create tuple of ones: (1.0, 1.0, ...)
-      default_str = '(' + ', '.join(['1.0'] * tuple_size) + ')'
-      fwdbwd.args.defaults.append(quoting.quote(default_str))
+      # Multi-output function: determine gradient seed based on configuration
+      output_index = grad_config.get('output_index')
+      output_weights = grad_config.get('output_weights')
+
+      if output_index is not None:
+        # Gradient of specific output only
+        if not (0 <= output_index < tuple_size):
+          raise ValueError(
+              f"output_index={output_index} is out of range for function "
+              f"'{getattr(func, '__name__', '<function>')}' which returns {tuple_size} values"
+          )
+        # Create one-hot seed: (0, 0, ..., 1.0, ..., 0, 0)
+        seed_values = ['0.0'] * tuple_size
+        seed_values[output_index] = '1.0'
+        default_str = '(' + ', '.join(seed_values) + ')'
+        fwdbwd.args.defaults.append(quoting.quote(default_str))
+
+      elif output_weights is not None:
+        # Custom weighted combination
+        if len(output_weights) != tuple_size:
+          raise ValueError(
+              f"output_weights has {len(output_weights)} values but function "
+              f"'{getattr(func, '__name__', '<function>')}' returns {tuple_size} values"
+          )
+        # Use provided weights
+        default_str = '(' + ', '.join([str(float(w)) for w in output_weights]) + ')'
+        fwdbwd.args.defaults.append(quoting.quote(default_str))
+
+      else:
+        # Default: sum all outputs (backward compatible)
+        default_str = '(' + ', '.join(['1.0'] * tuple_size) + ')'
+        fwdbwd.args.defaults.append(quoting.quote(default_str))
+
+        # Add warning only for default auto-sum behavior
+        import warnings
+        func_name = getattr(func, '__name__', '<function>')
+        warnings.warn(
+            f"\nFunction '{func_name}' returns a tuple of {tuple_size} values. "
+            f"The gradient will compute d/dx(sum of all outputs) using seed {default_str}.\n"
+            f"This is mathematically correct for multi-output functions where you want "
+            f"the gradient of the sum.\n"
+            f"If you need individual gradients, use output_index parameter:\n"
+            f"  df = tangent.grad(f, output_index=0)  # Gradient of first output\n"
+            f"Or use output_weights for custom weighting:\n"
+            f"  df = tangent.grad(f, output_weights=(0.7, 0.3))  # Weighted combination\n"
+            f"See test_multi_output_grad.py for examples.",
+            UserWarning,
+            stacklevel=4
+        )
     else:
       # Scalar return
       fwdbwd.args.defaults.append(quoting.quote('1.0'))

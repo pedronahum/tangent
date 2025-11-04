@@ -31,6 +31,54 @@ Tangent performs **source-to-source** automatic differentiation - it transforms 
 
 ---
 
+## 🚀 Quick Start: Building Energy Optimization
+
+**Try it now in Colab!** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
+
+See Tangent in action with a real-world example - optimizing building heating to minimize energy costs:
+
+```python
+import tangent
+import numpy as np
+
+# Physical simulation: building temperature dynamics
+def simulate_building(heating_schedule, outdoor_temp, electricity_price, params):
+    T = params['T_initial']
+    total_cost = 0.0
+
+    for t in range(len(heating_schedule)):
+        # Temperature dynamics with heating and solar gain
+        dT_dt = (outdoor_temp[t] - T) / (params['R'] * params['C']) + \
+                heating_schedule[t] / params['C']
+        T = T + params['dt'] * dT_dt
+
+        # Cost = energy cost + comfort penalty
+        total_cost += electricity_price[t] * heating_schedule[t] + \
+                     params['lambda_comfort'] * (T - params['T_target']) ** 2
+
+    return total_cost
+
+# 🎯 Automatic differentiation - ONE LINE!
+grad_simulate = tangent.grad(simulate_building, optimized=True)
+
+# Compute gradient to optimize heating schedule
+gradient = grad_simulate(heating_schedule, outdoor_temp, electricity_price, params)
+
+# Use gradients for optimization (gradient descent)
+heating_schedule -= learning_rate * gradient
+```
+
+**What you'll learn:**
+- 🏢 Real-world optimization problem (building thermal control)
+- 📖 Inspect generated gradient code (see what Tangent creates!)
+- ⚡ Compare unoptimized vs optimized performance
+- 📊 Visualize gradients and optimization convergence
+- 🎓 Perfect for teaching automatic differentiation!
+
+**[→ Open Interactive Notebook](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)**
+
+---
+
 ## 🐍 Comprehensive Python Support
 
 Tangent supports a remarkably complete subset of Python for numerical computing:
@@ -1116,6 +1164,25 @@ Benchmarks show:
 
 ## 📖 Examples
 
+### 📓 Interactive Notebooks
+
+**Building Energy Optimization Tutorial** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
+
+A comprehensive, pedagogical notebook demonstrating:
+- ✅ **Real-world application**: Building thermal dynamics simulation
+- ✅ **Generated code inspection**: See exactly what Tangent creates
+- ✅ **Optimization levels**: Compare unoptimized vs optimized gradients
+- ✅ **Performance benchmarks**: Tangent vs numerical differentiation vs PyTorch
+- ✅ **Gradient-based optimization**: Use gradients to minimize energy costs
+- ✅ **Visualization**: Beautiful plots of gradients, schedules, and convergence
+
+Perfect for teaching automatic differentiation or understanding how Tangent works under the hood!
+
+**Other Notebooks:**
+- [Tangent Tutorial](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb) - General introduction to Tangent
+
+---
+
 ### Example 1: Linear Regression
 
 ```python
@@ -1268,6 +1335,38 @@ tangent/
         ├── ROADMAP_TO_GREATNESS.md
         └── ... (planning documents)
 ```
+
+---
+
+## 📚 Documentation
+
+Comprehensive documentation organized by topic:
+
+### 🏆 **Performance Benchmarks**
+- **[Framework Comparison](docs/benchmarks/FRAMEWORK_COMPARISON.md)** - Tangent vs TensorFlow vs PyTorch
+- **[Benchmark Summary](docs/benchmarks/BENCHMARK_SUMMARY.md)** - Executive summary
+- **[Building Simulation](docs/benchmarks/BUILDING_SIMULATION_BENCHMARK.md)** - Real-world thermal simulation
+- **[Correctness Verification](docs/benchmarks/CORRECTNESS_VERIFICATION.md)** - Mathematical validation
+
+**Key Results**:
+- ✅ **Matches TensorFlow** - 4.300ms vs 4.315ms (essentially tied!)
+- ✅ **1.53× faster than PyTorch** for gradients
+- ✅ **10.80× faster forward pass** than PyTorch
+- ✅ **Mathematically correct** - verified to 7 significant figures
+
+### ⚡ **Optimizations**
+- **[Symbolic Optimizations](docs/optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md)** - CSE & algebraic simplification
+- **[Strength Reduction](docs/optimizations/STRENGTH_REDUCTION_COMPLETE.md)** - Power/division optimization
+- **[Performance Analysis](docs/optimizations/PERFORMANCE_ANALYSIS.md)** - Optimization impact
+- **[Future Improvements](docs/benchmarks/PERFORMANCE_IMPROVEMENT_STRATEGIES.md)** - Roadmap for 2-5× more speedup
+
+**Optimization Results**:
+- 2.35× speedup with full optimization stack
+- DCE alone: 1.95× speedup
+- Strength reduction: 5-25× per operation (x**2 → x*x)
+
+### 📖 **Complete Index**
+**[→ Full Documentation Index](docs/INDEX.md)** - All docs organized and searchable
 
 ---
 

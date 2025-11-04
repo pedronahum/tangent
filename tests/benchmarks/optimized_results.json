@@ -1,0 +1,19 @@
+{
+  "Selective Gradient (1 of N parameters)": {
+    "baseline_time": 8.331660064868628e-06,
+    "baseline_memory": 0.0007476806640625,
+    "n_params": 10
+  },
+  "Unused Computation Elimination": {
+    "baseline_time": 7.929999992484226e-06,
+    "baseline_memory": 0.0009002685546875
+  },
+  "Unused Regularization Term": {
+    "baseline_time": 9.129199315793812e-07,
+    "baseline_memory": 0.0
+  },
+  "Conditional Dead Branch": {
+    "baseline_time": 2.6649999199435114e-06,
+    "baseline_memory": 0.0006561279296875
+  }
+}

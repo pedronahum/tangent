@@ -1,0 +1,48 @@
+{
+  "benchmarks": [
+    {
+      "name": "Selective Gradient",
+      "results": {
+        "none": 0.022824832994956523,
+        "basic": 0.00830649999261368,
+        "dce": 0.008152999987942167,
+        "speedup_total": 2.7995624958559033,
+        "speedup_dce": 1.0188274260883763
+      }
+    },
+    {
+      "name": "Unused Computation",
+      "results": {
+        "none": 0.0120940829947358,
+        "basic": 0.0029479999939212576,
+        "dce": 0.0029605000017909333,
+        "speedup_total": 4.085148788184283,
+        "speedup_dce": 0.9957777375909089
+      }
+    },
+    {
+      "name": "Loop Optimization",
+      "results": {
+        "none": 0.019803916991804726,
+        "basic": 0.011189124998054467,
+        "dce": 0.01121054201212246,
+        "speedup_total": 1.7665441127101495,
+        "speedup_dce": 0.9980895648002717
+      }
+    },
+    {
+      "name": "Complex Function",
+      "results": {
+        "none": 0.009169917000690475,
+        "basic": 0.002831499994499609,
+        "dce": 0.002805458992952481,
+        "speedup_total": 3.2685977673264803,
+        "speedup_dce": 1.009282260625639
+      }
+    }
+  ],
+  "summary": {
+    "avg_total_speedup": 2.979963291019204,
+    "avg_dce_speedup": 1.005494247276299
+  }
+}

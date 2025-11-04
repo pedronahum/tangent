@@ -1,0 +1,63 @@
+================================================================================
+TANGENT FRAMEWORK COMPARISON BENCHMARK RESULTS
+================================================================================
+Date: 2025-11-04 13:32:34
+Benchmark: Building Thermal Simulation
+Trials: 100
+Timesteps: 20
+Warmup: 3
+================================================================================
+
+PERFORMANCE RESULTS
+--------------------------------------------------------------------------------
+Framework                           Forward (s)     Gradient (s)    Overhead  
+--------------------------------------------------------------------------------
+Tangent (All Optimizations)         0.000378        0.005529        14.62     ×
+TensorFlow                          0.001835        0.008029        4.37      ×
+PyTorch                             0.006065        0.011731        1.93      ×
+--------------------------------------------------------------------------------
+
+SPEEDUP ANALYSIS (Gradient Computation)
+--------------------------------------------------------------------------------
+
+Tangent (baseline):
+  Forward time:  0.000378 seconds
+  Gradient time: 0.005529 seconds
+  Overhead:      14.62×
+
+Tangent vs TensorFlow:
+  Tangent is 1.45× faster for gradients
+  Tangent is 4.85× faster for forward pass
+  (TensorFlow is 45.2% faster)
+
+Tangent vs PyTorch:
+  Tangent is 2.12× faster for gradients
+  Tangent is 16.04× faster for forward pass
+  (Tangent is 112.2% faster overall)
+
+--------------------------------------------------------------------------------
+
+RELATIVE SPEEDUPS
+--------------------------------------------------------------------------------
+Baseline (slowest): PyTorch - 0.011731s
+
+Tangent (All Optimizations)         2.12× faster than PyTorch
+TensorFlow                          1.46× faster than PyTorch
+
+================================================================================
+OPTIMIZATION DETAILS
+================================================================================
+Tangent optimizations enabled:
+  - Dead Code Elimination (DCE)
+  - Strength Reduction (x**2 → x*x)
+  - Common Subexpression Elimination (CSE)
+  - Algebraic Simplification
+
+TensorFlow optimizations:
+  - @tf.function graph compilation
+  - XLA optimization (automatic)
+
+PyTorch optimizations:
+  - Eager execution (baseline)
+  - No JIT compilation applied
+================================================================================

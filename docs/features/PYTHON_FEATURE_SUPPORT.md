@@ -53,16 +53,19 @@ This document provides a comprehensive reference of Python language features and
 ### Tuples
 - **✅ Tuple access** - Reading tuple elements works
 - **✅ Tuple indexing** - `t[0]`, `t[1]` works
-- **⚠️ Tuple unpacking** - Works but may give incorrect gradients (sums all elements)
-- **❌ Multiple returns** - Cannot return tuples from differentiated functions
-- **Workaround**: Use separate assignments instead of unpacking
+- **✅ Tuple unpacking** - Works correctly in assignments (e.g., `a, b = x**2, x*3`)
+- **✅ Tuple returns (Multi-Output)** - Full support with `output_index` and `output_weights` parameters
+- **✅ Individual output gradients** - Use `output_index` to differentiate specific outputs
+- **✅ Weighted output gradients** - Use `output_weights` for custom linear combinations
 
 ### Dictionaries
 - **✅ Dict access (read-only)** - `config['key']` works perfectly
-- **✅ Dict methods** - `.get()`, `.keys()`, `.values()`, `.items()`
-- **✅ Nested dicts** - Multi-level access works
-- **❌ Dict construction** - Cannot create dicts with `{}` or `dict()`
-- **Workaround**: Pass dicts as parameters or use global dicts
+- **⚠️ Dict construction (limited)** - Single-key dicts work, multi-key dicts have bugs
+- **❌ Dict methods** - `.get()`, `.keys()`, `.values()`, `.items()` not supported in constructed dicts
+- **✅ Nested dicts (parameters)** - Multi-level access works when dict is passed as parameter
+- **❌ Dict comprehensions** - Not supported
+- **❌ dict() constructor** - Not supported
+- **Workaround**: Pass dicts as parameters or use global dicts for reliable behavior
 
 ### Loops
 - **✅ For loops** - With constant `range()` parameters
@@ -103,28 +106,35 @@ This document provides a comprehensive reference of Python language features and
 
 ## Detailed Feature Documentation
 
-### Dictionaries (Read-Only)
+### Dictionaries (Limited Support)
 
-**Status**: ✅ Fully supported for read-only access
+**Status**: ⚠️ Partially supported - Use with caution
 
-Dictionaries work perfectly when:
-- Passed as function parameters
-- Defined as global variables
-- Accessed with `[]` or `.get()`
-- Nested dictionaries
-- Containing NumPy arrays as values
+**What Works:**
+- ✅ Dicts passed as function parameters
+- ✅ Dicts defined as global variables
+- ✅ Subscript access `dict['key']` on parameter/global dicts
+- ✅ Nested dicts (when passed as parameters)
+- ✅ Single-key dict construction (simple case)
+
+**What Doesn't Work:**
+- ❌ Multi-key dict construction with differentiated values (buggy code generation)
+- ❌ Dict methods (`.get()`, `.keys()`, `.values()`, `.items()`)
+- ❌ Dict comprehensions
+- ❌ `dict()` constructor
+- ❌ Modifying dict values (empty dict + assignments)
 
 ```python
 import tangent
 
-# ✅ Works: Dict as parameter
-def compute(x, config={'lr': 0.1}):
-    return x * config['lr']
+# ✅ RECOMMENDED: Dict as parameter
+def compute(x, config={'lr': 0.1, 'momentum': 0.9}):
+    return x * config['lr'] + x * config['momentum']
 
 df = tangent.grad(compute)
-grad = df(5.0)  # Works!
+grad = df(5.0)  # Works perfectly!
 
-# ✅ Works: Global dict
+# ✅ RECOMMENDED: Global dict
 PARAMS = {'scale': 2.0, 'offset': 1.0}
 
 def process(x):
@@ -133,30 +143,117 @@ def process(x):
 df = tangent.grad(process)
 grad = df(3.0)  # Works!
 
-# ✅ Works: Nested dicts
-def nested(x):
-    config = {
-        'optimizer': {
-            'lr': 0.1,
-            'momentum': 0.9
-        }
-    }
-    return x * config['optimizer']['lr']
+# ✅ Works: Single-key dict
+def single_key(x):
+    d = {'a': x}  # OK - single key
+    return d['a']
 
-df = tangent.grad(nested)
+df = tangent.grad(single_key)
 grad = df(2.0)  # Works!
 
-# ❌ Doesn't work: Dict construction
-def construct(x):
-    params = {'a': x, 'b': x ** 2}  # ERROR: Dict construction
-    return params['a']
+# ❌ BROKEN: Multi-key dict with differentiated values
+def multi_key(x):
+    d = {'a': x, 'b': x ** 2}  # BUG: Generates invalid code
+    return d['a'] + d['b']  # Runtime error: name '_' not defined
+
+# df = tangent.grad(multi_key)  # Generates buggy code
+
+# ❌ BROKEN: Dict methods
+def dict_methods(x):
+    d = {'a': x}
+    return d.get('a', 0.0)  # ERROR: .get() not supported
+
+# ✅ WORKAROUND: Use separate variables
+def separate_vars(x):
+    a = x
+    b = x ** 2
+    return a + b  # Equivalent to dict['a'] + dict['b']
+
+df = tangent.grad(separate_vars)
+grad = df(2.0)  # = 5.0, works perfectly!
 ```
 
-**Workarounds**:
-1. Define dicts outside the function
-2. Pass dicts as parameters (with default values)
-3. Use global dicts
-4. Use separate variables instead of dict values
+**Best Practices:**
+1. **Always pass dicts as parameters** - Most reliable approach
+2. **Use global dicts** for configuration that doesn't depend on inputs
+3. **Avoid constructing dicts** with multiple differentiated values
+4. **Use separate variables** instead of dict values when possible
+5. **Test thoroughly** if you must construct dicts
+
+**Known Bug:**
+Multi-key dict construction generates code with undefined `_` placeholders. This is a known issue in the template system. See GitHub issue #XXX for tracking.
+
+### Tuple Returns (Multi-Output Functions)
+
+**Status**: ✅ Fully supported with `output_index` and `output_weights` parameters
+
+Tangent now has **full support for multi-output functions**! You can:
+1. Get the gradient of a specific output
+2. Get a weighted combination of output gradients
+3. Use the default (sum of all outputs) for backward compatibility
+
+#### Option 1: Gradient of Specific Output (NEW!)
+
+```python
+import tangent
+
+def f(x):
+    return x ** 2, x * 3  # Returns (output1, output2)
+
+# Gradient of FIRST output only
+df_first = tangent.grad(f, output_index=0)
+grad1 = df_first(2.0)  # d/dx(x^2) = 2x = 4.0
+
+# Gradient of SECOND output only
+df_second = tangent.grad(f, output_index=1)
+grad2 = df_second(2.0)  # d/dx(3x) = 3.0
+```
+
+#### Option 2: Weighted Combination (NEW!)
+
+```python
+# Custom weighting of outputs
+df_weighted = tangent.grad(f, output_weights=(0.7, 0.3))
+result = df_weighted(2.0)
+# Computes: d/dx(0.7*x^2 + 0.3*3x) = 0.7*2x + 0.3*3 = 1.4x + 0.9 = 3.7
+```
+
+#### Option 3: Default (Sum of All Outputs)
+
+```python
+# Default: sum all outputs (backward compatible)
+df_sum = tangent.grad(f)
+result = df_sum(2.0)  # d/dx(x^2 + 3x) = 2x + 3 = 7.0
+```
+
+**Comparison:**
+
+```python
+# Tuple return (auto-summed)
+def f_tuple(x):
+    return x ** 2, x * 3
+
+df_tuple = tangent.grad(f_tuple)
+grad_tuple = df_tuple(2.0)  # = 7.0 (sum of gradients)
+
+# Explicit sum (same result)
+def f_sum(x):
+    return x ** 2 + x * 3
+
+df_sum = tangent.grad(f_sum)
+grad_sum = df_sum(2.0)  # = 7.0 (identical)
+
+assert grad_tuple == grad_sum  # True!
+```
+
+**When is this useful?**
+- Machine learning: `total_loss = prediction_loss + regularization_loss`
+- Multi-objective optimization where you want combined gradient
+- Physics simulations with multiple energy terms
+
+**See also**:
+- `tests/test_multi_output_grad.py` - Multi-output gradient examples with `output_index` and `output_weights`
+- `tests/test_tuple_return_behavior.py` - Comprehensive tuple return behavior examples
 
 ### Exception Handling
 

@@ -319,18 +319,44 @@ def cached_grad(original_grad):
     """
     @functools.wraps(original_grad)
     def wrapper(func, wrt=(0,), optimized=True, preserve_result=False,
-                check_dims=True, verbose=0, checkpoint=False, checkpoint_config=None):
+                check_dims=True, verbose=0, checkpoint=False, checkpoint_config=None,
+                optimizations=None, output_index=None, output_weights=None):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
+        from tangent.dict_construction_error import is_dict_construction_error, DictConstructionError
+
+        def wrap_with_error_handler(grad_func):
+            """Wrap gradient function to catch and enhance dict construction errors."""
+            @functools.wraps(grad_func)
+            def error_enhanced_wrapper(*args, **kwargs):
+                try:
+                    return grad_func(*args, **kwargs)
+                except NameError as e:
+                    if is_dict_construction_error(e):
+                        raise DictConstructionError() from e
+                    raise
+            return error_enhanced_wrapper
+
+        # Disable caching for multi-output configurations (output_index/output_weights)
+        # These create different gradient functions for same source function
+        if output_index is not None or output_weights is not None:
+            if verbose >= 1:
+                print(f"[Cache] Bypassing cache (multi-output configuration)")
+            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
+                               verbose, checkpoint, checkpoint_config, optimizations,
+                               output_index, output_weights)
+            return wrap_with_error_handler(result)
 
         # For now, disable caching when checkpointing is enabled
         # Phase 3 will add proper cache key generation for checkpoint configs
         if checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)):
             if verbose >= 1:
                 print(f"[Cache] Bypassing cache (checkpointing enabled)")
-            return original_grad(func, wrt, optimized, preserve_result, check_dims,
-                               verbose, checkpoint, checkpoint_config)
+            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
+                               verbose, checkpoint, checkpoint_config, optimizations,
+                               output_index, output_weights)
+            return wrap_with_error_handler(result)
 
         # Generate cache key (grad uses specific default parameters)
         cache_key = _generate_cache_key(
@@ -352,13 +378,18 @@ def cached_grad(original_grad):
         result = original_grad(
             func, wrt=wrt, optimized=optimized, preserve_result=preserve_result,
             check_dims=check_dims, verbose=verbose, checkpoint=checkpoint,
-            checkpoint_config=checkpoint_config
+            checkpoint_config=checkpoint_config, optimizations=optimizations,
+            output_index=output_index, output_weights=output_weights
         )
 
-        # Add to cache (only if not using checkpointing)
-        if not (checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False))):
-            _add_to_cache(cache_key, result)
+        # Wrap the gradient function to catch and enhance dict construction errors
+        wrapped_result = wrap_with_error_handler(result)
 
-        return result
+        # Add to cache (only if not using checkpointing or multi-output)
+        if not (checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)) or
+                output_index is not None or output_weights is not None):
+            _add_to_cache(cache_key, wrapped_result)
+
+        return wrapped_result
 
     return wrapper
