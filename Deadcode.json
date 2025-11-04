@@ -1,0 +1,343 @@
+{
+  "project": {
+    "name": "Dead Code Elimination for Tangent",
+    "description": "Step-by-step implementation guide for adding DCE optimizations to Tangent's automatic differentiation system",
+    "expected_impact": {
+      "speedup": "1.5-5× on gradient computations with selective wrt parameters",
+      "memory_reduction": "20-80%"
+    },
+    "repository": "https://github.com/pedronahum/tangent"
+  },
+  "phases": [
+    {
+      "phase": 0,
+      "name": "Setup and Benchmarking Infrastructure",
+      "objective": "Establish baseline performance metrics and testing infrastructure",
+      "tasks": [
+        {
+          "task_id": "0.1",
+          "name": "Create Benchmark Suite",
+          "file": "tests/benchmarks/dce_benchmarks.py",
+          "code": "\"\"\"\\nBenchmark suite for Dead Code Elimination.\\nTests various scenarios where DCE should provide benefits.\\n\\\"\\\"\\\"\\nimport time\\nimport tracemalloc\\nimport tangent\\nimport numpy as np\\n\\nclass Benchmark:\\n    \\\"\\\"\\\"Base class for DCE benchmarks.\\\"\\\"\\\"\\n    \\n    def __init__(self, name):\\n        self.name = name\\n        self.results = {}\\n    \\n    def time_it(self, func, *args, iterations=100, warmup=10):\\n        \\\"\\\"\\\"Time a function with warmup.\\\"\\\"\\\"\\n        # Warmup\\n        for _ in range(warmup):\\n            func(*args)\\n        \\n        # Time\\n        start = time.perf_counter()\\n        for _ in range(iterations):\\n            func(*args)\\n        end = time.perf_counter()\\n        \\n        return (end - start) / iterations\\n    \\n    def memory_it(self, func, *args):\\n        \\\"\\\"\\\"Measure peak memory usage.\\\"\\\"\\\"\\n        tracemalloc.start()\\n        func(*args)\\n        current, peak = tracemalloc.get_traced_memory()\\n        tracemalloc.stop()\\n        return peak / 1024 / 1024  # Convert to MB\\n    \\n    def run(self):\\n        \\\"\\\"\\\"Override in subclasses.\\\"\\\"\\\"\\n        raise NotImplementedError\\n\\n\\nclass SelectiveGradientBenchmark(Benchmark):\\n    \\\"\\\"\\\"\\n    Benchmark: Computing gradient w.r.t. only 1 parameter out of many.\\n    Expected speedup: 2-5× with DCE\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        super().__init__(\\\"Selective Gradient (1 of N parameters)\\\")\\n    \\n    def setup(self, n_params=100):\\n        \\\"\\\"\\\"Create function with many parameters.\\\"\\\"\\\"\\n        def model(x, *params):\\n            result = x\\n            for i, p in enumerate(params):\\n                result = result * p + p * p\\n            return result\\n        \\n        self.func = model\\n        self.x = 5.0\\n        self.params = [float(i + 1) for i in range(n_params)]\\n        self.n_params = n_params\\n    \\n    def run(self):\\n        # Baseline: gradient w.r.t. x only\\n        grad_func = tangent.grad(self.func, wrt=['x'])\\n        \\n        time_baseline = self.time_it(grad_func, self.x, *self.params)\\n        mem_baseline = self.memory_it(grad_func, self.x, *self.params)\\n        \\n        self.results['baseline_time'] = time_baseline\\n        self.results['baseline_memory'] = mem_baseline\\n        self.results['n_params'] = self.n_params\\n        \\n        return self.results\\n\\n\\nclass UnusedComputationBenchmark(Benchmark):\\n    \\\"\\\"\\\"\\n    Benchmark: Function with unused branches/computations.\\n    Expected speedup: 1.5-3× with DCE\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        super().__init__(\\\"Unused Computation Elimination\\\")\\n    \\n    def setup(self):\\n        def model(x, y, z):\\n            # Expensive computation on x (used)\\n            a = sum(x ** i for i in range(10))\\n            \\n            # Expensive computation on y (used)\\n            b = sum(y ** i for i in range(10))\\n            \\n            # Expensive computation on z (UNUSED!)\\n            c = sum(z ** i for i in range(10))\\n            \\n            return a + b  # c is never used!\\n        \\n        self.func = model\\n        self.x = 2.0\\n        self.y = 3.0\\n        self.z = 4.0\\n    \\n    def run(self):\\n        # Gradient w.r.t. x only (y and z computations could be eliminated)\\n        grad_func = tangent.grad(self.func, wrt=['x'])\\n        \\n        time_baseline = self.time_it(grad_func, self.x, self.y, self.z)\\n        mem_baseline = self.memory_it(grad_func, self.x, self.y, self.z)\\n        \\n        self.results['baseline_time'] = time_baseline\\n        self.results['baseline_memory'] = mem_baseline\\n        \\n        return self.results\\n\\n\\nclass UnusedRegularizationBenchmark(Benchmark):\\n    \\\"\\\"\\\"\\n    Benchmark: Regularization term computed but not used.\\n    Expected speedup: 1.5-2× with DCE\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        super().__init__(\\\"Unused Regularization Term\\\")\\n    \\n    def setup(self):\\n        def neural_net(x, w1, w2, w3, reg_weight):\\n            # Forward pass\\n            h1 = x * w1\\n            h2 = h1 * w2\\n            output = h2 * w3\\n            \\n            # Regularization (expensive, but not used in return!)\\n            reg = reg_weight * (w1**2 + w2**2 + w3**2)\\n            \\n            # Oops! Forgot to add regularization to loss\\n            return output  # Should be: output + reg\\n        \\n        self.func = neural_net\\n        self.x = 1.0\\n        self.w1 = 0.5\\n        self.w2 = 0.3\\n        self.w3 = 0.7\\n        self.reg_weight = 0.01\\n    \\n    def run(self):\\n        grad_func = tangent.grad(self.func, wrt=['w1'])\\n        \\n        time_baseline = self.time_it(\\n            grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight\\n        )\\n        mem_baseline = self.memory_it(\\n            grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight\\n        )\\n        \\n        self.results['baseline_time'] = time_baseline\\n        self.results['baseline_memory'] = mem_baseline\\n        \\n        return self.results\\n\\n\\nclass ConditionalBranchBenchmark(Benchmark):\\n    \\\"\\\"\\\"\\n    Benchmark: Dead branches in conditionals.\\n    Expected speedup: 1.3-2× with DCE\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        super().__init__(\\\"Conditional Dead Branch\\\")\\n    \\n    def setup(self):\\n        def model(x, y, flag):\\n            if flag > 0:\\n                a = x * x * x  # Expensive\\n                b = y  # Simple\\n            else:\\n                a = x  # Simple\\n                b = y * y * y  # Expensive (but this branch never taken!)\\n            \\n            return a + b\\n        \\n        self.func = model\\n        self.x = 2.0\\n        self.y = 3.0\\n        self.flag = 1.0  # Always positive, else branch is dead\\n    \\n    def run(self):\\n        grad_func = tangent.grad(self.func, wrt=['x'])\\n        \\n        time_baseline = self.time_it(grad_func, self.x, self.y, self.flag)\\n        mem_baseline = self.memory_it(grad_func, self.x, self.y, self.flag)\\n        \\n        self.results['baseline_time'] = time_baseline\\n        self.results['baseline_memory'] = mem_baseline\\n        \\n        return self.results\\n\\n\\ndef run_all_benchmarks():\\n    \\\"\\\"\\\"Run all benchmarks and display results.\\\"\\\"\\\"\\n    benchmarks = [\\n        SelectiveGradientBenchmark(),\\n        UnusedComputationBenchmark(),\\n        UnusedRegularizationBenchmark(),\\n        ConditionalBranchBenchmark(),\\n    ]\\n    \\n    print(\\\"=\\\" * 80)\\n    print(\\\"TANGENT DCE BENCHMARK SUITE - BASELINE\\\")\\n    print(\\\"=\\\" * 80)\\n    print()\\n    \\n    all_results = {}\\n    \\n    for bench in benchmarks:\\n        print(f\\\"Running: {bench.name}\\\")\\n        bench.setup()\\n        results = bench.run()\\n        all_results[bench.name] = results\\n        \\n        print(f\\\"  Time: {results['baseline_time']*1000:.3f} ms\\\")\\n        print(f\\\"  Memory: {results['baseline_memory']:.2f} MB\\\")\\n        print()\\n    \\n    return all_results\\n\\n\\nif __name__ == \\\"__main__\\\":\\n    results = run_all_benchmarks()\\n    \\n    # Save baseline results\\n    import json\\n    with open('baseline_results.json', 'w') as f:\\n        json.dump(results, f, indent=2)\\n    \\n    print(\\\"Baseline results saved to baseline_results.json\\\")",
+          "description": "Creates comprehensive benchmark suite to measure DCE impact"
+        },
+        {
+          "task_id": "0.2",
+          "name": "Create Comparison Script",
+          "file": "tests/benchmarks/compare_dce.py",
+          "code": "\"\"\"\\nCompare performance before and after DCE implementation.\\n\\\"\\\"\\\"\\nimport json\\nimport sys\\n\\ndef load_results(filename):\\n    \\\"\\\"\\\"Load benchmark results from JSON.\\\"\\\"\\\"\\n    with open(filename, 'r') as f:\\n        return json.load(f)\\n\\ndef compare_results(baseline, optimized):\\n    \\\"\\\"\\\"Compare and display results.\\\"\\\"\\\"\\n    print(\\\"=\\\" * 80)\\n    print(\\\"DCE PERFORMANCE COMPARISON\\\")\\n    print(\\\"=\\\" * 80)\\n    print()\\n    \\n    for bench_name in baseline.keys():\\n        base = baseline[bench_name]\\n        opt = optimized.get(bench_name, {})\\n        \\n        if not opt:\\n            print(f\\\"{bench_name}: NO OPTIMIZED DATA\\\")\\n            continue\\n        \\n        print(f\\\"{bench_name}:\\\")\\n        print(\\\"-\\\" * 80)\\n        \\n        # Time comparison\\n        base_time = base['baseline_time'] * 1000\\n        opt_time = opt['baseline_time'] * 1000\\n        time_speedup = base_time / opt_time if opt_time > 0 else 0\\n        \\n        print(f\\\"  Time:\\\")\\n        print(f\\\"    Baseline:  {base_time:.3f} ms\\\")\\n        print(f\\\"    Optimized: {opt_time:.3f} ms\\\")\\n        print(f\\\"    Speedup:   {time_speedup:.2f}×\\\")\\n        \\n        # Memory comparison\\n        base_mem = base['baseline_memory']\\n        opt_mem = opt['baseline_memory']\\n        mem_reduction = (1 - opt_mem / base_mem) * 100 if base_mem > 0 else 0\\n        \\n        print(f\\\"  Memory:\\\")\\n        print(f\\\"    Baseline:  {base_mem:.2f} MB\\\")\\n        print(f\\\"    Optimized: {opt_mem:.2f} MB\\\")\\n        print(f\\\"    Reduction: {mem_reduction:.1f}%\\\")\\n        print()\\n    \\n    print(\\\"=\\\" * 80)\\n\\nif __name__ == \\\"__main__\\\":\\n    if len(sys.argv) != 3:\\n        print(\\\"Usage: python compare_dce.py baseline.json optimized.json\\\")\\n        sys.exit(1)\\n    \\n    baseline = load_results(sys.argv[1])\\n    optimized = load_results(sys.argv[2])\\n    \\n    compare_results(baseline, optimized)",
+          "description": "Script to compare before/after performance metrics"
+        },
+        {
+          "task_id": "0.3",
+          "name": "Run Baseline Benchmarks",
+          "commands": [
+            "cd tests/benchmarks",
+            "python dce_benchmarks.py"
+          ],
+          "expected_output": "baseline_results.json created with timing and memory data",
+          "expected_results": {
+            "SelectiveGradient": "0.5-2ms, 5-10MB",
+            "UnusedComputation": "1-3ms, 8-15MB",
+            "UnusedRegularization": "0.3-1ms, 3-6MB",
+            "ConditionalBranch": "0.2-0.8ms, 2-5MB"
+          }
+        }
+      ],
+      "success_criteria": [
+        "All benchmarks run without errors",
+        "Baseline results saved to JSON",
+        "Results are reproducible (±10% variance)"
+      ]
+    },
+    {
+      "phase": 1,
+      "name": "Backward Slicing",
+      "objective": "Implement basic backward slicing to identify which statements affect requested gradients",
+      "expected_impact": "1.5-2× speedup on SelectiveGradient and UnusedComputation benchmarks",
+      "background": {
+        "concept": "Backward Slice",
+        "definition": "Given a variable v at a point p, the backward slice is the set of all statements that could affect the value of v at p",
+        "algorithm": "Weiser 1981",
+        "steps": [
+          "Start from target variable (gradient we want)",
+          "Traverse AST backwards",
+          "For each statement, if it defines a variable we need, mark it relevant",
+          "Add all variables used in that statement to the worklist",
+          "Repeat until worklist is empty"
+        ]
+      },
+      "tasks": [
+        {
+          "task_id": "1.1",
+          "name": "Create DCE Module Structure",
+          "file": "tangent/optimizations/dce.py",
+          "code": "\"\"\"\\nDead Code Elimination for Tangent gradients.\\n\\nThis module implements backward slicing and activity analysis to eliminate\\nunnecessary computations from gradient functions.\\n\\\"\\\"\\\"\\n\\nimport ast\\nimport gast\\nfrom typing import Set, Dict, List, Tuple\\n\\n\\nclass VariableCollector(ast.NodeVisitor):\\n    \\\"\\\"\\\"Collect all variables used in an expression.\\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        self.variables = set()\\n    \\n    def visit_Name(self, node):\\n        self.variables.add(node.id)\\n        self.generic_visit(node)\\n    \\n    @staticmethod\\n    def collect(node):\\n        \\\"\\\"\\\"Helper to collect variables from a node.\\\"\\\"\\\"\\n        collector = VariableCollector()\\n        collector.visit(node)\\n        return collector.variables\\n\\n\\nclass DefUseAnalyzer:\\n    \\\"\\\"\\\"\\n    Analyze definitions and uses in a function.\\n    \\n    Builds:\\n    - def_map: line_num -> set of variables defined at that line\\n    - use_map: line_num -> set of variables used at that line\\n    - def_sites: var_name -> list of line numbers where it's defined\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, func_ast):\\n        self.func_ast = func_ast\\n        self.def_map = {}  # line_num -> {vars defined}\\n        self.use_map = {}  # line_num -> {vars used}\\n        self.def_sites = {}  # var_name -> [line_nums]\\n        self._analyze()\\n    \\n    def _analyze(self):\\n        \\\"\\\"\\\"Analyze the AST to build def-use information.\\\"\\\"\\\"\\n        for i, stmt in enumerate(self.func_ast.body):\\n            self._analyze_statement(stmt, i)\\n    \\n    def _analyze_statement(self, stmt, line_num):\\n        \\\"\\\"\\\"Analyze a single statement.\\\"\\\"\\\"\\n        if isinstance(stmt, (ast.Assign, gast.Assign)):\\n            # Variables defined\\n            defined = set()\\n            for target in stmt.targets:\\n                if isinstance(target, (ast.Name, gast.Name)):\\n                    defined.add(target.id)\\n            \\n            # Variables used\\n            used = VariableCollector.collect(stmt.value)\\n            \\n            self.def_map[line_num] = defined\\n            self.use_map[line_num] = used\\n            \\n            for var in defined:\\n                self.def_sites.setdefault(var, []).append(line_num)\\n        \\n        elif isinstance(stmt, (ast.Return, gast.Return)):\\n            # Return uses variables\\n            if stmt.value:\\n                used = VariableCollector.collect(stmt.value)\\n                self.use_map[line_num] = used\\n\\n\\nclass BackwardSlicer:\\n    \\\"\\\"\\\"\\n    Compute backward slice for gradient computations.\\n    \\n    Given a set of target variables (requested gradients), computes\\n    the minimal set of statements needed to compute them.\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, func_ast, def_use_analyzer):\\n        self.func_ast = func_ast\\n        self.def_use = def_use_analyzer\\n        self.relevant_stmts = set()\\n    \\n    def slice(self, target_vars: Set[str]) -> Set[int]:\\n        \\\"\\\"\\\"\\n        Compute backward slice from target variables.\\n        \\n        Args:\\n            target_vars: Set of variable names we need (requested gradients)\\n        \\n        Returns:\\n            Set of statement indices that are relevant\\n        \\\"\\\"\\\"\\n        worklist = list(target_vars)\\n        visited_vars = set()\\n        \\n        while worklist:\\n            var = worklist.pop()\\n            \\n            if var in visited_vars:\\n                continue\\n            visited_vars.add(var)\\n            \\n            # Find all definitions of this variable\\n            for def_line in self.def_use.def_sites.get(var, []):\\n                self.relevant_stmts.add(def_line)\\n                \\n                # Add all variables used in this definition to worklist\\n                used_vars = self.def_use.use_map.get(def_line, set())\\n                for used_var in used_vars:\\n                    if used_var not in visited_vars:\\n                        worklist.append(used_var)\\n        \\n        return self.relevant_stmts\\n\\n\\nclass GradientDCE:\\n    \\\"\\\"\\\"\\n    Main DCE optimizer for gradient functions.\\n    \\n    Takes a gradient function AST and list of requested gradients,\\n    returns optimized AST with dead code eliminated.\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, grad_func_ast, requested_grads: List[str]):\\n        self.grad_func_ast = grad_func_ast\\n        self.requested_grads = set(requested_grads)\\n    \\n    def optimize(self):\\n        \\\"\\\"\\\"Apply DCE optimization.\\\"\\\"\\\"\\n        # Step 1: Analyze def-use chains\\n        analyzer = DefUseAnalyzer(self.grad_func_ast)\\n        \\n        # Step 2: Identify gradient variables we need\\n        # Convention: gradient of x is named d_x\\n        gradient_vars = {f'd_{var}' for var in self.requested_grads}\\n        \\n        # Step 3: Backward slice from these gradients\\n        slicer = BackwardSlicer(self.grad_func_ast, analyzer)\\n        relevant_stmts = slicer.slice(gradient_vars)\\n        \\n        # Step 4: Remove irrelevant statements\\n        optimized_body = [\\n            stmt for i, stmt in enumerate(self.grad_func_ast.body)\\n            if i in relevant_stmts or isinstance(stmt, (ast.Return, gast.Return))\\n        ]\\n        \\n        self.grad_func_ast.body = optimized_body\\n        return self.grad_func_ast\\n\\n\\ndef apply_dce(grad_func_ast, requested_grads: List[str]):\\n    \\\"\\\"\\\"\\n    Apply Dead Code Elimination to a gradient function.\\n    \\n    Args:\\n        grad_func_ast: AST of the gradient function\\n        requested_grads: List of variable names we want gradients for\\n    \\n    Returns:\\n        Optimized AST with dead code eliminated\\n    \\\"\\\"\\\"\\n    optimizer = GradientDCE(grad_func_ast, requested_grads)\\n    return optimizer.optimize()",
+          "description": "Core DCE implementation with backward slicing"
+        },
+        {
+          "task_id": "1.2",
+          "name": "Integrate DCE into Tangent",
+          "file": "tangent/grad.py",
+          "modifications": [
+            {
+              "location": "import section",
+              "add": "from tangent.optimizations.dce import apply_dce"
+            },
+            {
+              "location": "grad function",
+              "modify": "After gradient AST is generated, before returning",
+              "code": "# Apply Dead Code Elimination if requested\\nif optimizations.get('dce', True):\\n    grad_ast = apply_dce(grad_ast, wrt)"
+            }
+          ],
+          "description": "Hook DCE into Tangent's gradient generation pipeline"
+        },
+        {
+          "task_id": "1.3",
+          "name": "Create Unit Tests",
+          "file": "tests/test_dce.py",
+          "code": "\"\"\"\\nUnit tests for Dead Code Elimination.\\n\\\"\\\"\\\"\\nimport unittest\\nimport tangent\\nfrom tangent.optimizations.dce import (\\n    DefUseAnalyzer,\\n    BackwardSlicer,\\n    GradientDCE,\\n    VariableCollector\\n)\\nimport ast\\nimport gast\\n\\n\\nclass TestVariableCollector(unittest.TestCase):\\n    \\\"\\\"\\\"Test variable collection from expressions.\\\"\\\"\\\"\\n    \\n    def test_simple_expression(self):\\n        code = \\\"x + y\\\"\\n        node = ast.parse(code, mode='eval').body\\n        vars = VariableCollector.collect(node)\\n        self.assertEqual(vars, {'x', 'y'})\\n    \\n    def test_nested_expression(self):\\n        code = \\\"x * y + z * w\\\"\\n        node = ast.parse(code, mode='eval').body\\n        vars = VariableCollector.collect(node)\\n        self.assertEqual(vars, {'x', 'y', 'z', 'w'})\\n\\n\\nclass TestDefUseAnalyzer(unittest.TestCase):\\n    \\\"\\\"\\\"Test def-use analysis.\\\"\\\"\\\"\\n    \\n    def test_simple_function(self):\\n        code = \\\"\\\"\\\"\\ndef f():\\n    a = x + y\\n    b = a * z\\n    return b\\n        \\\"\\\"\\\"\\n        tree = gast.parse(code)\\n        func = tree.body[0]\\n        \\n        analyzer = DefUseAnalyzer(func)\\n        \\n        # Check definitions\\n        self.assertIn('a', analyzer.def_sites)\\n        self.assertIn('b', analyzer.def_sites)\\n        \\n        # Check uses\\n        self.assertIn('a', analyzer.use_map[1])  # b = a * z uses 'a'\\n\\n\\nclass TestBackwardSlicing(unittest.TestCase):\\n    \\\"\\\"\\\"Test backward slicing algorithm.\\\"\\\"\\\"\\n    \\n    def test_simple_slice(self):\\n        code = \\\"\\\"\\\"\\ndef f():\\n    a = x + 1\\n    b = y + 1\\n    c = a + 2\\n    return c\\n        \\\"\\\"\\\"\\n        tree = gast.parse(code)\\n        func = tree.body[0]\\n        \\n        analyzer = DefUseAnalyzer(func)\\n        slicer = BackwardSlicer(func, analyzer)\\n        \\n        # Slice for 'c' should include lines defining c and a, but not b\\n        relevant = slicer.slice({'c'})\\n        \\n        # Should include definition of c (line 2) and a (line 0)\\n        self.assertIn(2, relevant)  # c = a + 2\\n        self.assertIn(0, relevant)  # a = x + 1\\n        # Should NOT include b = y + 1\\n        self.assertNotIn(1, relevant)\\n\\n\\nclass TestGradientDCE(unittest.TestCase):\\n    \\\"\\\"\\\"Test full DCE on gradient functions.\\\"\\\"\\\"\\n    \\n    def test_unused_gradient_elimination(self):\\n        \\\"\\\"\\\"Test that unused gradients are eliminated.\\\"\\\"\\\"\\n        def f(x, y, z):\\n            a = x * 2\\n            b = y * 3\\n            c = z * 4\\n            return a + b  # z not used!\\n        \\n        # Generate gradient function (mock)\\n        grad_code = \\\"\\\"\\\"\\ndef grad_f(x, y, z):\\n    a = x * 2\\n    b = y * 3\\n    c = z * 4\\n    result = a + b\\n    \\n    # Gradients\\n    d_result = 1.0\\n    d_a = d_result\\n    d_b = d_result\\n    d_x = d_a * 2\\n    d_y = d_b * 3\\n    d_z = 0  # This should be eliminated!\\n    \\n    return d_x\\n        \\\"\\\"\\\"\\n        \\n        tree = gast.parse(grad_code)\\n        func = tree.body[0]\\n        \\n        # Apply DCE requesting only d_x\\n        optimizer = GradientDCE(func, ['x'])\\n        optimized = optimizer.optimize()\\n        \\n        # Check that d_z computation is removed\\n        code_str = gast.unparse(optimized)\\n        self.assertNotIn('d_z', code_str)\\n\\n\\nclass TestIntegration(unittest.TestCase):\\n    \\\"\\\"\\\"Integration tests with actual Tangent.\\\"\\\"\\\"\\n    \\n    def test_selective_gradient(self):\\n        \\\"\\\"\\\"Test gradient w.r.t. one variable eliminates others.\\\"\\\"\\\"\\n        def f(x, y, z):\\n            a = x * x\\n            b = y * y\\n            c = z * z\\n            return a + b  # z unused\\n        \\n        # Get gradient w.r.t. x only\\n        grad_f = tangent.grad(f, wrt=['x'])\\n        \\n        # Should work correctly\\n        result = grad_f(3.0, 4.0, 5.0)\\n        self.assertAlmostEqual(result, 6.0)  # d(x*x)/dx = 2x = 6\\n\\n\\nif __name__ == '__main__':\\n    unittest.main()",
+          "description": "Comprehensive unit tests for DCE components"
+        },
+        {
+          "task_id": "1.4",
+          "name": "Run Tests and Benchmarks",
+          "commands": [
+            "python -m pytest tests/test_dce.py -v",
+            "cd tests/benchmarks",
+            "python dce_benchmarks.py",
+            "python compare_dce.py baseline_results.json optimized_results.json"
+          ],
+          "description": "Validate implementation and measure improvements"
+        }
+      ],
+      "success_criteria": [
+        "All unit tests pass",
+        "SelectiveGradient benchmark shows 1.5-2× speedup",
+        "UnusedComputation benchmark shows 1.5-2× speedup",
+        "No regression on other benchmarks",
+        "Memory usage reduced by 20-40%"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Activity Analysis",
+      "objective": "Add forward/backward activity analysis to identify active variables more precisely",
+      "expected_impact": "Additional 1.2-1.5× speedup, more aggressive elimination",
+      "background": {
+        "concept": "Activity Analysis",
+        "definition": "Determines which variables can affect the final result (forward) or are affected by inputs (backward)",
+        "benefit": "More precise than backward slicing alone - catches cases where intermediate results aren't actually needed"
+      },
+      "tasks": [
+        {
+          "task_id": "2.1",
+          "name": "Implement Activity Analysis",
+          "file": "tangent/optimizations/dce.py",
+          "code": "class ActivityAnalyzer:\\n    \\\"\\\"\\\"\\n    Perform forward and backward activity analysis.\\n    \\n    Forward: Which variables depend on active inputs?\\n    Backward: Which variables affect active outputs?\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, func_ast, active_inputs: Set[str], active_outputs: Set[str]):\\n        self.func_ast = func_ast\\n        self.active_inputs = active_inputs\\n        self.active_outputs = active_outputs\\n        self.def_use = DefUseAnalyzer(func_ast)\\n    \\n    def forward_analysis(self) -> Set[str]:\\n        \\\"\\\"\\\"\\n        Propagate activity forward from active inputs.\\n        A variable is active if it transitively depends on active inputs.\\n        \\\"\\\"\\\"\\n        active_vars = set(self.active_inputs)\\n        changed = True\\n        \\n        while changed:\\n            changed = False\\n            for line_num in range(len(self.func_ast.body)):\\n                defined = self.def_use.def_map.get(line_num, set())\\n                used = self.def_use.use_map.get(line_num, set())\\n                \\n                # If any used variable is active, defined variables become active\\n                if any(var in active_vars for var in used):\\n                    for var in defined:\\n                        if var not in active_vars:\\n                            active_vars.add(var)\\n                            changed = True\\n        \\n        return active_vars\\n    \\n    def backward_analysis(self) -> Set[str]:\\n        \\\"\\\"\\\"\\n        Propagate activity backward from active outputs.\\n        A variable is active if active outputs transitively depend on it.\\n        \\\"\\\"\\\"\\n        active_vars = set(self.active_outputs)\\n        changed = True\\n        \\n        while changed:\\n            changed = False\\n            # Traverse in reverse order\\n            for line_num in reversed(range(len(self.func_ast.body))):\\n                defined = self.def_use.def_map.get(line_num, set())\\n                used = self.def_use.use_map.get(line_num, set())\\n                \\n                # If any defined variable is active, used variables become active\\n                if any(var in active_vars for var in defined):\\n                    for var in used:\\n                        if var not in active_vars:\\n                            active_vars.add(var)\\n                            changed = True\\n        \\n        return active_vars\\n    \\n    def compute_active_gradients(self, requested_grads: Set[str]) -> Set[str]:\\n        \\\"\\\"\\\"\\n        Compute which gradients actually need to be computed.\\n        \\n        Returns variables that:\\n        1. Are used in forward computation (forward active)\\n        2. Affect the requested gradients (backward active from gradients)\\n        \\\"\\\"\\\"\\n        # Forward: which variables depend on active inputs?\\n        forward_active = self.forward_analysis()\\n        \\n        # Backward: which variables affect requested gradients?\\n        gradient_vars = {f'd_{g}' for g in requested_grads}\\n        backward_active = self.backward_analysis()\\n        \\n        # Intersection: variables we actually need gradients for\\n        need_gradients = forward_active & backward_active\\n        \\n        return need_gradients",
+          "description": "Implement forward/backward activity analysis"
+        },
+        {
+          "task_id": "2.2",
+          "name": "Enhance GradientDCE with Activity Analysis",
+          "file": "tangent/optimizations/dce.py",
+          "code": "class GradientDCE:\\n    \\\"\\\"\\\"Enhanced version with activity analysis.\\\"\\\"\\\"\\n    \\n    def optimize(self):\\n        \\\"\\\"\\\"Apply DCE with activity analysis.\\\"\\\"\\\"\\n        # Step 1: Identify active inputs (from function signature)\\n        active_inputs = self._extract_function_params()\\n        \\n        # Step 2: Identify active outputs (return values)\\n        active_outputs = self._extract_return_values()\\n        \\n        # Step 3: Activity analysis\\n        activity = ActivityAnalyzer(\\n            self.grad_func_ast,\\n            active_inputs,\\n            active_outputs\\n        )\\n        \\n        # Step 4: Find which gradients we actually need\\n        need_gradients = activity.compute_active_gradients(self.requested_grads)\\n        \\n        # Step 5: Backward slice from needed gradients\\n        analyzer = DefUseAnalyzer(self.grad_func_ast)\\n        slicer = BackwardSlicer(self.grad_func_ast, analyzer)\\n        gradient_vars = {f'd_{var}' for var in need_gradients}\\n        relevant_stmts = slicer.slice(gradient_vars)\\n        \\n        # Step 6: Remove irrelevant statements\\n        optimized_body = [\\n            stmt for i, stmt in enumerate(self.grad_func_ast.body)\\n            if i in relevant_stmts or self._is_essential(stmt)\\n        ]\\n        \\n        self.grad_func_ast.body = optimized_body\\n        \\n        # Step 7: Statistics\\n        eliminated = len(self.grad_func_ast.body) - len(optimized_body)\\n        if eliminated > 0:\\n            print(f\\\"DCE: Eliminated {eliminated} statements\\\")\\n        \\n        return self.grad_func_ast\\n    \\n    def _extract_function_params(self):\\n        \\\"\\\"\\\"Extract parameter names from function.\\\"\\\"\\\"\\n        if hasattr(self.grad_func_ast, 'args'):\\n            return {arg.id for arg in self.grad_func_ast.args.args}\\n        return set()\\n    \\n    def _extract_return_values(self):\\n        \\\"\\\"\\\"Extract variables used in return statement.\\\"\\\"\\\"\\n        for stmt in self.grad_func_ast.body:\\n            if isinstance(stmt, (ast.Return, gast.Return)):\\n                if stmt.value:\\n                    return VariableCollector.collect(stmt.value)\\n        return set()\\n    \\n    def _is_essential(self, stmt):\\n        \\\"\\\"\\\"Check if statement is essential (return, control flow, etc.).\\\"\\\"\\\"\\n        return isinstance(stmt, (\\n            ast.Return, gast.Return,\\n            ast.FunctionDef, gast.FunctionDef\\n        ))",
+          "description": "Integrate activity analysis into DCE optimizer"
+        },
+        {
+          "task_id": "2.3",
+          "name": "Add Tests for Activity Analysis",
+          "file": "tests/test_activity_analysis.py",
+          "code": "\"\"\"\\nTests for activity analysis.\\n\\\"\\\"\\\"\\nimport unittest\\nimport gast\\nfrom tangent.optimizations.dce import ActivityAnalyzer, DefUseAnalyzer\\n\\n\\nclass TestActivityAnalysis(unittest.TestCase):\\n    \\n    def test_forward_activity(self):\\n        \\\"\\\"\\\"Test forward activity propagation.\\\"\\\"\\\"\\n        code = \\\"\\\"\\\"\\ndef f(x, y):\\n    a = x + 1\\n    b = a * 2\\n    c = y + 1\\n    return b\\n        \\\"\\\"\\\"\\n        tree = gast.parse(code)\\n        func = tree.body[0]\\n        \\n        analyzer = ActivityAnalyzer(func, {'x'}, {'b'})\\n        active = analyzer.forward_analysis()\\n        \\n        # x, a, b should be active (chain from x)\\n        self.assertIn('x', active)\\n        self.assertIn('a', active)\\n        self.assertIn('b', active)\\n        \\n        # c should NOT be active (depends on y, not x)\\n        # Note: This might be in active if y is considered input\\n    \\n    def test_backward_activity(self):\\n        \\\"\\\"\\\"Test backward activity propagation.\\\"\\\"\\\"\\n        code = \\\"\\\"\\\"\\ndef f(x, y):\\n    a = x + 1\\n    b = y + 1\\n    c = a + b\\n    return c\\n        \\\"\\\"\\\"\\n        tree = gast.parse(code)\\n        func = tree.body[0]\\n        \\n        analyzer = ActivityAnalyzer(func, {'x', 'y'}, {'c'})\\n        active = analyzer.backward_analysis()\\n        \\n        # All variables should be active (all affect c)\\n        self.assertIn('c', active)\\n        self.assertIn('a', active)\\n        self.assertIn('b', active)\\n    \\n    def test_unused_variable(self):\\n        \\\"\\\"\\\"Test that truly unused variables are identified.\\\"\\\"\\\"\\n        code = \\\"\\\"\\\"\\ndef f(x, y, z):\\n    a = x + 1\\n    b = y + 1\\n    c = z + 1  # Never used!\\n    return a + b\\n        \\\"\\\"\\\"\\n        tree = gast.parse(code)\\n        func = tree.body[0]\\n        \\n        analyzer = ActivityAnalyzer(func, {'x', 'y', 'z'}, {'a', 'b'})\\n        forward = analyzer.forward_analysis()\\n        backward = analyzer.backward_analysis()\\n        \\n        # c should not be in backward active (doesn't affect output)\\n        self.assertNotIn('c', backward)\\n\\n\\nif __name__ == '__main__':\\n    unittest.main()",
+          "description": "Test activity analysis correctness"
+        },
+        {
+          "task_id": "2.4",
+          "name": "Benchmark Phase 2",
+          "commands": [
+            "python -m pytest tests/test_activity_analysis.py -v",
+            "cd tests/benchmarks",
+            "python dce_benchmarks.py",
+            "mv baseline_results.json phase2_results.json",
+            "python compare_dce.py baseline_results.json phase2_results.json"
+          ],
+          "description": "Measure improvements from activity analysis"
+        }
+      ],
+      "success_criteria": [
+        "All tests pass",
+        "UnusedRegularization benchmark shows additional 1.2-1.5× speedup",
+        "Total speedup on SelectiveGradient: 2-3×",
+        "No false eliminations (correctness preserved)"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Control Flow Analysis",
+      "objective": "Handle loops and conditionals correctly using SSA-based analysis",
+      "expected_impact": "Enables DCE on 80%+ of real-world code (most code has control flow)",
+      "background": {
+        "concept": "SSA (Static Single Assignment)",
+        "definition": "Intermediate representation where each variable is assigned exactly once",
+        "benefit": "Simplifies data flow analysis, especially with control flow",
+        "phi_functions": "Special functions at control flow merge points that select the right value based on which path was taken"
+      },
+      "tasks": [
+        {
+          "task_id": "3.1",
+          "name": "Add SSA Conversion",
+          "file": "tangent/optimizations/ssa.py",
+          "code": "\"\"\"\\nSSA (Static Single Assignment) conversion for Tangent.\\n\\nConverts Python AST to SSA form to enable more precise analysis.\\n\\\"\\\"\\\"\\nimport ast\\nimport gast\\nfrom typing import Dict, Set, List\\nfrom collections import defaultdict\\n\\n\\nclass SSAConverter:\\n    \\\"\\\"\\\"\\n    Convert AST to SSA form.\\n    \\n    Main transformations:\\n    1. Rename variables at each definition: x -> x_1, x_2, etc.\\n    2. Insert phi functions at control flow merge points\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        self.var_versions = defaultdict(int)  # var -> current version\\n        self.phi_functions = {}  # block -> {var -> phi_node}\\n    \\n    def convert(self, func_ast):\\n        \\\"\\\"\\\"Convert function to SSA form.\\\"\\\"\\\"\\n        # Build CFG (Control Flow Graph)\\n        cfg = self._build_cfg(func_ast)\\n        \\n        # Compute dominance frontier\\n        dom_frontier = self._compute_dominance_frontier(cfg)\\n        \\n        # Insert phi functions\\n        self._insert_phi_functions(cfg, dom_frontier)\\n        \\n        # Rename variables\\n        self._rename_variables(cfg)\\n        \\n        return func_ast\\n    \\n    def _build_cfg(self, func_ast):\\n        \\\"\\\"\\\"Build control flow graph.\\\"\\\"\\\"\\n        # Simplified CFG for straight-line code\\n        # TODO: Handle If, For, While in full implementation\\n        blocks = []\\n        current_block = []\\n        \\n        for stmt in func_ast.body:\\n            if isinstance(stmt, (ast.If, gast.If)):\\n                # Start new blocks for branches\\n                if current_block:\\n                    blocks.append(current_block)\\n                    current_block = []\\n                # TODO: Handle branches\\n            else:\\n                current_block.append(stmt)\\n        \\n        if current_block:\\n            blocks.append(current_block)\\n        \\n        return blocks\\n    \\n    def _compute_dominance_frontier(self, cfg):\\n        \\\"\\\"\\\"Compute dominance frontier for phi placement.\\\"\\\"\\\"\\n        # Simplified: return empty for straight-line code\\n        # TODO: Implement full dominance frontier algorithm\\n        return {}\\n    \\n    def _insert_phi_functions(self, cfg, dom_frontier):\\n        \\\"\\\"\\\"Insert phi functions at merge points.\\\"\\\"\\\"\\n        # TODO: Insert phi(x_1, x_2) at control flow merges\\n        pass\\n    \\n    def _rename_variables(self, cfg):\\n        \\\"\\\"\\\"Rename variables to unique names.\\\"\\\"\\\"\\n        # TODO: Traverse CFG and rename variables\\n        pass\\n\\n\\nclass PhiFunction(gast.expr):\\n    \\\"\\\"\\\"\\n    Represent a phi function in SSA.\\n    \\n    phi(x_1, x_2) means: x = x_1 if came from block 1, else x_2\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, var_name, alternatives):\\n        self.var_name = var_name\\n        self.alternatives = alternatives  # [(value, source_block), ...]\\n\\n\\ndef convert_to_ssa(func_ast):\\n    \\\"\\\"\\\"\\n    Convert function AST to SSA form.\\n    \\n    Args:\\n        func_ast: Function AST to convert\\n    \\n    Returns:\\n        SSA form of the function\\n    \\\"\\\"\\\"\\n    converter = SSAConverter()\\n    return converter.convert(func_ast)\\n\\n\\ndef convert_from_ssa(ssa_ast):\\n    \\\"\\\"\\\"\\n    Convert SSA form back to normal form.\\n    \\n    Args:\\n        ssa_ast: Function in SSA form\\n    \\n    Returns:\\n        Normal form (removing phi functions, merging variable versions)\\n    \\\"\\\"\\\"\\n    # TODO: Implement SSA -> normal conversion\\n    return ssa_ast",
+          "description": "Basic SSA conversion infrastructure (simplified for Phase 3)"
+        },
+        {
+          "task_id": "3.2",
+          "name": "Extend DefUseAnalyzer for Control Flow",
+          "file": "tangent/optimizations/dce.py",
+          "code": "class ControlFlowDefUseAnalyzer(DefUseAnalyzer):\\n    \\\"\\\"\\\"\\n    Extended analyzer that handles If, For, While statements.\\n    \\\"\\\"\\\"\\n    \\n    def _analyze_statement(self, stmt, line_num):\\n        \\\"\\\"\\\"Analyze statement including control flow.\\\"\\\"\\\"\\n        # Handle basic assignments (from parent class)\\n        if isinstance(stmt, (ast.Assign, gast.Assign)):\\n            super()._analyze_statement(stmt, line_num)\\n        \\n        # Handle If statements\\n        elif isinstance(stmt, (ast.If, gast.If)):\\n            # Condition uses variables\\n            cond_vars = VariableCollector.collect(stmt.test)\\n            self.use_map[line_num] = cond_vars\\n            \\n            # Analyze body\\n            for i, s in enumerate(stmt.body):\\n                self._analyze_statement(s, (line_num, 'then', i))\\n            \\n            # Analyze orelse\\n            for i, s in enumerate(stmt.orelse):\\n                self._analyze_statement(s, (line_num, 'else', i))\\n        \\n        # Handle For loops\\n        elif isinstance(stmt, (ast.For, gast.For)):\\n            # Iterator uses variables\\n            iter_vars = VariableCollector.collect(stmt.iter)\\n            self.use_map[line_num] = iter_vars\\n            \\n            # Loop variable is defined\\n            if isinstance(stmt.target, (ast.Name, gast.Name)):\\n                loop_var = stmt.target.id\\n                self.def_map[line_num] = {loop_var}\\n                self.def_sites.setdefault(loop_var, []).append(line_num)\\n            \\n            # Analyze body\\n            for i, s in enumerate(stmt.body):\\n                self._analyze_statement(s, (line_num, 'body', i))\\n        \\n        # Handle While loops\\n        elif isinstance(stmt, (ast.While, gast.While)):\\n            # Condition uses variables\\n            cond_vars = VariableCollector.collect(stmt.test)\\n            self.use_map[line_num] = cond_vars\\n            \\n            # Analyze body\\n            for i, s in enumerate(stmt.body):\\n                self._analyze_statement(s, (line_num, 'body', i))\\n        \\n        # Handle Return\\n        elif isinstance(stmt, (ast.Return, gast.Return)):\\n            if stmt.value:\\n                used = VariableCollector.collect(stmt.value)\\n                self.use_map[line_num] = used",
+          "description": "Extend def-use analysis to handle control flow"
+        },
+        {
+          "task_id": "3.3",
+          "name": "Update BackwardSlicer for Control Flow",
+          "file": "tangent/optimizations/dce.py",
+          "code": "class ControlFlowBackwardSlicer(BackwardSlicer):\\n    \\\"\\\"\\\"\\n    Backward slicer that handles control flow correctly.\\n    \\\"\\\"\\\"\\n    \\n    def slice(self, target_vars: Set[str]) -> Set[int]:\\n        \\\"\\\"\\\"\\n        Compute backward slice handling control flow.\\n        \\n        Key insight: If a variable is needed, ALL paths that define it\\n        must be included (conservative approach).\\n        \\\"\\\"\\\"\\n        worklist = list(target_vars)\\n        visited_vars = set()\\n        self.relevant_stmts = set()\\n        \\n        while worklist:\\n            var = worklist.pop()\\n            \\n            if var in visited_vars:\\n                continue\\n            visited_vars.add(var)\\n            \\n            # Find all definitions (including in different branches)\\n            for def_line in self.def_use.def_sites.get(var, []):\\n                self._mark_relevant_recursive(def_line)\\n                \\n                # Add all used variables\\n                used_vars = self.def_use.use_map.get(def_line, set())\\n                for used_var in used_vars:\\n                    if used_var not in visited_vars:\\n                        worklist.append(used_var)\\n        \\n        return self.relevant_stmts\\n    \\n    def _mark_relevant_recursive(self, line_num):\\n        \\\"\\\"\\\"\\n        Mark statement and its control dependencies as relevant.\\n        \\n        If line_num is inside a branch, the branch condition is also relevant.\\n        \\\"\\\"\\\"\\n        if isinstance(line_num, tuple):\\n            # It's nested (inside If/For/While)\\n            parent_line = line_num[0]\\n            self.relevant_stmts.add(parent_line)  # Include control structure\\n            self.relevant_stmts.add(line_num)     # Include nested statement\\n        else:\\n            self.relevant_stmts.add(line_num)",
+          "description": "Handle control flow in backward slicing"
+        },
+        {
+          "task_id": "3.4",
+          "name": "Add Control Flow Tests",
+          "file": "tests/test_control_flow_dce.py",
+          "code": "\"\"\"\\nTests for DCE with control flow.\\n\\\"\\\"\\\"\\nimport unittest\\nimport tangent\\n\\n\\nclass TestControlFlowDCE(unittest.TestCase):\\n    \\n    def test_if_statement(self):\\n        \\\"\\\"\\\"Test DCE with if statement.\\\"\\\"\\\"\\n        def f(x, y, flag):\\n            if flag > 0:\\n                a = x * 2\\n            else:\\n                a = x * 3\\n            \\n            b = y * 2  # Unused if we only want gradient w.r.t. x\\n            return a\\n        \\n        grad_f = tangent.grad(f, wrt=['x'])\\n        \\n        # Should work correctly\\n        result = grad_f(5.0, 3.0, 1.0)\\n        self.assertAlmostEqual(result, 2.0)  # flag > 0, so a = x*2, gradient = 2\\n    \\n    def test_for_loop(self):\\n        \\\"\\\"\\\"Test DCE with for loop.\\\"\\\"\\\"\\n        def f(x, y):\\n            result = 0.0\\n            for i in range(5):\\n                result = result + x * i\\n            \\n            unused = y * y  # Should be eliminated\\n            return result\\n        \\n        grad_f = tangent.grad(f, wrt=['x'])\\n        result = grad_f(2.0, 3.0)\\n        \\n        # Gradient should be sum of i for i in range(5) = 0+1+2+3+4 = 10\\n        self.assertAlmostEqual(result, 10.0)\\n    \\n    def test_while_loop(self):\\n        \\\"\\\"\\\"Test DCE with while loop.\\\"\\\"\\\"\\n        def f(x, y):\\n            result = x\\n            count = 0\\n            while count < 3:\\n                result = result * 2\\n                count = count + 1\\n            \\n            unused = y + 5  # Should be eliminated\\n            return result\\n        \\n        grad_f = tangent.grad(f, wrt=['x'])\\n        result = grad_f(1.0, 10.0)\\n        \\n        # result = x * 2 * 2 * 2 = 8x, so gradient = 8\\n        self.assertAlmostEqual(result, 8.0)\\n    \\n    def test_nested_control_flow(self):\\n        \\\"\\\"\\\"Test DCE with nested if inside for.\\\"\\\"\\\"\\n        def f(x, y):\\n            result = 0.0\\n            for i in range(5):\\n                if i % 2 == 0:\\n                    result = result + x\\n                else:\\n                    result = result + x * 2\\n            \\n            waste = y * y * y  # Unused\\n            return result\\n        \\n        grad_f = tangent.grad(f, wrt=['x'])\\n        result = grad_f(1.0, 5.0)\\n        \\n        # i=0,2,4: +x (3 times) = 3x\\n        # i=1,3: +2x (2 times) = 4x\\n        # Total: 7x, gradient = 7\\n        self.assertAlmostEqual(result, 7.0)\\n\\n\\nif __name__ == '__main__':\\n    unittest.main()",
+          "description": "Test DCE correctness with control flow"
+        },
+        {
+          "task_id": "3.5",
+          "name": "Benchmark Phase 3",
+          "commands": [
+            "python -m pytest tests/test_control_flow_dce.py -v",
+            "cd tests/benchmarks",
+            "python dce_benchmarks.py",
+            "mv phase2_results.json phase3_results.json",
+            "python compare_dce.py baseline_results.json phase3_results.json"
+          ],
+          "description": "Validate control flow handling and measure performance"
+        }
+      ],
+      "success_criteria": [
+        "All control flow tests pass",
+        "ConditionalBranch benchmark shows 1.3-2× speedup",
+        "DCE works correctly on loops",
+        "No correctness regressions"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Integration with Coarsening",
+      "objective": "Combine DCE with coarsening optimization from the research paper",
+      "expected_impact": "Multiplicative benefits: 2-5× from DCE, 2-10× from coarsening = 4-50× total potential",
+      "prerequisites": [
+        "Coarsening optimization implemented (from research paper)",
+        "Phases 1-3 complete"
+      ],
+      "tasks": [
+        {
+          "task_id": "4.1",
+          "name": "Create Unified Optimization Pipeline",
+          "file": "tangent/optimizations/pipeline.py",
+          "code": "\"\"\"\\nUnified optimization pipeline for Tangent.\\n\\nCombines multiple optimizations in optimal order.\\n\\\"\\\"\\\"\\nfrom tangent.optimizations.dce import apply_dce\\nfrom tangent.optimizations.coarsening import apply_coarsening  # If implemented\\n\\n\\nclass OptimizationPipeline:\\n    \\\"\\\"\\\"\\n    Manages the application of multiple optimizations.\\n    \\n    Optimization order matters:\\n    1. Coarsening first (creates larger symbolic expressions)\\n    2. DCE second (eliminates unused parts of those expressions)\\n    \\\"\\\"\\\"\\n    \\n    def __init__(self, config=None):\\n        self.config = config or {}\\n        self.enabled_opts = self.config.get('optimizations', {\\n            'coarsening': True,\\n            'dce': True,\\n            'cse': False,  # Common subexpression elimination (future)\\n        })\\n    \\n    def optimize(self, grad_func_ast, wrt_vars, func_context):\\n        \\\"\\\"\\\"\\n        Apply all enabled optimizations in optimal order.\\n        \\n        Args:\\n            grad_func_ast: Gradient function AST\\n            wrt_vars: Variables we're differentiating w.r.t.\\n            func_context: Original function context (for coarsening)\\n        \\n        Returns:\\n            Optimized gradient function AST\\n        \\\"\\\"\\\"\\n        optimized = grad_func_ast\\n        stats = {}\\n        \\n        # Phase 1: Coarsening (if enabled and implemented)\\n        if self.enabled_opts.get('coarsening'):\\n            try:\\n                optimized, coarsen_stats = apply_coarsening(\\n                    optimized, func_context\\n                )\\n                stats['coarsening'] = coarsen_stats\\n            except Exception as e:\\n                print(f\\\"Warning: Coarsening failed: {e}\\\")\\n        \\n        # Phase 2: Dead Code Elimination\\n        if self.enabled_opts.get('dce'):\\n            try:\\n                optimized = apply_dce(optimized, wrt_vars)\\n                stats['dce'] = {'applied': True}\\n            except Exception as e:\\n                print(f\\\"Warning: DCE failed: {e}\\\")\\n        \\n        # Phase 3: Common Subexpression Elimination (future)\\n        if self.enabled_opts.get('cse'):\\n            # TODO: Implement CSE\\n            pass\\n        \\n        return optimized, stats\\n\\n\\ndef optimize_gradient(grad_func_ast, wrt_vars, func_context, config=None):\\n    \\\"\\\"\\\"\\n    Main entry point for gradient optimization.\\n    \\n    Args:\\n        grad_func_ast: Gradient function AST\\n        wrt_vars: Variables we're differentiating w.r.t.\\n        func_context: Original function context\\n        config: Optimization configuration\\n    \\n    Returns:\\n        Optimized gradient function AST and statistics\\n    \\\"\\\"\\\"\\n    pipeline = OptimizationPipeline(config)\\n    return pipeline.optimize(grad_func_ast, wrt_vars, func_context)",
+          "description": "Unified pipeline combining DCE and coarsening"
+        },
+        {
+          "task_id": "4.2",
+          "name": "Update Tangent Integration",
+          "file": "tangent/grad.py",
+          "modifications": [
+            {
+              "location": "import section",
+              "add": "from tangent.optimizations.pipeline import optimize_gradient"
+            },
+            {
+              "location": "grad function, after AST generation",
+              "replace_code": "# Apply Dead Code Elimination if requested\\nif optimizations.get('dce', True):\\n    grad_ast = apply_dce(grad_ast, wrt)",
+              "with_code": "# Apply optimization pipeline\\nopt_config = {\\n    'optimizations': {\\n        'coarsening': optimizations.get('coarsening', True),\\n        'dce': optimizations.get('dce', True),\\n    }\\n}\\ngrad_ast, opt_stats = optimize_gradient(\\n    grad_ast, wrt, func_context, opt_config\\n)\\n\\n# Print optimization statistics if verbose\\nif verbose:\\n    print(f\\\"Optimization stats: {opt_stats}\\\")"
+            }
+          ],
+          "description": "Replace standalone DCE with unified pipeline"
+        },
+        {
+          "task_id": "4.3",
+          "name": "Create Combined Benchmark",
+          "file": "tests/benchmarks/combined_optimization_benchmark.py",
+          "code": "\"\"\"\\nBenchmark combining DCE and coarsening optimizations.\\n\\\"\\\"\\\"\\nimport time\\nimport tangent\\nimport json\\n\\n\\ndef benchmark_optimization_combinations():\\n    \\\"\\\"\\\"Test different optimization combinations.\\\"\\\"\\\"\\n    \\n    def complex_model(x, y, z, w):\\n        # Multiple operations that benefit from both optimizations\\n        a = x * x + y * y\\n        b = z * z + w * w\\n        c = a * b\\n        \\n        # Loop that can be coarsened\\n        result = c\\n        for i in range(10):\\n            result = result + x * i + y * i\\n        \\n        # Unused computation (benefits from DCE)\\n        unused = z * w * z * w\\n        \\n        return result\\n    \\n    configs = {\\n        'baseline': {'coarsening': False, 'dce': False},\\n        'dce_only': {'coarsening': False, 'dce': True},\\n        'coarsen_only': {'coarsening': True, 'dce': False},\\n        'combined': {'coarsening': True, 'dce': True},\\n    }\\n    \\n    results = {}\\n    \\n    for name, opt_config in configs.items():\\n        print(f\\\"Testing: {name}\\\")\\n        \\n        # Create gradient function with this config\\n        grad_f = tangent.grad(\\n            complex_model,\\n            wrt=['x'],\\n            optimizations=opt_config\\n        )\\n        \\n        # Benchmark\\n        iterations = 100\\n        start = time.perf_counter()\\n        for _ in range(iterations):\\n            grad_f(2.0, 3.0, 4.0, 5.0)\\n        end = time.perf_counter()\\n        \\n        avg_time = (end - start) / iterations\\n        results[name] = {\\n            'time_ms': avg_time * 1000,\\n            'config': opt_config\\n        }\\n        \\n        print(f\\\"  Average time: {avg_time*1000:.3f} ms\\\")\\n    \\n    # Calculate speedups\\n    baseline_time = results['baseline']['time_ms']\\n    for name in results:\\n        if name != 'baseline':\\n            speedup = baseline_time / results[name]['time_ms']\\n            results[name]['speedup'] = speedup\\n            print(f\\\"{name} speedup: {speedup:.2f}×\\\")\\n    \\n    # Save results\\n    with open('combined_optimization_results.json', 'w') as f:\\n        json.dump(results, f, indent=2)\\n    \\n    return results\\n\\n\\nif __name__ == '__main__':\\n    results = benchmark_optimization_combinations()\\n    \\n    print(\\\"\\\\n=== SUMMARY ===\")\\n    print(f\\\"DCE alone: {results['dce_only']['speedup']:.2f}×\\\")\\n    print(f\\\"Coarsening alone: {results['coarsen_only']['speedup']:.2f}×\\\")\\n    print(f\\\"Combined: {results['combined']['speedup']:.2f}×\\\")\\n    \\n    # Check if combined is better than individual\\n    synergy = results['combined']['speedup'] / (\\n        results['dce_only']['speedup'] * results['coarsen_only']['speedup']\\n    )\\n    \\n    if synergy > 0.8:  # Within 20% of multiplicative\\n        print(f\\\"\\\\n✓ Optimizations combine well (synergy factor: {synergy:.2f})\\\")\\n    else:\\n        print(f\\\"\\\\n⚠ Potential interference (synergy factor: {synergy:.2f})\\\")",
+          "description": "Benchmark showing synergy between optimizations"
+        },
+        {
+          "task_id": "4.4",
+          "name": "Documentation and Usage Guide",
+          "file": "docs/OPTIMIZATION_GUIDE.md",
+          "content": "# Tangent Optimization Guide\\n\\n## Overview\\n\\nTangent now includes multiple optimization passes that can dramatically improve gradient computation performance.\\n\\n## Available Optimizations\\n\\n### 1. Dead Code Elimination (DCE)\\n\\n**What it does:** Removes computations that don't affect requested gradients.\\n\\n**Best for:**\\n- Computing gradients w.r.t. a subset of parameters\\n- Functions with unused branches or variables\\n- When you only need some gradients, not all\\n\\n**Expected speedup:** 1.5-5×\\n\\n**Usage:**\\n```python\\nimport tangent\\n\\ndef my_function(x, y, z):\\n    a = x * x\\n    b = y * y\\n    c = z * z  # Unused in output!\\n    return a + b\\n\\n# Only compute gradient w.r.t. x\\n# DCE will eliminate all y, z computations\\ngrad_f = tangent.grad(my_function, wrt=['x'])\\n```\\n\\n### 2. Coarsening Optimization\\n\\n**What it does:** Symbolically differentiates larger code sections instead of operation-by-operation.\\n\\n**Best for:**\\n- Loops with mathematical operations\\n- Chains of scalar operations\\n- Functions with clear mathematical structure\\n\\n**Expected speedup:** 2-10×\\n\\n**Usage:**\\n```python\\nimport tangent\\n\\ndef training_step(x, w):\\n    result = 0\\n    for i in range(100):\\n        result += x[i] * w\\n    return result\\n\\n# Coarsening converts loop to closed form\\ngrad_f = tangent.grad(training_step, optimizations={'coarsening': True})\\n```\\n\\n### 3. Combined Optimizations\\n\\n**What it does:** Applies both optimizations in sequence for maximum benefit.\\n\\n**Expected speedup:** 4-50× (multiplicative benefits)\\n\\n**Usage:**\\n```python\\nimport tangent\\n\\n# Enable all optimizations (default)\\ngrad_f = tangent.grad(\\n    my_function,\\n    wrt=['x'],\\n    optimizations={\\n        'dce': True,\\n        'coarsening': True,\\n    }\\n)\\n\\n# Or use defaults (all enabled)\\ngrad_f = tangent.grad(my_function, wrt=['x'])\\n```\\n\\n## Configuration\\n\\n### Disabling Optimizations\\n\\n```python\\n# Disable all optimizations\\ngrad_f = tangent.grad(\\n    my_function,\\n    optimizations={\\n        'dce': False,\\n        'coarsening': False,\\n    }\\n)\\n```\\n\\n### Verbose Mode\\n\\n```python\\n# See what optimizations are doing\\ngrad_f = tangent.grad(\\n    my_function,\\n    wrt=['x'],\\n    verbose=True\\n)\\n# Output: DCE: Eliminated 15 statements\\n#         Coarsening: 3 SOIs identified\\n```\\n\\n## Performance Tips\\n\\n1. **Use selective gradients:** If you only need `df/dx`, specify `wrt=['x']` rather than letting Tangent compute all gradients.\\n\\n2. **Structure for coarsening:** Write mathematical loops clearly for better coarsening results.\\n\\n3. **Profile first:** Use the benchmarking tools to see which optimizations help most.\\n\\n## Troubleshooting\\n\\n### Optimization fails\\n\\nIf an optimization fails, Tangent falls back to unoptimized version with a warning:\\n\\n```python\\n# Warning: Coarsening failed: unable to handle recursion\\n# Falling back to standard AD\\n```\\n\\n### Unexpected results\\n\\nIf you get incorrect gradients:\\n\\n1. Disable optimizations and check if results match\\n2. Report bug with minimal reproduction case\\n3. Use `optimizations={'dce': False}` as workaround\\n\\n## Benchmarking Your Code\\n\\nUse the benchmark utilities:\\n\\n```python\\nfrom tangent.benchmarks import benchmark_optimizations\\n\\nresults = benchmark_optimizations(\\n    my_function,\\n    wrt=['x'],\\n    args=(1.0, 2.0, 3.0)\\n)\\n\\nprint(results)\\n# {'baseline': 1.2ms, 'with_dce': 0.4ms, 'speedup': 3.0}\\n```",
+          "description": "User-facing documentation for optimization features"
+        },
+        {
+          "task_id": "4.5",
+          "name": "Final Integration Testing",
+          "commands": [
+            "python -m pytest tests/ -v",
+            "cd tests/benchmarks",
+            "python combined_optimization_benchmark.py",
+            "python compare_dce.py baseline_results.json phase3_results.json"
+          ],
+          "description": "Comprehensive testing of full system"
+        }
+      ],
+      "success_criteria": [
+        "All tests pass",
+        "Combined optimizations show multiplicative benefits (or close)",
+        "No correctness regressions",
+        "Documentation complete",
+        "Total speedup: 4-20× on benchmark suite"
+      ]
+    }
+  ],
+  "final_deliverables": {
+    "code": [
+      "tangent/optimizations/dce.py - Dead code elimination",
+      "tangent/optimizations/ssa.py - SSA conversion",
+      "tangent/optimizations/pipeline.py - Unified optimization pipeline",
+      "tests/test_dce.py - DCE unit tests",
+      "tests/test_activity_analysis.py - Activity analysis tests",
+      "tests/test_control_flow_dce.py - Control flow tests",
+      "tests/benchmarks/dce_benchmarks.py - Benchmark suite",
+      "tests/benchmarks/compare_dce.py - Comparison tool",
+      "tests/benchmarks/combined_optimization_benchmark.py - Combined benchmark"
+    ],
+    "documentation": [
+      "docs/OPTIMIZATION_GUIDE.md - User guide",
+      "docs/DCE_IMPLEMENTATION.md - Implementation details",
+      "README.md updates - Feature announcement"
+    ],
+    "benchmarks": [
+      "baseline_results.json - Pre-optimization baselines",
+      "phase1_results.json - After backward slicing",
+      "phase2_results.json - After activity analysis",
+      "phase3_results.json - After control flow support",
+      "combined_optimization_results.json - Final results"
+    ]
+  },
+  "expected_final_results": {
+    "speedups": {
+      "SelectiveGradient": "2-5×",
+      "UnusedComputation": "1.5-3×",
+      "UnusedRegularization": "1.5-2×",
+      "ConditionalBranch": "1.3-2×"
+    },
+    "memory_reduction": "20-80%",
+    "correctness": "100% (all existing tests still pass)"
+  },
+  "rollback_plan": {
+    "if_phase_fails": "Each phase is independent, can rollback to previous phase",
+    "feature_flag": "Optimizations can be disabled via config",
+    "fallback": "System automatically falls back to unoptimized version on optimization failure"
+  }
+}
