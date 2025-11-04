@@ -32,6 +32,7 @@ from tangent.utils import init_grad
 from tangent.utils import insert_grad_of
 from tangent.utils import pop
 from tangent.utils import pop_stack
+from tangent.utils import get_shape
 from tangent.utils import push
 from tangent.utils import push_stack
 from tangent.utils import shapes_match

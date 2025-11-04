@@ -267,7 +267,7 @@ class ReverseAD(object):
         assert tangent.shapes_match(
             primal, adjoint
         ), 'Shape mismatch between return value (%s) and seed derivative (%s)' % (
-            numpy.shape(primal), numpy.shape(adjoint))
+            tangent.get_shape(primal), tangent.get_shape(adjoint))
 
       shape_check = template.replace(shape_match_template, primal=y, adjoint=dy)
       adjoint_body = shape_check + adjoint_body

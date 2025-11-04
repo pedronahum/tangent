@@ -215,6 +215,26 @@ shape_functions = {
 }
 
 
+def get_shape(array):
+  """Get the shape of an array using the appropriate backend function.
+
+  This function dispatches to the correct shape function based on the
+  array type, supporting NumPy, TensorFlow, JAX, and other backends.
+
+  Args:
+    array: An array-like object (NumPy, TensorFlow tensor, JAX array, etc.)
+
+  Returns:
+    A tuple or list of integers representing the shape.
+  """
+  shape_func = shape_functions.get(type(array))
+  if shape_func is None:
+    # Fallback: try numpy.shape if no registered function
+    import numpy
+    return numpy.shape(array)
+  return shape_func(array)
+
+
 def register_shape_function(t, shape_function):
   """Register a new shape function.
 
