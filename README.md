@@ -33,7 +33,7 @@ Tangent performs **source-to-source** automatic differentiation - it transforms 
 
 ## 🚀 Quick Start: Building Energy Optimization
 
-**Try it now in Colab!** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
+**Try it now in Colab!** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
 
 See Tangent in action with a real-world example - optimizing building heating to minimize energy costs:
 
@@ -75,7 +75,7 @@ heating_schedule -= learning_rate * gradient
 - 📊 Visualize gradients and optimization convergence
 - 🎓 Perfect for teaching automatic differentiation!
 
-**[→ Open Interactive Notebook](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)**
+**[→ Open Interactive Notebook](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)**
 
 ---
 

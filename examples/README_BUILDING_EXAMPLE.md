@@ -1,6 +1,6 @@
 # Building Energy Optimization Example
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
 
 ## Overview
 
@@ -151,7 +151,7 @@ After completing this notebook, you will understand:
 pip install tangent numpy matplotlib
 
 # Clone repository
-git clone https://github.com/google/tangent.git
+git clone https://github.com/pedronahum/tangent.git
 cd tangent/examples
 
 # Launch Jupyter
@@ -261,7 +261,7 @@ If you use this example in research or teaching, please cite:
   title={Building Energy Optimization with Tangent},
   author={Tangent Contributors},
   year={2025},
-  url={https://github.com/google/tangent/tree/master/examples}
+  url={https://github.com/pedronahum/tangent/tree/master/examples}
 }
 ```
 
@@ -269,8 +269,8 @@ If you use this example in research or teaching, please cite:
 
 Found a bug? Have a suggestion? Want to contribute?
 
-- **Issues**: [GitHub Issues](https://github.com/google/tangent/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/google/tangent/discussions)
+- **Issues**: [GitHub Issues](https://github.com/pedronahum/tangent/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/pedronahum/tangent/discussions)
 - **Pull Requests**: Always welcome!
 
 ## License
