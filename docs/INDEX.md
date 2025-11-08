@@ -68,7 +68,6 @@ Located in `features/` directory:
 - [List Comprehension Support](../LIST_COMPREHENSION_SUPPORT.md)
 - [NumPy Extensions Complete](../NUMPY_EXTENSIONS_COMPLETE.md)
 - [TensorFlow Extensions Complete](../TF_EXTENSIONS_COMPLETE.md)
-- [Tuple Limitations](../TUPLE_LIMITATIONS.md)
 - [While Loop Support](../WHILE_LOOP_SUPPORT.md)
 
 ---

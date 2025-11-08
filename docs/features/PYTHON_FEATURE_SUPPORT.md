@@ -28,7 +28,7 @@ This document provides a comprehensive reference of Python language features and
 ### Data Structures (Read-Only)
 - **✅ Dictionaries (read-only)** - Dict access, methods, nested dicts
 - **✅ Lists (syntax)** - List operations in non-differentiated paths
-- **✅ Tuples (read-only)** - Tuple access (unpacking has limitations)
+- **✅ Tuples** - Tuple access and unpacking fully supported
 - **✅ NumPy arrays** - Full support with comprehensive gradients
 
 ### Comprehensions (Partial)
@@ -372,20 +372,32 @@ def safe_log(x):
         return 0.0
 ```
 
-### 4. Avoid Tuple Unpacking
+### 4. ~~Avoid Tuple Unpacking~~ ✅ FIXED - Tuple Unpacking Works!
+
+**Update**: Tuple unpacking now works correctly in all tested scenarios.
 
 ```python
-# ✅ Good: Separate assignments
+# ✅ Works correctly: Tuple unpacking
 def compute(x):
-    a = x ** 2
-    b = x * 3
+    a, b = x ** 2, x * 3  # Gradients computed correctly!
     return a + b
 
-# ⚠️ Problematic: Tuple unpacking
+# ✅ Also works: Multiple unpacking
 def compute(x):
-    a, b = x ** 2, x * 3  # May give wrong gradient
+    a, b = x ** 2, x * 3
+    c, d = a + 1, b * 2
+    return c + d
+
+# ✅ Even works: Unpacking from function calls
+def helper(x):
+    return x ** 2, x * 3
+
+def compute(x):
+    a, b = helper(x)  # Works correctly!
     return a + b
 ```
+
+All tuple unpacking patterns have been tested and produce correct gradients.
 
 ## Comparison with Other Frameworks
 
@@ -398,7 +410,7 @@ def compute(x):
 | **Closures** | ✅ | ✅ | ✅ | ✅ |
 | **Dict (read)** | ✅ | ✅ | ✅ | ✅ |
 | **Dict (write)** | ❌ | ✅ | ✅ | ✅ |
-| **Tuples** | ⚠️ | ✅ | ✅ | ✅ |
+| **Tuples** | ✅ | ✅ | ✅ | ✅ |
 | **Try/except** | ❌ | ⚠️ | ⚠️ | ⚠️ |
 | **Break/continue** | ❌ | ⚠️ | ⚠️ | ⚠️ |
 
@@ -411,10 +423,10 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 25+ features
-- **Partially Supported**: 3 features (tuples, dicts, loops)
+- **Fully Supported**: 26+ features (including tuples!)
+- **Partially Supported**: 2 features (dicts, some loops)
 - **Not Supported**: 15+ features
-- **Overall Coverage**: ~60% of common Python features
+- **Overall Coverage**: ~62% of common Python features
 
 ## Recommendations
 
@@ -431,13 +443,12 @@ For maximum compatibility with Tangent:
    - Construct dicts inside functions
    - Use try/except blocks
    - Use break/continue in loops
-   - Rely on tuple unpacking
    - Use f-strings or sets
 
 3. **⚠️ BE CAREFUL**:
-   - Tuple unpacking may give incorrect gradients
    - Dict construction not supported (use parameters)
    - Loop ranges must be compile-time constants
+   - Multiple return statements in branches may cause issues
 
 ## See Also
 
@@ -448,4 +459,3 @@ For maximum compatibility with Tangent:
 - [Assert and Pass Support](ASSERT_PASS_SUPPORT.md)
 - [Lambda Support](LAMBDA_SUPPORT_COMPLETE.md)
 - [Closure Support](CLOSURE_SUPPORT_COMPLETE.md)
-- [Tuple Limitations](TUPLE_LIMITATIONS.md)

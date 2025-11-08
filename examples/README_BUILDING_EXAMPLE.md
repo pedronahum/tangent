@@ -2,6 +2,8 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
 
+> **Acknowledgment**: This example is inspired by PassiveLogic's work on differentiable programming for building control systems. See their blog post [Breaking the AI Speed Barrier](https://passivelogic.com/blog/?post=breaking-ai-speed-barrier-blog) and their [Differentiable Swift Examples](https://github.com/PassiveLogic/differentiable-swift-examples/tree/main/Benchmarks/BuildingSimulation). This tutorial demonstrates how Tangent brings similar capabilities to Python.
+
 ## Overview
 
 This comprehensive tutorial demonstrates Tangent's automatic differentiation capabilities through a real-world building energy optimization problem. Perfect for teaching, learning, or showcasing Tangent's features!
