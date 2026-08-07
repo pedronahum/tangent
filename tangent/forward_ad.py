@@ -389,6 +389,14 @@ class ForwardAD(transformers.TreeTransformer):
         z=self.target)
     return tangent_node
 
+  def visit_IfExp(self, node):
+    # Forward mode does not yet support ternary (conditional) expressions: their
+    # branches are not decomposed during ANF, so no valid tangent is generated
+    # and the emitted code references an undefined derivative. Fail clearly and
+    # point users at reverse mode instead of producing broken code. Reverse mode
+    # supports ternaries (see reverse_ad.visit_IfExp).
+    raise errors.ForwardNotImplementedError('conditional expression (ternary)')
+
   def visit_Expr(self, node):
     # Special-case the push() expression (have to reverse the usual
     # tangent/primal order)

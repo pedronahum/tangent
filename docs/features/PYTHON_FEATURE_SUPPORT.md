@@ -8,7 +8,7 @@ This document provides a comprehensive reference of Python language features and
 
 ### Control Flow
 - **✅ If/elif/else statements** - Full support with differentiable branches
-- **✅ Conditional expressions (ternary)** - `a if condition else b`
+- **✅ Conditional expressions (ternary)** - `a if condition else b` (reverse mode; forward mode raises `ForwardNotImplementedError`)
 - **✅ For loops with range()** - Fixed iteration loops with constant ranges
 - **✅ While loops** - Variable iteration with conditions (no break/continue)
 

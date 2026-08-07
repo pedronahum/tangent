@@ -88,11 +88,12 @@ def test_uadd():
 
 
 def test_not():
-
+  # The `not` operator produces a non-differentiable boolean (like the
+  # comparison operators) and is allowed.
   def f(x):
     return not x
 
-  _assert_tangent_parse_error(f, 'Not operator')
+  fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_invert():
@@ -168,11 +169,11 @@ def test_notin():
 
 
 def test_ifexp():
-
+  # Conditional (ternary) expressions are supported.
   def f(x):
     return 1 if x else 2
 
-  _assert_tangent_parse_error(f, 'Conditional')
+  fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_setcomp():

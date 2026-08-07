@@ -1019,6 +1019,11 @@ class ReverseAD(object):
 
   def visit_UnaryOp(self, node):
     op = type(node.op)
+    # Logical negation produces a (non-differentiable) boolean, just like
+    # Compare and BoolOp. It is allowed in conditions and, when it appears as a
+    # value, simply has no adjoint.
+    if op is gast.Not:
+      return node, []
     if op not in grads.adjoints:
       raise ValueError('unknown unary operator')
     adjoint_template = grads.adjoints[op]
