@@ -43,7 +43,7 @@ This document provides a comprehensive reference of Python language features and
 ### Statements
 - **✅ Assert statements** - Input validation and runtime checks
 - **✅ Pass statements** - No-op placeholders
-- **✅ Return statements** - Single value returns
+- **✅ Return statements** - Including early returns in if/elif/else branches (lifted to single-exit form; returns inside loops are rejected)
 - **✅ Assignment statements** - Variable binding
 
 ### Other Features
@@ -457,7 +457,7 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 33+ features (including tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, and constant-range set/dict comprehensions!)
+- **Fully Supported**: 34+ features (including early returns, tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, and constant-range set/dict comprehensions!)
 - **Partially Supported**: 1 feature (some loops)
 - **Not Supported**: 10+ features
 - **Overall Coverage**: ~62% of common Python features
@@ -482,7 +482,7 @@ For maximum compatibility with Tangent:
 3. **⚠️ BE CAREFUL**:
    - Set/dict comprehensions must range over a constant `range(...)`/list/tuple (no dynamic iterables or `if` filters)
    - Loop ranges must be compile-time constants
-   - Multiple return statements in branches may cause issues
+   - Early returns in if/elif/else are supported; returns inside loops are not
 
 ## See Also
 
