@@ -70,5 +70,25 @@ def test_array_second_derivative():
     assert np.allclose(got, expected)
 
 
+def test_second_derivative_through_list_and_subscript(optimized):
+    # The first gradient uses add_grad_at_index to accumulate into a list's
+    # gradient; differentiating that a second time exercises its adjoint.
+    def f(a):
+        x = [1.0, a, 3.0]
+        return x[0] * x[1]
+
+    # f(a) = 1.0 * a = a, so the second derivative is 0.
+    assert _gradgrad(f, optimized)(2.0) == pytest.approx(0.0)
+
+
+def test_second_derivative_subscript_product(optimized):
+    def f(a):
+        x = [a, a]
+        return x[0] * x[1]
+
+    # f(a) = a^2, so d2/da2 = 2.
+    assert _gradgrad(f, optimized)(3.0) == pytest.approx(2.0)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

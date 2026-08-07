@@ -565,6 +565,17 @@ def aadd_grad(z, left, right):
   d[right] = tangent.unbroadcast(d[z], right)
 
 
+# add_grad_at_index(grad_array, index, value) accumulates `value` into
+# grad_array[index] and returns the container. It is a linear operation, so its
+# adjoint passes the container's gradient through unchanged and routes the
+# element's gradient to `value`. Registering an adjoint also keeps higher-order
+# AD from trying to differentiate the helper's own (import-containing) body.
+@adjoint(tangent.add_grad_at_index)
+def a_add_grad_at_index(z, grad_array, index, value):
+  d[grad_array] = d[z]
+  d[value] = d[z][index]
+
+
 @adjoint(tangent.astype)
 def aastype(z, array, y):
   d[array] = tangent.astype(d[z], array)
