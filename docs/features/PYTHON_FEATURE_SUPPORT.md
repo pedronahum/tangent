@@ -15,6 +15,8 @@ This document provides a comprehensive reference of Python language features and
 ### Operators
 - **✅ Boolean operators** - `and`, `or`, `not` with short-circuit evaluation
 - **✅ Comparison operators** - `>`, `<`, `>=`, `<=`, `==`, `!=`
+- **✅ Membership operators** - `in`, `not in` (as non-differentiable branch guards)
+- **✅ Identity operators** - `is`, `is not`
 - **✅ Arithmetic operators** - `+`, `-`, `*`, `/`, `**`, `//`, `%`
 - **✅ Augmented assignments** - `+=`, `-=`, `*=`, `/=`, `**=`, `//=`, `%=`
 
@@ -84,8 +86,6 @@ This document provides a comprehensive reference of Python language features and
 
 ### Operators
 - **❌ Walrus operator** (`:=`) - Assignment expressions not supported correctly
-- **❌ In operator** - Membership testing not supported
-- **❌ Is operator** - Identity comparison not supported
 
 ### String Features
 - **❌ F-strings** - Formatted string literals not supported
@@ -423,9 +423,9 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 26+ features (including tuples!)
+- **Fully Supported**: 28+ features (including tuples and membership/identity operators!)
 - **Partially Supported**: 2 features (dicts, some loops)
-- **Not Supported**: 15+ features
+- **Not Supported**: 13+ features
 - **Overall Coverage**: ~62% of common Python features
 
 ## Recommendations

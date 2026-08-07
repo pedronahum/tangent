@@ -152,19 +152,19 @@ def test_bitand():
 
 
 def test_in():
-
+  # Membership tests are non-differentiable booleans, like the other
+  # comparison operators, and are allowed (typically used as branch guards).
   def f(x):
     return 1 in x
 
-  _assert_tangent_parse_error(f, 'In operator')
+  fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_notin():
-
   def f(x):
     return 1 not in x
 
-  _assert_tangent_parse_error(f, 'Not In operator')
+  fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_ifexp():

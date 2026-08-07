@@ -256,10 +256,12 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_In(self, node):
-    self._reject(node, 'In operator is not supported')
+    # Membership tests produce a (non-differentiable) boolean, just like the
+    # other comparison operators, so they are safe to allow in conditions.
+    self._allow_and_continue(node)
 
   def visit_NotIn(self, node):
-    self._reject(node, 'Not In operator is not supported')
+    self._allow_and_continue(node)
 
   def visit_Call(self, node):
     self._allow_and_continue(node)
