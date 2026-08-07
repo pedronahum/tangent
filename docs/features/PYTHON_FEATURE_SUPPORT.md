@@ -65,6 +65,7 @@ This document provides a comprehensive reference of Python language features and
 ### Dictionaries
 - **✅ Dict access (read-only)** - `config['key']` works perfectly
 - **✅ Dict construction (string keys)** - Single- and multi-key dicts with string keys work
+- **✅ Local dicts in forward mode** - Construction and subscript (parameter dicts: reverse mode only)
 - **✅ Dict `.get()`** - `d.get(k)` and `d.get(k, default)` (reverse mode)
 - **❌ Dict methods** - `.keys()`, `.values()`, `.items()` not supported
 - **✅ Nested dicts (parameters)** - Multi-level access works when dict is passed as parameter

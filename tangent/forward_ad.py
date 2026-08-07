@@ -540,6 +540,43 @@ class ForwardAD(transformers.TreeTransformer):
   def visit_Tuple(self, node):
     return self.visit_List(node)
 
+  def create_grad_dict(self, node):
+    assert isinstance(node, gast.Dict), 'Must be a dict'
+    values = []
+    for _node in node.values:
+      if isinstance(_node, (gast.Name, gast.Subscript)):
+        grad_node = create.create_grad(_node, self.namer, tangent=True)
+        grad_node.ctx = gast.Load()
+        values.append(grad_node)
+      elif isinstance(_node, gast.Constant) and isinstance(_node.value,
+                                                           (int, float)):
+        values.append(gast.Constant(value=0, kind=None))
+      elif isinstance(_node, gast.Dict):
+        values.append(self.create_grad_dict(_node))
+      else:
+        raise ValueError('Cannot handle node type %s' % type(_node))
+    keys = [ast_.copy_node(k) for k in node.keys]
+    return gast.Dict(keys=keys, values=values)
+
+  def visit_Dict(self, node):
+    """Tangent of dict construction, e.g. z = {'a': x}.
+
+    The tangent is a dict with the same keys and the tangents of the values:
+    d[z] = {'a': d[x]}. Keys are non-differentiable and copied verbatim.
+    """
+    if not self.target:
+      return node
+    ddict = self.create_grad_dict(node)
+    tangent_node = [
+        template.replace(
+            'd[z] = ddict',
+            replace_grad=template.Replace.TANGENT,
+            namer=self.namer,
+            z=self.target,
+            ddict=ddict)
+    ]
+    return tangent_node
+
   def visit_Return(self, node):
     orig_retval = ast_.copy_node(node.value)
     retval = node.value
