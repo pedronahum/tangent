@@ -74,9 +74,10 @@ This document provides a comprehensive reference of Python language features and
 - **❌ dict() constructor** - Not supported
 
 ### Loops
-- **✅ For loops** - With constant `range()` parameters
+- **✅ For loops** - `range(...)`, NumPy arrays, and constant collections
 - **✅ While loops** - With termination conditions
 - **❌ break/continue** - Loop control statements not supported
+- **❌ Iterating differentiated collections** - `for v in [x, y]`, `for v in d.values()`, etc. are rejected (the loop variable is not differentiated); use `range(len(...))` with indexing, a NumPy array, or `sum(d.values())`
 - **Workaround**: Use conditional logic for early termination
 
 ## ❌ Not Supported Features

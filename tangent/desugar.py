@@ -24,6 +24,16 @@ from tangent import naming
 from tangent import quoting
 from tangent import template
 from tangent import transformers
+from tangent.errors import TangentParseError
+
+
+def _references_active(node, active):
+  """Whether an expression reads any currently-active variable."""
+  for n in gast.walk(node):
+    if (isinstance(n, gast.Name) and isinstance(n.ctx, gast.Load) and
+        n.id in active):
+      return True
+  return False
 
 
 class ExplicitLoopIndexes(transformers.TreeTransformer):
@@ -74,8 +84,42 @@ class ExplicitLoopIndexes(transformers.TreeTransformer):
         anno.setanno(node.iter, 'func', range)
         anno.setanno(node.iter.args[0], 'func', len)
         node.body = [item_access] + node.body
+    else:
+      self._reject_unsupported_iter(node)
 
     return node
+
+  def _reject_unsupported_iter(self, node):
+    """Reject for-loops over iterables Tangent cannot differentiate.
+
+    Iterating a literal collection or a dict view binds the loop variable to
+    values that are never differentiated, so any gradient flowing through those
+    values is silently dropped. Only reject when the iterable actually carries
+    active (differentiated) values; iterating a constant collection - e.g.
+    ``for i in [0, 1, 2]`` - is a legitimate fixed loop and is left alone.
+    """
+    active = anno.getanno(node, 'active_in', default=set())
+    it = node.iter
+
+    # Iterating a dict view: for v in d.values() / d.keys() / d.items().
+    if (isinstance(it, gast.Call) and isinstance(it.func, gast.Attribute) and
+        it.func.attr in ('values', 'keys', 'items') and
+        _references_active(it.func.value, active)):
+      raise TangentParseError(
+          "Iterating a dict via .%s() is not supported: the loop variable is "
+          "not differentiated, so gradients would be silently wrong. "
+          "Use `sum(d.values())` to reduce values, or iterate "
+          "`range(len(...))` with explicit indexing." % it.func.attr)
+
+    # Iterating a literal collection whose elements are differentiated values.
+    if (isinstance(it, (gast.List, gast.Tuple, gast.Set)) and
+        any(_references_active(elt, active) for elt in it.elts)):
+      raise TangentParseError(
+          "Iterating a %s literal that contains differentiated values is not "
+          "supported: the loop variable is not differentiated, so gradients "
+          "would be silently wrong. Put the values in a NumPy array and iterate "
+          "that, or use `for i in range(n)` with explicit indexing." %
+          type(it).__name__.lower())
 
 
 def explicit_loop_indexes(node):
