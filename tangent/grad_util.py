@@ -70,6 +70,7 @@ from tangent import chained_assign_desugar
 from tangent import comprehension_desugar
 from tangent import dict_method_desugar
 from tangent import return_desugar
+from tangent import sentinel_rename
 from tangent import lambda_desugar
 from tangent import listcomp_desugar
 from tangent import naming
@@ -126,6 +127,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   """
   # Parse the function and desugar classes, lambdas and list comprehensions first
   node = quoting.parse_function(func)
+  node = sentinel_rename.rename_sentinel_vars(node)
   node = class_desugar.inline_class_methods(node, func)  # Pass func for __globals__
   node = lambda_desugar.desugar_lambdas(node)
   node = return_desugar.desugar_returns(node)

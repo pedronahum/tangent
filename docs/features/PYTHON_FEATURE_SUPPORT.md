@@ -195,10 +195,12 @@ def dict_methods(x):
    doesn't depend on inputs
 3. **Prefer `d['key']`, `d.get('key')`, or `sum(d.values())`** over `.keys()`/`.items()` iteration
 
-**Note:** Local dict construction with string keys is fully supported. A prior
-bug produced undefined `_` placeholders whenever the dict variable was named
-`d` (which collided with Tangent's internal `d[x]` gradient-operator sentinel);
-string-keyed subscripts are now always treated as genuine dictionary access.
+**Note:** Local dict construction is fully supported, with string or numeric
+keys. A prior bug produced undefined `_` placeholders / a DictConstructionError
+whenever a *local* dict variable was named `d` (which collided with Tangent's
+internal `d[x]` gradient-operator sentinel). A local variable named `d` is now
+alpha-renamed before differentiation, so any key type works regardless of the
+variable's name.
 
 ### Tuple Returns (Multi-Output Functions)
 
