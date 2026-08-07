@@ -94,7 +94,13 @@ def unwrap_function(func):
   - custom_vjp
   - PjitFunction
 
-  This function recursively unwraps until we get to a regular FunctionType.
+  This follows the entire __wrapped__ chain, including plain-function wrappers
+  created with functools.wraps. That matters for differentiating a cached
+  gradient function a second time (grad-of-grad): the caching layer wraps the
+  generated function, and the wrapper - itself a regular function - carries
+  Tangent's module globals rather than the numpy/tangent names the generated
+  code references. `inspect` unwraps these wrappers when fetching source, so the
+  namespace must be taken from the same underlying function.
 
   Args:
     func: A function that may be wrapped
@@ -102,10 +108,10 @@ def unwrap_function(func):
   Returns:
     The unwrapped function if it has __wrapped__, otherwise the original func
   """
-  import types
   unwrapped = func
-  # Unwrap if it's not already a FunctionType and has __wrapped__
-  while not isinstance(unwrapped, types.FunctionType) and hasattr(unwrapped, '__wrapped__'):
+  seen = set()
+  while hasattr(unwrapped, '__wrapped__') and id(unwrapped) not in seen:
+    seen.add(id(unwrapped))
     unwrapped = unwrapped.__wrapped__
   return unwrapped
 
@@ -201,13 +207,17 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
 
   done = set()
   final = gast.Module(body=[])
-  namespace.update(six.get_function_globals(func))
+  # Unwrap the top-level function so its namespace matches the source we
+  # differentiate (see unwrap_function); e.g. a cached gradient function is
+  # wrapped and would otherwise contribute Tangent's globals instead of numpy.
+  unwrapped_top = unwrap_function(func)
+  namespace.update(six.get_function_globals(unwrapped_top))
 
   # Add closure variables to namespace
-  if six.get_function_closure(func):
+  if six.get_function_closure(unwrapped_top):
     namespace.update(dict(zip(
-        func.__code__.co_freevars,
-        (cell.cell_contents for cell in six.get_function_closure(func)))))
+        unwrapped_top.__code__.co_freevars,
+        (cell.cell_contents for cell in six.get_function_closure(unwrapped_top)))))
 
   node, required = autodiff_ast(func, wrt, motion, mode, preserve_result,
                                 check_dims, verbose, checkpoint_config)

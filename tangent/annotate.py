@@ -35,10 +35,18 @@ class ResolveCalls(gast.NodeVisitor):
 
   def __init__(self, func):
     self.func = func
-    # Unwrap JAX JIT functions to access __globals__ and __code__
-    import types
+    # Follow __wrapped__ to the underlying function so that the namespace we
+    # resolve names against matches the source we differentiate. `inspect`
+    # (used to fetch the source) unwraps these wrappers, so the globals must be
+    # taken from the same place. This matters for JAX JIT functions and, in
+    # particular, for differentiating a cached gradient function a second time
+    # (grad-of-grad): the caching layer wraps the generated function with
+    # functools.wraps, and that wrapper - a plain function - carries Tangent's
+    # own module globals, not the numpy/tangent names the generated code uses.
     unwrapped = func
-    while not isinstance(unwrapped, types.FunctionType) and hasattr(unwrapped, '__wrapped__'):
+    seen = set()
+    while hasattr(unwrapped, '__wrapped__') and id(unwrapped) not in seen:
+      seen.add(id(unwrapped))
       unwrapped = unwrapped.__wrapped__
 
     self.namespace = six.get_function_globals(unwrapped)
