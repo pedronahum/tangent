@@ -64,7 +64,8 @@ This document provides a comprehensive reference of Python language features and
 ### Dictionaries
 - **✅ Dict access (read-only)** - `config['key']` works perfectly
 - **✅ Dict construction (string keys)** - Single- and multi-key dicts with string keys work
-- **❌ Dict methods** - `.get()`, `.keys()`, `.values()`, `.items()` not supported in constructed dicts
+- **✅ Dict `.get()`** - `d.get(k)` and `d.get(k, default)` (reverse mode)
+- **❌ Dict methods** - `.keys()`, `.values()`, `.items()` not supported
 - **✅ Nested dicts (parameters)** - Multi-level access works when dict is passed as parameter
 - **❌ Dict comprehensions** - Not supported
 - **❌ dict() constructor** - Not supported
@@ -114,9 +115,10 @@ This document provides a comprehensive reference of Python language features and
 - ✅ Subscript access `dict['key']` on parameter/global dicts
 - ✅ Nested dicts (when passed as parameters)
 - ✅ Local dict construction with string keys (single- and multi-key)
+- ✅ `.get(key)` and `.get(key, default)` (reverse mode)
 
 **What Doesn't Work:**
-- ❌ Dict methods (`.get()`, `.keys()`, `.values()`, `.items()`)
+- ❌ Other dict methods (`.keys()`, `.values()`, `.items()`)
 - ❌ Dict comprehensions
 - ❌ `dict()` constructor
 - ❌ Modifying dict values (empty dict + assignments)
@@ -156,17 +158,25 @@ def multi_key(x):
 df = tangent.grad(multi_key)
 grad = df(2.0)  # = 5.0, works!
 
-# ❌ BROKEN: Dict methods
-def dict_methods(x):
+# ✅ Works: .get() with or without a default (reverse mode)
+def dict_get(x):
     d = {'a': x}
-    return d.get('a', 0.0)  # ERROR: .get() not supported
+    return d.get('a', 0.0)  # desugars to d['a'] if 'a' in d else 0.0
+
+df = tangent.grad(dict_get)
+grad = df(2.0)  # = 1.0, works!
+
+# ❌ BROKEN: Other dict methods
+def dict_methods(x):
+    d = {'a': x, 'b': x ** 2}
+    return sum(d.values())  # ERROR: .values() not supported
 ```
 
 **Best Practices:**
 1. **Use string keys** when constructing dicts locally
 2. **Pass dicts as parameters** or use global dicts for configuration that
    doesn't depend on inputs
-3. **Avoid dict methods** (`.get()`, `.items()`, ...) inside differentiated code
+3. **Prefer `d['key']` or `d.get('key')`** over `.keys()`/`.values()`/`.items()`
 
 **Note:** Local dict construction with string keys is fully supported. A prior
 bug produced undefined `_` placeholders whenever the dict variable was named
@@ -326,10 +336,14 @@ def good(x):
     config = {'lr': 0.1}
     return x * config['lr']
 
-# ❌ Bad: Dict methods are not supported
+# ✅ Good: .get() works too (with or without a default)
+def good_get(x):
+    config = {'lr': 0.1}
+    return x * config.get('lr', 0.01)
+
+# ❌ Bad: iteration methods are not supported
 def bad(x, config):
-    lr = config.get('lr', 0.1)  # ERROR: .get() not supported
-    return x * lr
+    return x * sum(config.values())  # ERROR: .values() not supported
 ```
 
 ### 2. Define Complex Data Structures Outside
@@ -418,7 +432,7 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 29+ features (including tuples, membership/identity operators, and f-strings!)
+- **Fully Supported**: 30+ features (including tuples, membership/identity operators, f-strings, and dict `.get()`!)
 - **Partially Supported**: 1 feature (some loops)
 - **Not Supported**: 12+ features
 - **Overall Coverage**: ~62% of common Python features
@@ -435,7 +449,7 @@ For maximum compatibility with Tangent:
    - Define complex data structures outside functions
 
 2. **❌ DON'T**:
-   - Use dict methods (`.get()`, `.items()`, ...) in differentiated code
+   - Use dict iteration methods (`.keys()`, `.values()`, `.items()`)
    - Use try/except blocks
    - Use break/continue in loops
    - Use sets
