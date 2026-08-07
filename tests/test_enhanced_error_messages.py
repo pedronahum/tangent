@@ -64,26 +64,19 @@ def test_multi_key_dict_construction_now_works():
     assert df(2.0) == pytest.approx(5.0)
 
 
-def test_set_error_has_suggestion():
-    """Test that set error includes helpful suggestion."""
+def test_set_literal_now_supported():
+    """Set literals are now supported (non-differentiable membership guards)."""
 
     def f(x):
-        s = {1, 2, 3}
-        return x ** 2
+        if x in {1.0, 2.0, 3.0}:
+            y = x * x
+        else:
+            y = x * 3.0
+        return y
 
-    # This test may fail with SourceCodeNotAvailableError in some contexts
-    # (e.g., when function is defined in REPL/test), which is expected
-    try:
-        df = tangent.grad(f)
-        # If we get here, the function might not have been parsed yet
-        # Skip the test in this case
-    except TangentParseError as e:
-        error_msg = str(e)
-        assert "Sets" in error_msg or "Set" in error_msg
-        assert "not supported" in error_msg.lower()
-    except Exception:
-        # SourceCodeNotAvailableError or other - skip test
-        pytest.skip("Set test requires file-based function definition")
+    df = tangent.grad(f)
+    assert df(2.0) == pytest.approx(4.0)   # in set -> d(x^2) = 2x
+    assert df(5.0) == pytest.approx(3.0)   # else -> d(3x) = 3
 
 
 if __name__ == '__main__':
@@ -96,7 +89,7 @@ if __name__ == '__main__':
         ("F-string now supported", test_fstring_now_supported),
         ("In operator now supported", test_in_operator_now_supported),
         ("Multi-key dict construction now works", test_multi_key_dict_construction_now_works),
-        ("Set error", test_set_error_has_suggestion),
+        ("Set literal now supported", test_set_literal_now_supported),
     ]
 
     for name, test_func in tests:

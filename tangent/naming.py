@@ -273,6 +273,9 @@ class Namer(object):
   def name_List(self, node):
     return 'l'
 
+  def name_Set(self, node):
+    return 'set'
+
   def name_Dict(self, node):
     return 'd'
 

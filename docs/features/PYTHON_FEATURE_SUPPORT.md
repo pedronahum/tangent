@@ -50,6 +50,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ NumPy slicing** - Array indexing and slicing
 - **✅ Ellipsis indexing** - `arr[..., 0]` for NumPy arrays
 - **✅ F-strings** - Non-differentiable debug/assert messages, e.g. `f"x = {x}"`
+- **✅ Set literals** - Non-differentiable collections, e.g. `if x in {1, 2, 3}`
 
 ## ⚠️ Partially Supported Features
 
@@ -92,7 +93,7 @@ This document provides a comprehensive reference of Python language features and
 - **❌ String interpolation** - % formatting, .format() in limited contexts
 
 ### Data Structures
-- **❌ Sets** - Set literals and operations not supported
+- **❌ Set operations** - Union/intersection/etc. not supported (literals as membership guards are supported)
 - **❌ Set comprehensions** - Not supported
 - **❌ Dict comprehensions** - Not supported
 
@@ -432,9 +433,9 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 30+ features (including tuples, membership/identity operators, f-strings, and dict `.get()`!)
+- **Fully Supported**: 31+ features (including tuples, membership/identity operators, f-strings, dict `.get()`, and set literals!)
 - **Partially Supported**: 1 feature (some loops)
-- **Not Supported**: 12+ features
+- **Not Supported**: 11+ features
 - **Overall Coverage**: ~62% of common Python features
 
 ## Recommendations
@@ -452,7 +453,7 @@ For maximum compatibility with Tangent:
    - Use dict iteration methods (`.keys()`, `.values()`, `.items()`)
    - Use try/except blocks
    - Use break/continue in loops
-   - Use sets
+   - Use set operations or set comprehensions (set literals as guards are fine)
 
 3. **⚠️ BE CAREFUL**:
    - Local dicts support string keys (methods and comprehensions do not)

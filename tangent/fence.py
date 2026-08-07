@@ -134,7 +134,9 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_Set(self, node):
-    self._reject(node, 'Sets are not supported')
+    # A set literal is a non-differentiable collection, most commonly used as a
+    # membership guard (e.g. `if x in {1, 2, 3}`). Allow it like tuples/lists.
+    self._allow_and_continue(node)
 
   def visit_Dict(self, node):
     self._allow_and_continue(node)

@@ -55,11 +55,13 @@ def test_bytes():
 
 
 def test_set():
+  # Set literals are non-differentiable collections (commonly membership
+  # guards) and are allowed by the fence.
+  def f(x):
+    s = {1, 2, 3}
+    return x
 
-  def f(_):
-    return set({1})
-
-  _assert_tangent_parse_error(f, 'Sets')
+  fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_del():

@@ -862,6 +862,15 @@ class ReverseAD(object):
     """A formatted value inside an f-string is non-differentiable."""
     return node, []
 
+  def visit_Set(self, node):
+    """A set is an unordered, non-differentiable collection.
+
+    Unlike tuples and lists, a set cannot be indexed, so there is no per-element
+    gradient to propagate. Sets are used as membership guards or constant marker
+    collections, so they simply have no adjoint.
+    """
+    return node, []
+
   def visit_Tuple(self, node):
     return self.visit_container(node)
 

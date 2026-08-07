@@ -365,6 +365,10 @@ grad_initializers = {
     # gradient that is stored/reset but never contributes to any computation.
     str: (lambda obj: 0.0, False),
     bytes: (lambda obj: 0.0, False),
+    # Sets are unordered, non-differentiable collections (used as membership
+    # guards / marker sets); treat them the same way as strings.
+    set: (lambda obj: 0.0, False),
+    frozenset: (lambda obj: 0.0, False),
 }
 
 if hasattr(types, 'ClassType'):
