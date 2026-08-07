@@ -323,6 +323,13 @@ class Namer(object):
   def name_Str(self, node):
     return node.s
 
+  def name_JoinedStr(self, node):
+    # f-strings are non-differentiable; give any temporary a stable base name.
+    return 'fstr'
+
+  def name_FormattedValue(self, node):
+    return self._name(node.value)
+
   def name_Constant(self, node):
     """Handle gast.Constant nodes (Python 3.8+).
 

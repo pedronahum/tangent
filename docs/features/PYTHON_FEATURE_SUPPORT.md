@@ -49,6 +49,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Multiple assignment** - `a = b = x` (separate assignments work)
 - **✅ NumPy slicing** - Array indexing and slicing
 - **✅ Ellipsis indexing** - `arr[..., 0]` for NumPy arrays
+- **✅ F-strings** - Non-differentiable debug/assert messages, e.g. `f"x = {x}"`
 
 ## ⚠️ Partially Supported Features
 
@@ -87,7 +88,6 @@ This document provides a comprehensive reference of Python language features and
 - **❌ Walrus operator** (`:=`) - Assignment expressions not supported correctly
 
 ### String Features
-- **❌ F-strings** - Formatted string literals not supported
 - **❌ String interpolation** - % formatting, .format() in limited contexts
 
 ### Data Structures
@@ -414,9 +414,9 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 28+ features (including tuples and membership/identity operators!)
+- **Fully Supported**: 29+ features (including tuples, membership/identity operators, and f-strings!)
 - **Partially Supported**: 1 feature (some loops)
-- **Not Supported**: 13+ features
+- **Not Supported**: 12+ features
 - **Overall Coverage**: ~62% of common Python features
 
 ## Recommendations
@@ -434,7 +434,7 @@ For maximum compatibility with Tangent:
    - Use dict methods (`.get()`, `.items()`, ...) in differentiated code
    - Use try/except blocks
    - Use break/continue in loops
-   - Use f-strings or sets
+   - Use sets
 
 3. **⚠️ BE CAREFUL**:
    - Local dicts support string keys (methods and comprehensions do not)

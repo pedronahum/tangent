@@ -854,6 +854,14 @@ class ReverseAD(object):
     """Handle gast.Constant nodes (Python 3.8+)."""
     return node, []
 
+  def visit_JoinedStr(self, node):
+    """f-strings are non-differentiable (they produce a string)."""
+    return node, []
+
+  def visit_FormattedValue(self, node):
+    """A formatted value inside an f-string is non-differentiable."""
+    return node, []
+
   def visit_Tuple(self, node):
     return self.visit_container(node)
 

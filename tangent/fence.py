@@ -116,10 +116,12 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_FormattedValue(self, node):
-    self._reject(node, 'F-Strings are not supported')
+    # f-strings produce a (non-differentiable) string, typically used for
+    # debug or assert messages, so they are safe to allow.
+    self._allow_and_continue(node)
 
   def visit_JoinedStr(self, node):
-    self._reject(node, 'F-Strings are not supported')
+    self._allow_and_continue(node)
 
   def visit_Bytes(self, node):
     self._reject(node, 'Byte Literals are not supported')

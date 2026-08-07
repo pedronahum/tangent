@@ -22,20 +22,15 @@ def test_dict_comprehension_error_has_suggestion():
     assert "Use separate variables" in error_msg
 
 
-def test_fstring_error_has_suggestion():
-    """Test that f-string error includes helpful suggestion."""
+def test_fstring_now_supported():
+    """f-strings are now supported (non-differentiable debug/assert messages)."""
 
     def f(x):
         msg = f"Value is {x}"
         return x ** 2
 
-    with pytest.raises(TangentParseError) as exc_info:
-        df = tangent.grad(f)
-
-    error_msg = str(exc_info.value)
-    assert "F-Strings are not supported" in error_msg
-    assert "💡 Suggestion" in error_msg
-    assert "Use string concatenation" in error_msg
+    df = tangent.grad(f)
+    assert df(3.0) == pytest.approx(6.0)  # d(x^2)/dx = 2x, msg ignored
 
 
 def test_in_operator_now_supported():
@@ -98,7 +93,7 @@ if __name__ == '__main__':
 
     tests = [
         ("Dict comprehension error", test_dict_comprehension_error_has_suggestion),
-        ("F-string error", test_fstring_error_has_suggestion),
+        ("F-string now supported", test_fstring_now_supported),
         ("In operator now supported", test_in_operator_now_supported),
         ("Multi-key dict construction now works", test_multi_key_dict_construction_now_works),
         ("Set error", test_set_error_has_suggestion),

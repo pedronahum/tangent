@@ -359,6 +359,12 @@ grad_initializers = {
     float: (lambda obj: 0.0, False),
     int: (init_zero_int, False),
     bool: (init_zero_bool, False),
+    # Strings are non-differentiable (e.g. f-string debug/assert messages).
+    # They may still be flagged "active" by the conservative activity analysis
+    # when they interpolate an active variable, so give them a benign zero
+    # gradient that is stored/reset but never contributes to any computation.
+    str: (lambda obj: 0.0, False),
+    bytes: (lambda obj: 0.0, False),
 }
 
 if hasattr(types, 'ClassType'):
