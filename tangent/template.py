@@ -123,6 +123,18 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
       # Get the actual slice value (handle both old Index wrapper and direct access)
       slice_value = node.slice.value if hasattr(node.slice, 'value') else node.slice
 
+      # A subscript with a string key (e.g. d['a']) is genuine dictionary
+      # access in user code, not the gradient operator d[x]. The gradient
+      # operator only ever indexes by a variable name or a numeric constant, so
+      # a user dict that merely happens to be named `d` must be left untouched.
+      # Depending on the gast version the key surfaces either as a raw ``str``
+      # (Python 3.9+, where the slice is a bare Constant) or as a Constant node
+      # (older gast, which wraps the key in an Index).
+      key = slice_value.value if isinstance(slice_value, gast.Constant) else slice_value
+      if isinstance(key, str):
+        node.slice = self.visit(node.slice)
+        return node
+
       if not isinstance(slice_value, (gast.Subscript, gast.Name, gast.Constant)):
         # This happens when the gradient of a constant is taken
         if self.replace_grad == Replace.TANGENT:

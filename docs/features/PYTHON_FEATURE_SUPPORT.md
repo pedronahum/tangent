@@ -62,12 +62,11 @@ This document provides a comprehensive reference of Python language features and
 
 ### Dictionaries
 - **✅ Dict access (read-only)** - `config['key']` works perfectly
-- **⚠️ Dict construction (limited)** - Single-key dicts work, multi-key dicts have bugs
+- **✅ Dict construction (string keys)** - Single- and multi-key dicts with string keys work
 - **❌ Dict methods** - `.get()`, `.keys()`, `.values()`, `.items()` not supported in constructed dicts
 - **✅ Nested dicts (parameters)** - Multi-level access works when dict is passed as parameter
 - **❌ Dict comprehensions** - Not supported
 - **❌ dict() constructor** - Not supported
-- **Workaround**: Pass dicts as parameters or use global dicts for reliable behavior
 
 ### Loops
 - **✅ For loops** - With constant `range()` parameters
@@ -93,7 +92,6 @@ This document provides a comprehensive reference of Python language features and
 
 ### Data Structures
 - **❌ Sets** - Set literals and operations not supported
-- **❌ Dict literals** - Cannot construct dicts inline
 - **❌ Set comprehensions** - Not supported
 - **❌ Dict comprehensions** - Not supported
 
@@ -108,17 +106,16 @@ This document provides a comprehensive reference of Python language features and
 
 ### Dictionaries (Limited Support)
 
-**Status**: ⚠️ Partially supported - Use with caution
+**Status**: ✅ Construction and read access supported (string keys); methods and comprehensions not supported
 
 **What Works:**
 - ✅ Dicts passed as function parameters
 - ✅ Dicts defined as global variables
 - ✅ Subscript access `dict['key']` on parameter/global dicts
 - ✅ Nested dicts (when passed as parameters)
-- ✅ Single-key dict construction (simple case)
+- ✅ Local dict construction with string keys (single- and multi-key)
 
 **What Doesn't Work:**
-- ❌ Multi-key dict construction with differentiated values (buggy code generation)
 - ❌ Dict methods (`.get()`, `.keys()`, `.values()`, `.items()`)
 - ❌ Dict comprehensions
 - ❌ `dict()` constructor
@@ -151,37 +148,30 @@ def single_key(x):
 df = tangent.grad(single_key)
 grad = df(2.0)  # Works!
 
-# ❌ BROKEN: Multi-key dict with differentiated values
+# ✅ Works: Multi-key dict with differentiated values (string keys)
 def multi_key(x):
-    d = {'a': x, 'b': x ** 2}  # BUG: Generates invalid code
-    return d['a'] + d['b']  # Runtime error: name '_' not defined
+    d = {'a': x, 'b': x ** 2}
+    return d['a'] + d['b']
 
-# df = tangent.grad(multi_key)  # Generates buggy code
+df = tangent.grad(multi_key)
+grad = df(2.0)  # = 5.0, works!
 
 # ❌ BROKEN: Dict methods
 def dict_methods(x):
     d = {'a': x}
     return d.get('a', 0.0)  # ERROR: .get() not supported
-
-# ✅ WORKAROUND: Use separate variables
-def separate_vars(x):
-    a = x
-    b = x ** 2
-    return a + b  # Equivalent to dict['a'] + dict['b']
-
-df = tangent.grad(separate_vars)
-grad = df(2.0)  # = 5.0, works perfectly!
 ```
 
 **Best Practices:**
-1. **Always pass dicts as parameters** - Most reliable approach
-2. **Use global dicts** for configuration that doesn't depend on inputs
-3. **Avoid constructing dicts** with multiple differentiated values
-4. **Use separate variables** instead of dict values when possible
-5. **Test thoroughly** if you must construct dicts
+1. **Use string keys** when constructing dicts locally
+2. **Pass dicts as parameters** or use global dicts for configuration that
+   doesn't depend on inputs
+3. **Avoid dict methods** (`.get()`, `.items()`, ...) inside differentiated code
 
-**Known Bug:**
-Multi-key dict construction generates code with undefined `_` placeholders. This is a known issue in the template system. See GitHub issue #XXX for tracking.
+**Note:** Local dict construction with string keys is fully supported. A prior
+bug produced undefined `_` placeholders whenever the dict variable was named
+`d` (which collided with Tangent's internal `d[x]` gradient-operator sentinel);
+string-keyed subscripts are now always treated as genuine dictionary access.
 
 ### Tuple Returns (Multi-Output Functions)
 
@@ -327,21 +317,21 @@ def with_condition(x):
 ### 1. Use Supported Features When Possible
 
 ```python
-# ✅ Good: Use supported features
-def good(x, config):
-    lr = config.get('lr', 0.1)
-    return x * lr
-
-# ❌ Bad: Try to construct dict
-def bad(x):
-    config = {'lr': 0.1}  # ERROR
+# ✅ Good: Construct a dict with string keys and index it
+def good(x):
+    config = {'lr': 0.1}
     return x * config['lr']
+
+# ❌ Bad: Dict methods are not supported
+def bad(x, config):
+    lr = config.get('lr', 0.1)  # ERROR: .get() not supported
+    return x * lr
 ```
 
 ### 2. Define Complex Data Structures Outside
 
 ```python
-# ✅ Good: Define globally
+# ✅ Good: Define large / static structures globally for clarity
 CONFIG = {
     'model': {'layers': 3, 'units': 128},
     'training': {'lr': 0.01, 'epochs': 100}
@@ -350,10 +340,10 @@ CONFIG = {
 def train_step(x):
     return x * CONFIG['training']['lr']
 
-# ❌ Bad: Construct inside
+# ✅ Also works: Construct (even nested) dicts with string keys inside
 def train_step(x):
-    config = {'training': {'lr': 0.01}}  # ERROR
-    return x * config['training']['lr']
+    config = {'training': {'lr': x}}
+    return config['training']['lr']
 ```
 
 ### 3. Use Assertions Instead of Exceptions
@@ -409,7 +399,8 @@ All tuple unpacking patterns have been tested and produce correct gradients.
 | **Lambdas** | ✅ | ✅ | ✅ | ✅ |
 | **Closures** | ✅ | ✅ | ✅ | ✅ |
 | **Dict (read)** | ✅ | ✅ | ✅ | ✅ |
-| **Dict (write)** | ❌ | ✅ | ✅ | ✅ |
+| **Dict (construct)** | ✅ (string keys) | ✅ | ✅ | ✅ |
+| **Dict (mutate)** | ❌ | ✅ | ✅ | ✅ |
 | **Tuples** | ✅ | ✅ | ✅ | ✅ |
 | **Try/except** | ❌ | ⚠️ | ⚠️ | ⚠️ |
 | **Break/continue** | ❌ | ⚠️ | ⚠️ | ⚠️ |
@@ -417,14 +408,14 @@ All tuple unpacking patterns have been tested and produce correct gradients.
 ## Testing
 
 Comprehensive tests available:
-- `/tmp/test_feature_survey.py` - Survey of 15 features
-- `/tmp/test_dict_detailed.py` - 8 dictionary tests (all pass)
+- `tests/test_dict_construction.py` - Local dict construction (string keys)
+- `tests/test_membership_operators.py` - `in` / `not in` operators
 - Individual feature test files for each supported feature
 
 ## Summary Statistics
 
 - **Fully Supported**: 28+ features (including tuples and membership/identity operators!)
-- **Partially Supported**: 2 features (dicts, some loops)
+- **Partially Supported**: 1 feature (some loops)
 - **Not Supported**: 13+ features
 - **Overall Coverage**: ~62% of common Python features
 
@@ -440,13 +431,13 @@ For maximum compatibility with Tangent:
    - Define complex data structures outside functions
 
 2. **❌ DON'T**:
-   - Construct dicts inside functions
+   - Use dict methods (`.get()`, `.items()`, ...) in differentiated code
    - Use try/except blocks
    - Use break/continue in loops
    - Use f-strings or sets
 
 3. **⚠️ BE CAREFUL**:
-   - Dict construction not supported (use parameters)
+   - Local dicts support string keys (methods and comprehensions do not)
    - Loop ranges must be compile-time constants
    - Multiple return statements in branches may cause issues
 

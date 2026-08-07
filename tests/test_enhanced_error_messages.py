@@ -38,41 +38,35 @@ def test_fstring_error_has_suggestion():
     assert "Use string concatenation" in error_msg
 
 
-def test_in_operator_error_has_suggestion():
-    """Test that 'in' operator error includes helpful suggestion."""
+def test_in_operator_now_supported():
+    """The 'in' operator is now supported as a (non-differentiable) branch guard."""
 
     def f(x):
-        if x in [1, 2, 3]:
-            return x
-        return x ** 2
+        if x in (1.0, 2.0, 3.0):
+            y = x
+        else:
+            y = x ** 2
+        return y
 
-    with pytest.raises(TangentParseError) as exc_info:
-        df = tangent.grad(f)
-
-    error_msg = str(exc_info.value)
-    assert "In operator is not supported" in error_msg
-    assert "💡 Suggestion" in error_msg
-    assert "or" in error_msg  # Suggests using 'or' for comparisons
+    df = tangent.grad(f)
+    assert df(2.0) == pytest.approx(1.0)   # in-branch: d(x)/dx = 1
+    assert df(5.0) == pytest.approx(10.0)  # else-branch: d(x^2)/dx = 2x
 
 
-def test_multi_key_dict_construction_error():
-    """Test that multi-key dict construction gives helpful error."""
+def test_multi_key_dict_construction_now_works():
+    """Multi-key dict construction with string keys now differentiates correctly.
+
+    This previously failed because a dict named ``d`` collided with the internal
+    ``d[x]`` gradient-operator sentinel, producing undefined ``_`` placeholders.
+    """
 
     def f(x):
         d = {'a': x, 'b': x ** 2}
         return d['a'] + d['b']
 
     df = tangent.grad(f)
-
-    with pytest.raises(DictConstructionError) as exc_info:
-        result = df(2.0)
-
-    error_msg = str(exc_info.value)
-    assert "Dict Construction Bug" in error_msg
-    assert "💡 Workarounds" in error_msg
-    assert "Pass dict as parameter" in error_msg
-    assert "Use global dict" in error_msg
-    assert "Use separate variables" in error_msg
+    # d/dx (x + x^2) = 1 + 2x = 5 at x = 2
+    assert df(2.0) == pytest.approx(5.0)
 
 
 def test_set_error_has_suggestion():
@@ -105,8 +99,8 @@ if __name__ == '__main__':
     tests = [
         ("Dict comprehension error", test_dict_comprehension_error_has_suggestion),
         ("F-string error", test_fstring_error_has_suggestion),
-        ("In operator error", test_in_operator_error_has_suggestion),
-        ("Multi-key dict construction", test_multi_key_dict_construction_error),
+        ("In operator now supported", test_in_operator_now_supported),
+        ("Multi-key dict construction now works", test_multi_key_dict_construction_now_works),
         ("Set error", test_set_error_has_suggestion),
     ]
 
