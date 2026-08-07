@@ -570,24 +570,29 @@ def aastype(z, array, y):
   d[array] = tangent.astype(d[z], array)
 
 
+# In these adjoints the op_id is a non-differentiable tape marker (a string
+# constant), so it is passed through unchanged - exactly like `stack`. Wrapping
+# it as `d[op_id]` (the gradient operator) is meaningless for a marker and, in
+# higher-order AD where these adjoints actually fire, leaked an undefined `d`
+# into the generated code.
 @adjoint(tangent.push)
 def apush(stack, val, op_id):
-  d[val] = tangent.pop(stack, d[op_id])
+  d[val] = tangent.pop(stack, op_id)
 
 
 @adjoint(tangent.pop)
 def apop(z, stack, op_id):
-  tangent.push(stack, d[z], d[op_id])
+  tangent.push(stack, d[z], op_id)
 
 
 @adjoint(tangent.push_stack)
 def apush_stack(stack, val, op_id):
-  d[val] = tangent.pop_stack(stack, d[op_id])
+  d[val] = tangent.pop_stack(stack, op_id)
 
 
 @adjoint(tangent.pop_stack)
 def apop_stack(z, stack, op_id):
-  tangent.push_stack(stack, d[z], d[op_id])
+  tangent.push_stack(stack, d[z], op_id)
 
 
 @adjoint(tangent.copy)
