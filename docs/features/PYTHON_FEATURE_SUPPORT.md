@@ -35,9 +35,10 @@ This document provides a comprehensive reference of Python language features and
 
 ### Comprehensions (Partial)
 - **✅ List comprehensions** - Syntactic support (lists not differentiable)
-- **❌ Dict comprehensions** - Not supported
-- **❌ Set comprehensions** - Not supported
+- **✅ Dict comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a dict literal)
+- **✅ Set comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a set literal)
 - **❌ Generator expressions** - Not supported
+- **Note**: Comprehensions with dynamic iterables or `if` filters are rejected with a clear error
 
 ### Statements
 - **✅ Assert statements** - Input validation and runtime checks
@@ -70,7 +71,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ `sum(d.values())`** - Folded over local dict literals (keys known statically)
 - **❌ Dict methods** - `.keys()`, `.items()`, and general `.values()` iteration not supported
 - **✅ Nested dicts (parameters)** - Multi-level access works when dict is passed as parameter
-- **❌ Dict comprehensions** - Not supported
+- **✅ Dict comprehensions** - Over a constant range/list/tuple (unrolled)
 - **❌ dict() constructor** - Not supported
 
 ### Loops
@@ -97,8 +98,8 @@ This document provides a comprehensive reference of Python language features and
 
 ### Data Structures
 - **❌ Set operations** - Union/intersection/etc. not supported (literals as membership guards are supported)
-- **❌ Set comprehensions** - Not supported
-- **❌ Dict comprehensions** - Not supported
+- **❌ Generator expressions** - Not supported
+- **⚠️ Set/dict comprehensions** - Only over constant ranges/literals (dynamic iterables and `if` filters rejected)
 
 ### Advanced Features
 - **❌ Generators** - Generator functions and expressions not supported
@@ -111,7 +112,7 @@ This document provides a comprehensive reference of Python language features and
 
 ### Dictionaries (Limited Support)
 
-**Status**: ✅ Construction and read access supported (string keys); methods and comprehensions not supported
+**Status**: ✅ Construction and read access supported (string keys); `.get()`, `sum(.values())`, and constant-range comprehensions supported; other methods not supported
 
 **What Works:**
 - ✅ Dicts passed as function parameters
@@ -124,7 +125,7 @@ This document provides a comprehensive reference of Python language features and
 
 **What Doesn't Work:**
 - ❌ `.keys()`, `.items()`, and general `.values()` iteration (only `sum(d.values())` is folded)
-- ❌ Dict comprehensions
+- ❌ Dict comprehensions over dynamic iterables or with `if` filters (constant ranges are unrolled)
 - ❌ `dict()` constructor
 - ❌ Modifying dict values (empty dict + assignments)
 
@@ -456,9 +457,9 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 32+ features (including tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, and set literals!)
+- **Fully Supported**: 33+ features (including tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, and constant-range set/dict comprehensions!)
 - **Partially Supported**: 1 feature (some loops)
-- **Not Supported**: 11+ features
+- **Not Supported**: 10+ features
 - **Overall Coverage**: ~62% of common Python features
 
 ## Recommendations
@@ -476,10 +477,10 @@ For maximum compatibility with Tangent:
    - Iterate dict `.keys()`/`.items()` (only `sum(d.values())` is supported)
    - Use try/except blocks
    - Use break/continue in loops
-   - Use set operations or set comprehensions (set literals as guards are fine)
+   - Use set operations (union/intersection); set literals and constant-range comprehensions are fine
 
 3. **⚠️ BE CAREFUL**:
-   - Local dicts support string keys (methods and comprehensions do not)
+   - Set/dict comprehensions must range over a constant `range(...)`/list/tuple (no dynamic iterables or `if` filters)
    - Loop ranges must be compile-time constants
    - Multiple return statements in branches may cause issues
 
