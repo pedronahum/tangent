@@ -280,9 +280,13 @@ def safe_divide(x):
 
 ### Loop Control (break/continue)
 
-**Status**: ❌ Not supported
+**Status**: ❌ Not supported (rejected with a clear error)
 
-Break and continue statements are not supported:
+Break and continue statements are rejected at parse time with an actionable
+error. They cannot be differentiated correctly: the reverse-mode loop tape
+records one entry per completed iteration, but `break`/`continue` alter the
+control flow mid-iteration, which would silently produce incorrect gradients.
+Tangent therefore refuses them up front rather than returning a wrong result.
 
 ```python
 # ❌ Doesn't work

@@ -353,16 +353,18 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_Break(self, node):
-    if self._strict:
-      self._reject(node, 'Break statements are not supported in strict mode')
-    else:
-      self._allow_and_continue(node)
+    # Break is never supported. The reverse-mode loop tape records one entry per
+    # completed iteration, but `break` exits mid-iteration before the iteration
+    # counter is advanced, so the backward pass replays the wrong number of
+    # iterations and silently produces incorrect gradients. Reject it outright
+    # (regardless of strict mode) rather than emit a plausible-but-wrong result.
+    self._reject(node, 'Break statements are not supported')
 
   def visit_Continue(self, node):
-    if self._strict:
-      self._reject(node, 'Continue statements are not supported in strict mode')
-    else:
-      self._allow_and_continue(node)
+    # Continue has the same tape/iteration-counter problem as break (see
+    # visit_Break): it only happens to give correct gradients when no active
+    # computation precedes it, and otherwise fails or is silently wrong.
+    self._reject(node, 'Continue statements are not supported')
 
   def visit_Try(self, node):
     self._allow_and_continue(node)

@@ -259,6 +259,16 @@ def test_continue():
   _assert_tangent_parse_error(f, 'Continue')
 
 
+def test_break():
+
+  def f(x):
+    for _ in range(2):
+      break
+    return x
+
+  _assert_tangent_parse_error(f, 'Break')
+
+
 def test_lambda():
 
   def f(_):
