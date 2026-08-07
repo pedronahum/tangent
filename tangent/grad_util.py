@@ -66,6 +66,7 @@ from tangent import control_flow_validator
 from tangent import desugar
 from tangent import fence
 from tangent import forward_ad
+from tangent import chained_assign_desugar
 from tangent import comprehension_desugar
 from tangent import dict_method_desugar
 from tangent import lambda_desugar
@@ -126,6 +127,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   node = quoting.parse_function(func)
   node = class_desugar.inline_class_methods(node, func)  # Pass func for __globals__
   node = lambda_desugar.desugar_lambdas(node)
+  node = chained_assign_desugar.desugar_chained_assignments(node)
   node = comprehension_desugar.desugar_comprehensions(node)
   node = listcomp_desugar.desugar_listcomps(node)
   node = dict_method_desugar.desugar_dict_methods(node)

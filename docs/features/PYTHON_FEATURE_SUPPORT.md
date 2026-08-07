@@ -47,7 +47,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Assignment statements** - Variable binding
 
 ### Other Features
-- **✅ Multiple assignment** - `a = b = x` (separate assignments work)
+- **✅ Chained assignment** - `a = b = x` (desugared to `a = x; b = a`)
 - **✅ NumPy slicing** - Array indexing and slicing
 - **✅ Ellipsis indexing** - `arr[..., 0]` for NumPy arrays
 - **✅ F-strings** - Non-differentiable debug/assert messages, e.g. `f"x = {x}"`
