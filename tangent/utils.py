@@ -889,3 +889,58 @@ def update_grad_at_index(grad_array, index, value):
   else:
     grad_array[index] = value
     return grad_array
+
+
+def add_grad_at_index(grad_array, index, value):
+  """Accumulate a gradient contribution at an index of a container.
+
+  This is the accumulating counterpart of `update_grad_at_index`. Reverse-mode
+  gradients must always accumulate, because the same element can be read more
+  than once (e.g. `a[0] * a[0]`, or a subscript read inside a loop). Overwriting
+  would silently keep only the last contribution.
+
+  Works with NumPy (mutable), JAX (immutable), TensorFlow (immutable), and plain
+  Python containers such as dicts and lists.
+
+  Args:
+    grad_array: The gradient container to update (NumPy array, JAX array, TF
+        tensor, dict, or list).
+    index: The index or key to accumulate into.
+    value: The gradient contribution to add at the given index.
+
+  Returns:
+    The updated gradient container. For mutable types this is the same object
+    with modified contents; for immutable types it is a new object.
+  """
+  type_name = type(grad_array).__module__
+
+  # JAX arrays - use .at[].add() functional accumulation
+  if 'jax' in type_name:
+    if not isinstance(index, tuple):
+      index = (index,)
+    return grad_array.at[index].add(value)
+
+  # TensorFlow tensors - use tensor_scatter_nd_add
+  elif 'tensorflow' in type_name:
+    import tensorflow as tf
+    if isinstance(index, int):
+      indices = [[index]]
+    elif isinstance(index, tuple):
+      indices = [list(index)]
+    elif isinstance(index, slice):
+      raise NotImplementedError(
+          "Slice updates for TensorFlow tensors not yet implemented. "
+          "Please use explicit integer indices.")
+    else:
+      indices = [[index]]
+    if not hasattr(value, 'shape'):
+      value = tf.constant(value)
+    if len(tf.shape(value)) == 0:
+      value = tf.expand_dims(value, 0)
+    return tf.tensor_scatter_nd_add(grad_array, indices, value)
+
+  # NumPy arrays and plain Python containers (dict, list) - accumulate in place.
+  else:
+    current = grad_array[index]
+    grad_array[index] = add_grad(current, value) if current is not None else value
+    return grad_array

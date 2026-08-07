@@ -803,11 +803,15 @@ class ReverseAD(object):
   def visit_Subscript(self, node):
     """Handle subscript access in reverse mode.
 
-    For `result = container[i]`, the adjoint is `d_container[i] = d_result`.
-    This assigns the gradient of the result to element i of the container's gradient.
+    For `result = container[i]`, the adjoint accumulates into element i of the
+    container's gradient: `d_container[i] += d_result`. Accumulation (rather than
+    overwriting) is required because the same element can be read more than once
+    - e.g. `a[0] * a[0]`, or a subscript read inside a loop - and every
+    contribution must be summed, consistent with how Tangent accumulates all
+    other gradients.
 
-    For immutable types (JAX, TensorFlow), we use tangent.update_grad_at_index()
-    which provides functional updates instead of in-place assignment.
+    For immutable types (JAX, TensorFlow), we use tangent.add_grad_at_index()
+    which provides functional accumulation instead of in-place addition.
     """
     # Create the gradient of the container: d_container
     grad_container = create.create_grad(node.value, self.namer)
@@ -817,12 +821,12 @@ class ReverseAD(object):
     rhs_grad = create.create_grad(self.target, self.namer)
     rhs_grad.ctx = gast.Load()
 
-    # Generate: d_container = tangent.update_grad_at_index(d_container, index, d_result)
+    # Generate: d_container = tangent.add_grad_at_index(d_container, index, d_result)
     # This handles both mutable (NumPy) and immutable (JAX, TensorFlow) types
     update_call = gast.Call(
         func=gast.Attribute(
             value=gast.Name(id='tangent', ctx=gast.Load(), annotation=None),
-            attr='update_grad_at_index',
+            attr='add_grad_at_index',
             ctx=gast.Load()),
         args=[
             grad_container,  # grad_array parameter

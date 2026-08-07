@@ -41,6 +41,7 @@ from tangent.utils import unbroadcast
 from tangent.utils import unreduce
 from tangent.utils import unreduce_like
 from tangent.utils import update_grad_at_index
+from tangent.utils import add_grad_at_index
 
 # NumPy activation functions for neural networks
 from tangent.grads import (
