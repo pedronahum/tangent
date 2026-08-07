@@ -313,7 +313,16 @@ class LanguageFence(ast.NodeVisitor):
     self._reject(node, 'Type-annotated assignment are not supported')
 
   def visit_AugAssign(self, node):
-    self._allow_and_continue(node)
+    # Augmented assignment to a subscript or attribute (e.g. `a[i] += x`) is not
+    # supported: the in-place update is lost during normalization, which
+    # corrupts both the primal value and the gradient. Reject it rather than
+    # return a silently wrong result. Plain `x += y` on a name is fine.
+    if isinstance(node.target, (ast.Subscript, ast.Attribute)):
+      self._reject(node,
+                   'Augmented assignment to a subscript or attribute is not '
+                   'supported')
+    else:
+      self._allow_and_continue(node)
 
   def visit_Print(self, node):
     self._allow_and_continue(node)

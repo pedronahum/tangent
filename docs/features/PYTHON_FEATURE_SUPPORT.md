@@ -18,7 +18,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Membership operators** - `in`, `not in` (as non-differentiable branch guards)
 - **✅ Identity operators** - `is`, `is not`
 - **✅ Arithmetic operators** - `+`, `-`, `*`, `/`, `**`, `//`, `%`
-- **✅ Augmented assignments** - `+=`, `-=`, `*=`, `/=`, `**=`, `//=`, `%=`
+- **✅ Augmented assignments** - `+=`, `-=`, `*=`, `/=`, `**=`, `//=`, `%=` (on variables; not on subscripts/attributes such as `a[i] += x`)
 
 ### Functions
 - **✅ Lambda functions** - Anonymous functions with full inlining
