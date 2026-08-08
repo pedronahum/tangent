@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install flake8
+        run: pip install flake8
+      # Syntax errors and undefined names only (template code legitimately
+      # references the d[...] gradient sentinel and tangent/numpy at parse
+      # time, hence the builtins list).
+      - name: Syntax and undefined-name check
+        run: >-
+          flake8 . --builtins=d,tangent,numpy --count
+          --exclude=tests,.venv,.venv-*,build,dist
+          --select=E901,E999,F821,F822,F823 --show-source --statistics
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 is held back by the gast<0.6.0 pin; add it once the pin moves.
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (core dependencies only)
+        run: pip install -r requirements.txt
+      # TensorFlow/JAX stay absent on purpose here: the optional-backend
+      # code paths must degrade to skips, not failures.
+      - name: Run test suite
+        run: python -m pytest tests -q
+
+  test-full:
+    # Exercises the TensorFlow, JAX, SymPy and visualization code paths as
+    # well. Pinned to a single interpreter to keep CI time bounded; the
+    # matrix job above covers interpreter breadth.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install with all optional backends
+        run: >-
+          pip install -r requirements.txt
+          tensorflow jax sympy matplotlib networkx
+      - name: Run test suite
+        run: python -m pytest tests -q

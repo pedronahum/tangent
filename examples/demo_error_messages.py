@@ -24,7 +24,7 @@ print()
 try:
     # Create a function dynamically (source not available)
     exec("def dynamic_func(x): return x * x")
-    df = tangent.grad(dynamic_func)
+    df = tangent.grad(dynamic_func)  # noqa: F821 - created by exec() above
 except Exception as e:
     print(e)
     print()
