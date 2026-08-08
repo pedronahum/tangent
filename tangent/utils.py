@@ -572,7 +572,16 @@ def add_grad(left, right):
 
 
 def array_shapes_match(a, b):
-  return numpy.shape(a) == numpy.shape(b)
+  shape_a = numpy.shape(a)
+  shape_b = numpy.shape(b)
+  # A scalar (shape ()) broadcasts to any shape, so it is compatible with an
+  # array. In particular the default seed derivative 1.0 is accepted for an
+  # array-valued output, where it computes the gradient of the sum of the
+  # outputs (this already happens in optimized mode, where the shape assertion
+  # is elided). Genuinely mismatched array shapes are still rejected.
+  if shape_a == () or shape_b == ():
+    return True
+  return shape_a == shape_b
 
 
 shape_checkers = {}
