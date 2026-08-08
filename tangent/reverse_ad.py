@@ -769,11 +769,22 @@ class ReverseAD(object):
               ] + adjoint_rhs + [reset] + accumulations
 
     # If the LHS is a subscript assignment with variable index, we need to
-    # store and restore that as well
-    if (isinstance(self.orig_target, gast.Subscript) and
-        isinstance(self.orig_target.slice.value, gast.Name)):
+    # store and restore that as well.
+    # On Python < 3.9 / gast < 0.4 the index is wrapped in an Index node with
+    # a `.value` attribute; on modern gast the slice is the expression itself.
+    # Only unwrap a genuine Index wrapper - other node types (Subscript,
+    # Attribute) also have a `.value` field holding the container.
+    if isinstance(self.orig_target, gast.Subscript):
+      index_cls = getattr(gast, 'Index', None)
+      if index_cls is not None and isinstance(self.orig_target.slice, index_cls):
+        slice_value = self.orig_target.slice.value
+      else:
+        slice_value = self.orig_target.slice
+    else:
+      slice_value = None
+    if isinstance(slice_value, gast.Name):
       push, pop, op_id = get_push_pop()
-      i = self.orig_target.slice.value
+      i = slice_value
       push_index = template.replace(
           'push(_stack, i, op_id)',
           push=push,

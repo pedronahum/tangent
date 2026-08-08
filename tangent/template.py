@@ -119,23 +119,32 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
 
     # Check if node.value is a Name with id 'd' (gast.Constant doesn't have .id)
     if isinstance(node.value, gast.Name) and node.value.id == 'd':
-      # In Python 3.9+, gast.Index was removed - slice is used directly
-      # Get the actual slice value (handle both old Index wrapper and direct access)
-      slice_value = node.slice.value if hasattr(node.slice, 'value') else node.slice
+      # On Python < 3.9 / gast < 0.4 simple-index slices are wrapped in an
+      # Index node; unwrap it to get the actual slice value. On modern gast
+      # the slice is the expression itself. Only unwrap a genuine Index
+      # wrapper: Subscript and Attribute nodes also carry a `.value` field,
+      # but there it is the container being indexed, not a wrapper, so a
+      # blanket hasattr(.value) check would corrupt d[x[i]] into d[x].
+      index_cls = getattr(gast, 'Index', None)
+      if index_cls is not None and isinstance(node.slice, index_cls):
+        slice_value = node.slice.value
+      else:
+        slice_value = node.slice
+
+      # Normalize constant slices to their literal value (e.g. d['a'] -> 'a',
+      # d[1] -> 1) so the checks below behave the same across gast versions.
+      if isinstance(slice_value, gast.Constant):
+        slice_value = slice_value.value
 
       # A subscript with a string key (e.g. d['a']) is genuine dictionary
       # access in user code, not the gradient operator d[x]. The gradient
       # operator only ever indexes by a variable name or a numeric constant, so
       # a user dict that merely happens to be named `d` must be left untouched.
-      # Depending on the gast version the key surfaces either as a raw ``str``
-      # (Python 3.9+, where the slice is a bare Constant) or as a Constant node
-      # (older gast, which wraps the key in an Index).
-      key = slice_value.value if isinstance(slice_value, gast.Constant) else slice_value
-      if isinstance(key, str):
+      if isinstance(slice_value, str):
         node.slice = self.visit(node.slice)
         return node
 
-      if not isinstance(slice_value, (gast.Subscript, gast.Name, gast.Constant)):
+      if not isinstance(slice_value, (gast.Subscript, gast.Name)):
         # This happens when the gradient of a constant is taken
         if self.replace_grad == Replace.TANGENT:
           new_node = gast.Constant(value=0, kind=None)

@@ -322,24 +322,28 @@ def tinit_grad(z, x, allow_lazy_initializer=False):
   d[z] = tangent.init_grad(d[x], allow_lazy_initializer=False)
 
 
+# In these tangents the op_id is a non-differentiable tape marker (a string
+# constant), so it is passed through unchanged - exactly like `stack`. Wrapping
+# it as `d[op_id]` (the gradient operator) is meaningless for a marker and
+# leaked an undefined `d` into the generated code.
 @tangent_(tangent.push)
 def tpush(x, stack, op_id):
-  tangent.push(d[stack], d[x], d[op_id])
+  tangent.push(d[stack], d[x], op_id)
 
 
 @tangent_(tangent.push_stack)
 def tpush_stack(x, stack, op_id):
-  tangent.push_stack(d[stack], d[x], d[op_id])
+  tangent.push_stack(d[stack], d[x], op_id)
 
 
 @tangent_(tangent.pop)
 def tpop(x, stack, op_id):
-  d[x] = tangent.pop(d[stack], d[op_id])
+  d[x] = tangent.pop(d[stack], op_id)
 
 
 @tangent_(tangent.pop_stack)
 def tpop_stack(x, stack, op_id):
-  d[x] = tangent.pop_stack(d[stack], d[op_id])
+  d[x] = tangent.pop_stack(d[stack], op_id)
 
 
 @tangent_(tangent.unbroadcast)

@@ -18,7 +18,7 @@ to differentiate through user-defined classes without needing OOP support.
 
 Strategy:
 ---------
-1. Access class definitions from the function's __globals__ namespace
+1. Access class definitions from the function's namespace (globals + closure)
 2. Track instance variable assignments (e.g., calc = Calculator())
 3. When encountering method calls (e.g., calc.square(x)), inline the method body
 4. Substitute 'self' and method parameters with actual values
@@ -47,12 +47,14 @@ import inspect
 import textwrap
 import types
 
+import six
+
 
 class ClassMethodInliner(gast.NodeTransformer):
     """Inlines class method calls by substituting method bodies.
 
     This transformer:
-    1. Resolves class objects from func.__globals__
+    1. Resolves class objects from the function's namespace (globals + closure)
     2. Tracks instance variable assignments
     3. Inlines method calls by parsing and substituting method bodies
     4. Handles 'self' parameter substitution
@@ -62,9 +64,19 @@ class ClassMethodInliner(gast.NodeTransformer):
         """Initialize the class method inliner.
 
         Args:
-            func: The function being transformed (used to access __globals__)
+            func: The function being transformed (used to resolve class names)
         """
         self.func = func
+
+        # Namespace used to resolve class names. Classes may be defined in the
+        # enclosing scope of `func` (e.g. inside a test function), in which
+        # case they live in the closure rather than in __globals__ - merge
+        # both, mirroring annotate.ResolveCalls.
+        self.namespace = dict(six.get_function_globals(func))
+        if six.get_function_closure(func):
+            self.namespace.update(dict(zip(
+                func.__code__.co_freevars,
+                (cell.cell_contents for cell in six.get_function_closure(func)))))
 
         # Map variable name -> class info
         # e.g., 'calc' -> {'class': Calculator, 'init_args': [...]}
@@ -92,9 +104,10 @@ class ClassMethodInliner(gast.NodeTransformer):
             class_name = node.value.func.id
             var_name = node.targets[0].id
 
-            # Try to resolve the class from function's globals
-            if class_name in self.func.__globals__:
-                potential_class = self.func.__globals__[class_name]
+            # Try to resolve the class from the function's namespace
+            # (globals plus closure)
+            if class_name in self.namespace:
+                potential_class = self.namespace[class_name]
 
                 # Check if it's actually a class
                 if inspect.isclass(potential_class):

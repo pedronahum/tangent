@@ -803,6 +803,11 @@ def grad_dot(dy, x1, x2):
     The gradient with respect to `x1` i.e. `x2.dot(dy.T)` with all the
     broadcasting involved.
   """
+  if len(numpy.shape(x1)) == 1 and len(numpy.shape(x2)) == 1:
+    # Vector dot product producing a scalar: d(x1) = dy * x2. The general
+    # matrix machinery below assumes at least one operand is 2-D and would
+    # produce misaligned shapes here.
+    return dy * x2
   if len(numpy.shape(x1)) == 1:
     dy = numpy.atleast_2d(dy)
   elif len(numpy.shape(x2)) == 1:
