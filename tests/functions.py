@@ -485,7 +485,7 @@ def tfe_exp(t):
 
 
 def tfe_log(t):
-  return tf.log(t)
+  return tf.math.log(t)
 
 
 def tfe_tanh(t):
@@ -501,7 +501,7 @@ def tfe_sinh(t):
 
 
 def tfe_rsqrt(t):
-  return tf.rsqrt(t)
+  return tf.math.rsqrt(t)
 
 
 def tfe_expand_dims_before(t):
@@ -578,7 +578,7 @@ def tfe_maximum(t1, t2):
 
 
 def tfe_squared_difference(t1, t2):
-  return tf.squared_difference(t1, t2)
+  return tf.math.squared_difference(t1, t2)
 
 
 def tfe_matmul(mat1, mat2, boolean1, boolean2):

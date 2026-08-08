@@ -259,6 +259,17 @@ def test_grad_matmul(func, motion, optimized, preserve_result, mat1, mat2,
 def test_grad_matmul_higherdim(func, motion, optimized, preserve_result,
                                timage1, timage2, boolean1, boolean2):
   """Test gradients of functions with binary matrix inputs."""
+  # tf.matmul acts on the last two dimensions; with the transpose flags, the
+  # contracted dimensions are s1[-1] (or s1[-2] if transposed) for the first
+  # operand and s2[-2] (or s2[-1] if transposed) for the second. Skip shape
+  # combinations where the operands are incompatible - those are invalid
+  # inputs to tf.matmul itself, not gradient bugs.
+  s1, s2 = tuple(timage1.shape), tuple(timage2.shape)
+  inner1 = s1[-1] if not boolean1 else s1[-2]
+  inner2 = s2[-2] if not boolean2 else s2[-1]
+  if inner1 != inner2:
+    pytest.skip('matmul operands incompatible: %s x %s with transpose flags '
+                '(%s, %s)' % (s1, s2, boolean1, boolean2))
   tfe_utils.test_rev_tensor(func, motion, optimized, preserve_result, (0, 1),
                             timage1, timage2, boolean1, boolean2)
 

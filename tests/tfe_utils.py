@@ -76,7 +76,50 @@ def _skip_tf_param():
 def register_parametrizations(metafunc, short):
   """Create additional parametrizations required for TF tests."""
 
-  for arg in ['t', 't1', 't2']:
+  def _parametrize_pair(name1, name2, values):
+    """Parametrize a binary-op fixture pair with matching shapes.
+
+    The two operands of a binary op must be shape-compatible, so they are
+    parametrized jointly as shape-matched pairs. An independent cross product
+    would be mostly invalid inputs (e.g. tf.add of a [3] and a [5] tensor).
+
+    The paired values are built from two separate lists of tensors: although
+    immutable, reusing the same tensor object for both operands would make
+    the tape treat them as one variable (see the note above about shared
+    tensor objects) and change the gradient, e.g. d(t + t)/dt = 2.
+
+    Args:
+      name1, name2: The fixture names.
+      values: List of numpy arrays to turn into tensors (unused when
+          TensorFlow is missing).
+    """
+    both = (name1 in metafunc.fixturenames and
+            name2 in metafunc.fixturenames)
+    single = [arg for arg in (name1, name2) if arg in metafunc.fixturenames]
+    if not tf:
+      if both:
+        metafunc.parametrize(
+            [name1, name2],
+            [pytest.param(None, None,
+                          marks=pytest.mark.skip(
+                              reason='tensorflow not present'))])
+      else:
+        for arg in single:
+          metafunc.parametrize(arg, [_skip_tf_param()])
+      return
+    tensors_a = [tf.constant(v, dtype=tf.float32) for v in values]
+    # Draw fresh values (same shapes) for the second operand: identical
+    # values would create ties in ops like tf.maximum, where Tangent and
+    # GradientTape legitimately break the tie differently.
+    tensors_b = [tf.constant(np.random.randn(*v.shape), dtype=tf.float32)
+                 for v in values]
+    if both:
+      metafunc.parametrize([name1, name2], list(zip(tensors_a, tensors_b)))
+    else:
+      for arg in single:
+        metafunc.parametrize(arg, tensors_a)
+
+  if 't' in metafunc.fixturenames:
     # Note: care must be exercised when sharing tensor objects. Although
     # immutable, references to the same value will be interpreted as the same
     # variable, with unexpected side effects.
@@ -88,23 +131,16 @@ def register_parametrizations(metafunc, short):
       tensors = [tf.constant(v, dtype=tf.float32) for v in vectors]
     else:
       tensors = [_skip_tf_param()]
-    if arg in metafunc.fixturenames:
-      metafunc.parametrize(arg, tensors)
+    metafunc.parametrize('t', tensors)
 
-  for arg in ['mat1', 'mat2']:
-    if tf:
-      matrices = [
-        np.random.randn(*i)
-        for i in (
-            ((3, 3),) if short else (
-                (1, 1),
-                (3, 3),
-                (5, 5)))]
-      tensors = [tf.constant(m, dtype=tf.float32) for m in matrices]
-    else:
-      tensors = [_skip_tf_param()]
-    if arg in metafunc.fixturenames:
-      metafunc.parametrize(arg, tensors)
+  if 't1' in metafunc.fixturenames or 't2' in metafunc.fixturenames:
+    _parametrize_pair('t1', 't2', [
+        np.random.randn(i) for i in ((3,) if short else (3, 5, 10))])
+
+  if 'mat1' in metafunc.fixturenames or 'mat2' in metafunc.fixturenames:
+    _parametrize_pair('mat1', 'mat2', [
+        np.random.randn(*i) for i in (
+            ((3, 3),) if short else ((1, 1), (3, 3), (5, 5)))])
 
   if 's' in metafunc.fixturenames:
     if tf:
@@ -116,22 +152,22 @@ def register_parametrizations(metafunc, short):
       scalars = [_skip_tf_param()]
     metafunc.parametrize('s', scalars)
 
-  for arg in ['timage', 'timage1', 'timage2']:
-    if arg in metafunc.fixturenames:
-      if tf:
-        images = [
-            np.random.randn(*i)
-            for i in (
-              ((2, 3, 3, 3),) if short else (
-                    (2, 1, 1, 3),
-                    (2, 3, 3, 3),
-                    (2, 5, 5, 3),
-                ))
-        ]
-        timages = [tf.constant(v, dtype=tf.float32) for v in images]
-      else:
-        timages = [_skip_tf_param()]
-      metafunc.parametrize(arg, timages)
+  image_shapes = ((2, 3, 3, 3),) if short else (
+      (2, 1, 1, 3),
+      (2, 3, 3, 3),
+      (2, 5, 5, 3),
+  )
+  if 'timage' in metafunc.fixturenames:
+    if tf:
+      images = [np.random.randn(*i) for i in image_shapes]
+      timages = [tf.constant(v, dtype=tf.float32) for v in images]
+    else:
+      timages = [_skip_tf_param()]
+    metafunc.parametrize('timage', timages)
+
+  if 'timage1' in metafunc.fixturenames or 'timage2' in metafunc.fixturenames:
+    _parametrize_pair('timage1', 'timage2',
+                      [np.random.randn(*i) for i in image_shapes])
 
   if 'tkernel' in metafunc.fixturenames:
     if tf:
@@ -153,7 +189,10 @@ def register_parametrizations(metafunc, short):
     strides = [(1, 2, 2, 1)] if short else [
         (1, 1, 1, 1),
         (1, 2, 2, 1),
-        (1, 2, 2, 2),
+        # Spatial-only strides: the spatial axes of an NHWC stride are 1 and
+        # 2; striding the batch or channel dimension (e.g. (1, 2, 2, 2) or
+        # (1, 1, 2, 2)) is unsupported by the Conv2D and PoolingGrad kernels.
+        (1, 1, 3, 1),
     ]
     metafunc.parametrize('conv2dstrides', strides)
 

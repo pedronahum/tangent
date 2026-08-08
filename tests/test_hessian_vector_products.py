@@ -25,8 +25,16 @@ import pytest
 import tangent
 import tfe_utils
 
+# Tangent's generated TF code expects the differentiated function's module to
+# provide the name `tf` (the TensorFlow module), so the import must use this
+# exact name. The TF fixture is called tf_mod to avoid shadowing it.
+try:
+  import tensorflow as tf
+except ImportError:
+  tf = None
+
 @pytest.fixture
-def tf():
+def tf_mod():
   try:
     import tensorflow as tf
     return tf
@@ -54,7 +62,6 @@ def f_calltree(x):
 
 
 def tf_straightline(x):
-  import tensorflow as tf
   a = x * x * x
   b = a * x ** 2.0
   return tf.reduce_sum(b)
@@ -110,16 +117,16 @@ def _test_tf_hvp(func, optimized, tf):
       assert dx.shape == a.shape
 
 
-def test_hvp_complex_tf(optimized, tf):
-  _test_tf_hvp(tf_straightline, optimized, tf)
+def test_hvp_complex_tf(optimized, tf_mod):
+  _test_tf_hvp(tf_straightline, optimized, tf_mod)
 
 
-def test_hvp_straightline(optimized, tf):
-  _test_hvp(f_straightline, optimized, tf)
+def test_hvp_straightline(optimized):
+  _test_hvp(f_straightline, optimized)
 
 
-def test_hvp_calltree(optimized, tf):
-  _test_hvp(f_calltree, optimized, tf)
+def test_hvp_calltree(optimized):
+  _test_hvp(f_calltree, optimized)
 
 
 if __name__ == '__main__':
