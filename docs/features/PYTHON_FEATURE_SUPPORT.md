@@ -10,6 +10,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ If/elif/else statements** - Full support with differentiable branches
 - **✅ Conditional expressions (ternary)** - `a if condition else b` (reverse mode; forward mode raises `ForwardNotImplementedError`)
 - **✅ For loops with range()** - Fixed iteration loops with constant ranges
+- **✅ For loops with enumerate()** - `for i, v in enumerate(seq)` (desugared to an indexed loop)
 - **✅ While loops** - Variable iteration with conditions (no break/continue)
 
 ### Operators

@@ -68,6 +68,7 @@ from tangent import fence
 from tangent import forward_ad
 from tangent import chained_assign_desugar
 from tangent import comprehension_desugar
+from tangent import enumerate_desugar
 from tangent import dict_method_desugar
 from tangent import return_desugar
 from tangent import sentinel_rename
@@ -138,6 +139,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   node = lambda_desugar.desugar_lambdas(node)
   node = return_desugar.desugar_returns(node)
   node = chained_assign_desugar.desugar_chained_assignments(node)
+  node = enumerate_desugar.desugar_enumerate(node)
   node = comprehension_desugar.desugar_comprehensions(node)
   node = listcomp_desugar.desugar_listcomps(node)
   node = dict_method_desugar.desugar_dict_methods(node)
