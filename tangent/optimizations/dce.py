@@ -51,7 +51,13 @@ class DefUseAnalyzer:
             self._analyze_statement(stmt, i)
 
     def _analyze_statement(self, stmt, line_num):
-        """Analyze a single statement."""
+        """Analyze a single statement.
+
+        Note: statements nested inside control flow are analyzed under the
+        SAME line number as their enclosing top-level statement, so the
+        def/use maps must be merged (setdefault + update) rather than
+        overwritten, or the outer statement's defs/uses get clobbered.
+        """
         if isinstance(stmt, (ast.Assign, gast.Assign)):
             # Variables defined
             defined = set()
@@ -67,8 +73,8 @@ class DefUseAnalyzer:
             # Variables used
             used = VariableCollector.collect(stmt.value)
 
-            self.def_map[line_num] = defined
-            self.use_map[line_num] = used
+            self.def_map.setdefault(line_num, set()).update(defined)
+            self.use_map.setdefault(line_num, set()).update(used)
 
             for var in defined:
                 self.def_sites.setdefault(var, []).append(line_num)
@@ -77,20 +83,21 @@ class DefUseAnalyzer:
             # Augmented assignment: x += 1
             if isinstance(stmt.target, (ast.Name, gast.Name)):
                 var = stmt.target.id
-                self.def_map[line_num] = {var}
-                self.use_map[line_num] = {var} | VariableCollector.collect(stmt.value)
+                self.def_map.setdefault(line_num, set()).add(var)
+                self.use_map.setdefault(line_num, set()).update(
+                    {var} | VariableCollector.collect(stmt.value))
                 self.def_sites.setdefault(var, []).append(line_num)
 
         elif isinstance(stmt, (ast.Return, gast.Return)):
             # Return uses variables
             if stmt.value:
                 used = VariableCollector.collect(stmt.value)
-                self.use_map[line_num] = used
+                self.use_map.setdefault(line_num, set()).update(used)
 
         elif isinstance(stmt, (ast.If, gast.If)):
             # If statement condition uses variables
             cond_vars = VariableCollector.collect(stmt.test)
-            self.use_map[line_num] = cond_vars
+            self.use_map.setdefault(line_num, set()).update(cond_vars)
 
             # Recursively analyze body and orelse
             for body_stmt in stmt.body:
@@ -101,7 +108,7 @@ class DefUseAnalyzer:
         elif isinstance(stmt, (ast.For, gast.For)):
             # For loop iterator uses variables
             iter_vars = VariableCollector.collect(stmt.iter)
-            self.use_map[line_num] = iter_vars
+            self.use_map.setdefault(line_num, set()).update(iter_vars)
 
             # Loop variable is defined
             if isinstance(stmt.target, (ast.Name, gast.Name)):
@@ -116,7 +123,7 @@ class DefUseAnalyzer:
         elif isinstance(stmt, (ast.While, gast.While)):
             # While loop condition uses variables
             cond_vars = VariableCollector.collect(stmt.test)
-            self.use_map[line_num] = cond_vars
+            self.use_map.setdefault(line_num, set()).update(cond_vars)
 
             # Recursively analyze loop body
             for body_stmt in stmt.body:
@@ -251,6 +258,29 @@ class ActivityAnalyzer:
         return active
 
 
+# Tape operations whose calls must never be eliminated: the push/pop sequence
+# has to stay balanced and in order, regardless of whether the popped value
+# ends up used by the requested gradients.
+_TAPE_OP_NAMES = frozenset(('push', 'pop', 'push_stack', 'pop_stack'))
+
+
+def _touches_tape(stmt):
+    """Return True if the statement performs any tape push/pop operation."""
+    for node in gast.walk(stmt):
+        if not isinstance(node, gast.Call):
+            continue
+        func = node.func
+        if isinstance(func, gast.Attribute):
+            name = func.attr
+        elif isinstance(func, gast.Name):
+            name = func.id
+        else:
+            name = None
+        if name in _TAPE_OP_NAMES:
+            return True
+    return False
+
+
 class GradientDCE:
     """
     Main DCE optimizer for gradient functions.
@@ -259,10 +289,11 @@ class GradientDCE:
     returns optimized AST with dead code eliminated.
     """
 
-    def __init__(self, grad_func_ast, requested_grads: List[str], use_activity_analysis=True):
+    def __init__(self, grad_func_ast, requested_grads: List[str], use_activity_analysis=True, verbose=0):
         self.grad_func_ast = grad_func_ast
         self.requested_grads = set(requested_grads)
         self.use_activity_analysis = use_activity_analysis
+        self.verbose = verbose
 
     def optimize(self):
         """Apply DCE optimization with optional activity analysis."""
@@ -301,6 +332,17 @@ class GradientDCE:
             # Filter gradient vars to only active ones
             gradient_vars = gradient_vars & active_vars
 
+        # Statements that are kept unconditionally (tape pushes/pops and other
+        # side-effecting statements, see _touches_tape and _is_essential) do
+        # not participate in the slice otherwise, so the variables they
+        # reference - most importantly the stack itself, which is not
+        # "active" dataflow-wise - must be added to the slice seed. Otherwise
+        # their definitions get eliminated and the generated code fails with
+        # NameError/stack underflow at runtime.
+        for stmt in self.grad_func_ast.body:
+            if _touches_tape(stmt) or self._is_essential(stmt):
+                gradient_vars.update(VariableCollector.collect(stmt))
+
         # Step 4: Backward slice from these gradients
         slicer = BackwardSlicer(self.grad_func_ast, analyzer)
         relevant_stmts = slicer.slice(gradient_vars)
@@ -309,11 +351,12 @@ class GradientDCE:
         original_count = len(self.grad_func_ast.body)
 
         # Step 5: Remove irrelevant statements
-        # Always keep: function def, return statements, docstrings
+        # Always keep: function def, return statements, docstrings, and any
+        # statement that performs tape push/pop operations.
         optimized_body = []
         for i, stmt in enumerate(self.grad_func_ast.body):
-            # Always keep essential statements
-            if self._is_essential(stmt):
+            # Always keep essential statements and tape operations
+            if self._is_essential(stmt) or _touches_tape(stmt):
                 optimized_body.append(stmt)
             # Keep relevant statements
             elif i in relevant_stmts:
@@ -325,7 +368,7 @@ class GradientDCE:
 
         # Step 6: Report statistics
         eliminated = original_count - len(optimized_body)
-        if eliminated > 0:
+        if eliminated > 0 and self.verbose >= 1:
             print(f"DCE: Eliminated {eliminated} statements ({original_count} → {len(optimized_body)})")
 
         return self.grad_func_ast
@@ -366,24 +409,51 @@ class GradientDCE:
         if isinstance(stmt, (ast.FunctionDef, gast.FunctionDef)):
             return True
 
+        # Expression statements exist purely for their side effects. In
+        # adjoint code these are the tape pushes (tangent.push(_stack, ...));
+        # eliminating them would leave their pops orphaned and the stack
+        # would underflow at runtime. Augmented assignments are likewise
+        # side-effecting.
+        if isinstance(stmt, (ast.Expr, gast.Expr)):
+            return True
+        if isinstance(stmt, (ast.AugAssign, gast.AugAssign)):
+            return True
+
+        # Writes through a subscript or attribute mutate state that the
+        # def-use analysis above does not track (it only records plain Name
+        # targets), so they must not be eliminated either.
+        if isinstance(stmt, (ast.Assign, gast.Assign)):
+            for target in stmt.targets:
+                if isinstance(target, (ast.Subscript, gast.Subscript,
+                                       ast.Attribute, gast.Attribute)):
+                    return True
+
         # Docstrings are essential
         if isinstance(stmt, (ast.Expr, gast.Expr)):
-            if isinstance(stmt.value, (ast.Str, gast.Str, ast.Constant)):
+            # gast.Str/ast.Str only exist on older versions; gast >= 0.3 and
+            # ast on Python >= 3.8 use Constant.
+            constant_types = [ast.Constant, gast.Constant]
+            if hasattr(ast, 'Str'):
+                constant_types.append(ast.Str)
+            if hasattr(gast, 'Str'):
+                constant_types.append(gast.Str)
+            if isinstance(stmt.value, tuple(constant_types)):
                 return True
 
         return False
 
 
-def apply_dce(grad_func_ast, requested_grads: List[str]):
+def apply_dce(grad_func_ast, requested_grads: List[str], verbose: int = 0):
     """
     Apply Dead Code Elimination to a gradient function.
 
     Args:
         grad_func_ast: AST of the gradient function
         requested_grads: List of variable names we want gradients for
+        verbose: Verbosity level; >= 1 prints elimination statistics
 
     Returns:
         Optimized AST with dead code eliminated
     """
-    optimizer = GradientDCE(grad_func_ast, requested_grads)
+    optimizer = GradientDCE(grad_func_ast, requested_grads, verbose=verbose)
     return optimizer.optimize()

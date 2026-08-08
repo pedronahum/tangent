@@ -99,9 +99,13 @@ def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
       print(f"[Optimization] Phase 2: Advanced DCE for {requested_grads}")
     try:
       from tangent.optimizations.dce import apply_dce
-      # Apply advanced DCE to the gradient function
+      # Apply advanced DCE to the gradient function. In split motion the
+      # module holds [forward, backward] so the gradient code lives in the
+      # LAST function; in joint motion there is a single combined function,
+      # which is also the last one. body[0] would hit the primal in split
+      # mode and strip the tape pushes the adjoint pops rely on.
       if hasattr(node, 'body') and len(node.body) > 0:
-        node.body[0] = apply_dce(node.body[0], requested_grads)
+        node.body[-1] = apply_dce(node.body[-1], requested_grads, verbose)
     except Exception as e:
       if verbose >= 1:
         print(f"[Optimization] Warning: Advanced DCE failed: {e}")
@@ -207,9 +211,11 @@ def optimize_with_symbolic(node, requested_grads=None, enable_cse=True,
       print(f"[Optimization] Phase 5: Advanced DCE for {requested_grads}")
     try:
       from tangent.optimizations.dce import apply_dce
-      # Apply advanced DCE to the gradient function
+      # Apply advanced DCE to the gradient function (the last one in the
+      # module - see optimize_with_advanced_dce for why body[0] is wrong in
+      # split motion).
       if hasattr(node, 'body') and len(node.body) > 0:
-        node.body[0] = apply_dce(node.body[0], requested_grads)
+        node.body[-1] = apply_dce(node.body[-1], requested_grads, verbose)
     except Exception as e:
       if verbose >= 1:
         print(f"[Optimization] Warning: Advanced DCE failed: {e}")
