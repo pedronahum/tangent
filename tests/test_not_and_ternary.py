@@ -85,15 +85,15 @@ class TestTernary:
         df = tangent.grad(f)
         assert df(2.0) == pytest.approx(0.0)
 
-    def test_ternary_forward_mode_not_implemented(self):
-        # Forward mode does not support ternaries; it must fail clearly rather
-        # than emit broken code referencing an undefined derivative.
+    def test_ternary_forward_mode(self):
+        # Forward mode lowers ternaries to if-statements, so they differentiate.
         def f(x):
             y = (x * x) if x > 0 else (x * 3.0)
             return y
 
-        with pytest.raises(NotImplementedError):
-            tangent.autodiff(f, mode='forward', preserve_result=False)
+        df = tangent.autodiff(f, mode='forward', preserve_result=False)
+        assert df(2.0, 1.0) == pytest.approx(4.0)   # x>0 -> d(x^2) = 2x
+        assert df(-2.0, 1.0) == pytest.approx(3.0)  # else -> d(3x) = 3
 
 
 if __name__ == '__main__':

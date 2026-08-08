@@ -70,6 +70,7 @@ from tangent import chained_assign_desugar
 from tangent import comprehension_desugar
 from tangent import enumerate_desugar
 from tangent import zip_desugar
+from tangent import ifexp_desugar
 from tangent import dict_method_desugar
 from tangent import return_desugar
 from tangent import sentinel_rename
@@ -145,6 +146,12 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   node = comprehension_desugar.desugar_comprehensions(node)
   node = listcomp_desugar.desugar_listcomps(node)
   node = dict_method_desugar.desugar_dict_methods(node)
+  # Forward mode supports if-statements but not conditional expressions, so
+  # lower ternaries to if-statements. This runs last so it also catches
+  # ternaries introduced by other desugarings (e.g. d.get(k, default)). Reverse
+  # mode differentiates conditional expressions directly.
+  if mode == 'forward':
+    node = ifexp_desugar.desugar_ifexps(node)
 
   # Now resolve calls on the transformed AST
   annotate.ResolveCalls(func).visit(node)

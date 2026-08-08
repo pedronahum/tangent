@@ -6,10 +6,8 @@ subscripting, so Tangent desugars it before differentiation:
     d.get(k)           ->  d[k]
     d.get(k, default)  ->  d[k] if k in d else default
 
-These tests cover reverse mode (the fully supported path). Local-dict gradients
-in forward mode are limited by a separate, pre-existing constraint, so forward
-mode is only exercised for the two-argument form, which desugars to a ternary
-and therefore fails with a clear ``ForwardNotImplementedError``.
+These tests cover reverse mode (the fully supported path), plus the two-argument
+form in forward mode (its ternary is lowered to an if-statement).
 """
 import pytest
 
@@ -93,15 +91,15 @@ class TestGetReverseMode:
 
 
 class TestGetForwardMode:
-    def test_get_with_default_forward_not_implemented(self):
-        # The two-argument form desugars to a ternary, which forward mode does
-        # not support; it must fail clearly rather than emit broken code.
+    def test_get_with_default_forward(self):
+        # The two-argument form desugars to a ternary, which forward mode now
+        # lowers to an if-statement.
         def f(x):
             d = {'a': x * x}
             return d.get('a', 0.0)
 
-        with pytest.raises(NotImplementedError):
-            tangent.autodiff(f, mode='forward', preserve_result=False)
+        df = tangent.autodiff(f, mode='forward', preserve_result=False)
+        assert df(3.0, 1.0) == pytest.approx(6.0)  # d(x^2)/dx = 2x
 
 
 if __name__ == '__main__':
