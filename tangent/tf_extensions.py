@@ -40,6 +40,12 @@ from tangent.utils import register_unbroadcast
 from tangent.utils import register_unreduce
 import tensorflow as tf
 
+# The tangent package itself (not just its submodules) is needed so adjoint
+# templates can expose helpers on it for generated code to reference. By the
+# time this module is imported, tangent is already in sys.modules (it imports
+# this file), so this binds the partially-initialized module safely.
+import tangent
+
 # TensorFlow 2.x compatibility: EagerTensor type detection
 try:
     from tensorflow.python.framework import ops
@@ -103,6 +109,13 @@ if TensorType not in _utils.grad_initializers:
     register_init_grad(TensorType, tf.zeros_like)
 if VariableType not in _utils.grad_initializers:
     register_init_grad(VariableType, tf.zeros_like)
+# Shapes are non-differentiable; forward mode still needs a zero of the same
+# structure when a tangent passes through a shape value (e.g. via
+# shape_as_list in a second derivative).
+if tf.TensorShape not in _utils.grad_initializers:
+    register_init_grad(
+        tf.TensorShape,
+        lambda shape: tf.TensorShape([0 for _ in range(len(shape))]))
 
 # Register add_grad and shape checker for supported types
 # Only register if not already done
@@ -330,6 +343,14 @@ except (ImportError, AttributeError):
         tf_conv2d_backprop_input = None
         tf_conv2d_backprop_filter = None
 
+# Generated adjoints can only resolve names in the tangent/numpy/tf
+# namespaces, so expose the backprop helpers on the tangent module for the
+# conv2d adjoint template to reference.
+if tf_conv2d_backprop_input is not None:
+    tangent.conv2d_backprop_input = tf_conv2d_backprop_input
+if tf_conv2d_backprop_filter is not None:
+    tangent.conv2d_backprop_filter = tf_conv2d_backprop_filter
+
 @adjoint(tf_log)
 def dtflog(y, x):
   d[x] = d[y] / x
@@ -352,7 +373,7 @@ def dtfsinh(y, x):
 
 @adjoint(tf_rsqrt)
 def drsqrt(y, x):
-  d[x] = -0.5 * d[y] * tf.pow(tf.conj(y), tf.constant(3.0))
+  d[x] = -0.5 * d[y] * tf.pow(tf.math.conj(y), tf.constant(3.0))
 
 
 @adjoint(tf.negative)
@@ -467,8 +488,11 @@ def dtfmatmul(z, x, y, transpose_a=False, transpose_b=False):
 
 @adjoint(tf.nn.conv2d)
 def dtfconv2d(z, x, y, strides, padding):
-  d[x] = tf.nn.conv2d_backprop_input(tf.shape(x), y, d[z], strides, padding)
-  d[y] = tf.nn.conv2d_backprop_filter(x, tf.shape(y), d[z], strides, padding)
+  # Reference the helpers exposed on the tangent module: the old
+  # tf.nn.conv2d_backprop_* names were removed from the TF 2.x public API,
+  # and module-level names of this file are not visible to generated code.
+  d[x] = tangent.conv2d_backprop_input(tf.shape(x), y, d[z], strides, padding)
+  d[y] = tangent.conv2d_backprop_filter(x, tf.shape(y), d[z], strides, padding)
 
 
 # Register conv2d backprop adjoints only if functions are available
@@ -489,28 +513,34 @@ if tf_conv2d_backprop_filter is not None:
 
 @adjoint(tf.nn.avg_pool)
 def dtfavg_pool(y, x, sizes, strides, padding):
-  # Use public API in TF 2.x
+  # The callable is selected in the try/except and assigned to a local, so
+  # that d[x] is written exactly once: a d[x] store inside each branch would
+  # create a distinct temp adjoint per branch, and only one of them exists at
+  # runtime.
   try:
     from tensorflow.python.ops import gen_nn_ops
-    d[x] = gen_nn_ops.avg_pool_grad(
+    _pool_grad = gen_nn_ops.avg_pool_grad(
         tf.shape(x), d[y], sizes, strides, padding)
   except (ImportError, AttributeError):
     # Fallback for older TF versions
-    d[x] = tf.nn._nn_grad.gen_nn_ops._avg_pool_grad(
+    _pool_grad = tf.nn._nn_grad.gen_nn_ops._avg_pool_grad(
         tf.shape(x), d[y], sizes, strides, padding)
+  d[x] = _pool_grad
 
 
 @adjoint(tf.nn.max_pool)
 def dtfmax_pool(y, x, sizes, strides, padding):
-  # Use public API in TF 2.x
+  # See dtfavg_pool for why the d[x] store must happen outside the
+  # try/except.
   try:
     from tensorflow.python.ops import gen_nn_ops
-    d[x] = gen_nn_ops.max_pool_grad(
+    _pool_grad = gen_nn_ops.max_pool_grad(
         x, y, d[y], sizes, strides, padding)
   except (ImportError, AttributeError):
     # Fallback for older TF versions
-    d[x] = tf.nn._nn_grad.gen_nn_ops._max_pool_grad(
+    _pool_grad = tf.nn._nn_grad.gen_nn_ops._max_pool_grad(
         x, y, d[y], sizes, strides, padding)
+  d[x] = _pool_grad
 
 
 #
@@ -667,8 +697,12 @@ def tshape(y, x):
 # TF 2.x removed tf.distributions and tf.layers
 tf_modules_to_check = [tf, tf.image, tf.linalg, tf.losses, tf.nn]
 
-# Add optional modules that may not exist in all TF versions
-for optional_mod_name in ['distributions', 'layers']:
+# Add optional modules that may not exist in all TF versions. tf.math is
+# where TF 2.x moved most elementwise ops (rsqrt, squared_difference, ...);
+# without scanning it, those ops escape the blacklist and forward mode
+# crashes trying to differentiate TF's generated op wrappers instead of
+# raising ForwardNotImplementedError.
+for optional_mod_name in ['math', 'signal', 'random', 'distributions', 'layers']:
     if hasattr(tf, optional_mod_name):
         tf_modules_to_check.append(getattr(tf, optional_mod_name))
 

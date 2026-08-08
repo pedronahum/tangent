@@ -265,7 +265,12 @@ _TAPE_OP_NAMES = frozenset(('push', 'pop', 'push_stack', 'pop_stack'))
 
 
 def _touches_tape(stmt):
-    """Return True if the statement performs any tape push/pop operation."""
+    """Return True if the statement performs any tape push/pop operation.
+
+    Before compilation the callee of generated tape operations is typically a
+    Constant holding the function object itself (resolved at compile time),
+    not a Name/Attribute, so all three representations must be checked.
+    """
     for node in gast.walk(stmt):
         if not isinstance(node, gast.Call):
             continue
@@ -274,6 +279,8 @@ def _touches_tape(stmt):
             name = func.attr
         elif isinstance(func, gast.Name):
             name = func.id
+        elif isinstance(func, gast.Constant) and callable(func.value):
+            name = getattr(func.value, '__name__', None)
         else:
             name = None
         if name in _TAPE_OP_NAMES:
@@ -332,15 +339,16 @@ class GradientDCE:
             # Filter gradient vars to only active ones
             gradient_vars = gradient_vars & active_vars
 
-        # Statements that are kept unconditionally (tape pushes/pops and other
-        # side-effecting statements, see _touches_tape and _is_essential) do
-        # not participate in the slice otherwise, so the variables they
-        # reference - most importantly the stack itself, which is not
-        # "active" dataflow-wise - must be added to the slice seed. Otherwise
-        # their definitions get eliminated and the generated code fails with
-        # NameError/stack underflow at runtime.
+        # Statements that are kept unconditionally (tape pushes/pops, other
+        # side-effecting statements, and statement types the analysis does
+        # not model) do not participate in the slice otherwise, so the
+        # variables they reference - most importantly the stack itself, which
+        # is not "active" dataflow-wise, and values popped for an assert -
+        # must be added to the slice seed. Otherwise their definitions get
+        # eliminated and the generated code fails at runtime.
         for stmt in self.grad_func_ast.body:
-            if _touches_tape(stmt) or self._is_essential(stmt):
+            if (_touches_tape(stmt) or self._is_essential(stmt) or
+                    not self._is_modeled(stmt)):
                 gradient_vars.update(VariableCollector.collect(stmt))
 
         # Step 4: Backward slice from these gradients
@@ -351,12 +359,15 @@ class GradientDCE:
         original_count = len(self.grad_func_ast.body)
 
         # Step 5: Remove irrelevant statements
-        # Always keep: function def, return statements, docstrings, and any
-        # statement that performs tape push/pop operations.
+        # Always keep: function def, return statements, docstrings, any
+        # statement that performs tape push/pop operations, and any statement
+        # type the def-use analysis does not model (eliminating those cannot
+        # be proven safe).
         optimized_body = []
         for i, stmt in enumerate(self.grad_func_ast.body):
             # Always keep essential statements and tape operations
-            if self._is_essential(stmt) or _touches_tape(stmt):
+            if (self._is_essential(stmt) or _touches_tape(stmt) or
+                    not self._is_modeled(stmt)):
                 optimized_body.append(stmt)
             # Keep relevant statements
             elif i in relevant_stmts:
@@ -398,6 +409,20 @@ class GradientDCE:
                 elif hasattr(arg, 'arg'):
                     params.add(arg.arg)
         return params
+
+    def _is_modeled(self, stmt):
+        """True if the def-use analysis understands this statement type.
+
+        Only statements the analyzer models may be eliminated; anything else
+        (try/except, imports, asserts, ...) is kept because its effects
+        cannot be reasoned about here.
+        """
+        return isinstance(stmt, (ast.Assign, gast.Assign,
+                                 ast.AugAssign, gast.AugAssign,
+                                 ast.Return, gast.Return,
+                                 ast.If, gast.If,
+                                 ast.For, gast.For,
+                                 ast.While, gast.While))
 
     def _is_essential(self, stmt):
         """Check if statement is essential (return, control flow, docstring, etc.)."""

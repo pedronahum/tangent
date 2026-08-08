@@ -670,8 +670,9 @@ def shapes_match(a, b):
 
 
 register_all_shape_checker(
-    array_shapes_match, (numpy.ndarray, Number, float, int, numpy.float32,
-                         numpy.float64, numpy.int32, numpy.int64),
+    array_shapes_match, (numpy.ndarray, Number, float, int, bool,
+                         numpy.float32, numpy.float64, numpy.int32,
+                         numpy.int64),
     ignore_existing=True)
 
 

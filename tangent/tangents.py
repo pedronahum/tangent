@@ -363,7 +363,11 @@ def tastype(z, x, y):
 
 @tangent_(tangent.unreduce)
 def tunreduce(z, array, shape, axis, keepdims):
-  d[z] = tangent.unreduce(d[array], d[shape], axis, keepdims)
+  # The shape argument is non-differentiable metadata: the tangent is the
+  # same unreduce applied to the array's tangent, using the primal shape.
+  # Passing d[shape] (zeros) would reshape the tangent to a zero-sized
+  # array.
+  d[z] = tangent.unreduce(d[array], shape, axis, keepdims)
 
 
 
