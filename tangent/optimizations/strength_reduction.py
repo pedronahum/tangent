@@ -229,11 +229,6 @@ class StrengthReducer(gast.NodeTransformer):
             if isinstance(node.value, (int, float)):
                 return float(node.value)
 
-        # Handle legacy ast.Num (Python < 3.8)
-        if hasattr(ast, 'Num') and isinstance(node, ast.Num):
-            if isinstance(node.n, (int, float)):
-                return float(node.n)
-
         # Handle unary operations like -1 (UnaryOp with USub)
         if isinstance(node, (gast.UnaryOp, ast.UnaryOp)):
             if isinstance(node.op, (gast.USub, ast.USub)):

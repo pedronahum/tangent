@@ -421,7 +421,7 @@ class ForwardAD(transformers.TreeTransformer):
         return [node] + tangent_node
     return node
 
-  def visit_Num(self, node):
+  def visit_Constant(self, node):
     """Tangent of e.g.
     x = 0"""
     if not self.target:

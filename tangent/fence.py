@@ -109,10 +109,11 @@ class LanguageFence(ast.NodeVisitor):
     self._visited_top_module = True
     self._allow_and_continue(node)
 
-  def visit_Num(self, node):
-    self._allow_and_continue(node)
-
-  def visit_Str(self, node):
+  def visit_Constant(self, node):
+    # Bytes literals are not differentiable; on Python 3.8+ they arrive as
+    # Constant nodes (the old ast.Bytes class is a deprecated alias).
+    if isinstance(node.value, bytes):
+      self._reject(node, 'Byte Literals are not supported')
     self._allow_and_continue(node)
 
   def visit_FormattedValue(self, node):
@@ -122,9 +123,6 @@ class LanguageFence(ast.NodeVisitor):
 
   def visit_JoinedStr(self, node):
     self._allow_and_continue(node)
-
-  def visit_Bytes(self, node):
-    self._reject(node, 'Byte Literals are not supported')
 
   def visit_List(self, node):
     self._allow_and_continue(node)

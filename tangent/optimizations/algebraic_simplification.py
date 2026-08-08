@@ -63,10 +63,6 @@ class ASTToSymPyConverter:
         if isinstance(node, (ast.Constant, gast.Constant)):
             return sp.sympify(node.value)
 
-        # Legacy Num node (Python < 3.8)
-        if hasattr(ast, 'Num') and isinstance(node, ast.Num):
-            return sp.sympify(node.n)
-
         # Binary operations
         if isinstance(node, (ast.BinOp, gast.BinOp)):
             left = self._convert_node(node.left)

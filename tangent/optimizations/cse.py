@@ -62,10 +62,7 @@ class SubexpressionAnalyzer:
             return
 
         # Skip leaf nodes (names, constants)
-        # Note: ast.Num deprecated in Python 3.8+, use ast.Constant
         if isinstance(node, (ast.Name, gast.Name, ast.Constant, gast.Constant)):
-            return
-        if hasattr(ast, 'Num') and isinstance(node, ast.Num):
             return
 
         # Compute hash for this subexpression
@@ -132,11 +129,8 @@ class SubexpressionAnalyzer:
         - Power: 10
         - Function call (sin, cos, exp, etc.): 20
         """
-        # Note: ast.Num deprecated in Python 3.8+, use ast.Constant
         if isinstance(node, (ast.Name, gast.Name, ast.Constant, gast.Constant)):
             return 0  # Free (just a load)
-        if hasattr(ast, 'Num') and isinstance(node, ast.Num):
-            return 0
 
         cost = 0
 
@@ -309,8 +303,6 @@ class CommonSubexpressionEliminator:
 
         # Skip leaf nodes
         if isinstance(node, (ast.Name, gast.Name, ast.Constant, gast.Constant)):
-            return
-        if hasattr(ast, 'Num') and isinstance(node, ast.Num):
             return
 
         # Hash this subexpression

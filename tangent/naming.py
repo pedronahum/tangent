@@ -316,16 +316,6 @@ class Namer(object):
   def name_ExtSlice(self, node):
     return '_'.join(self._name(d) for d in node.dims)
 
-  def name_Num(self, node):
-    num_str = str(node.n)
-    num_str = num_str.replace('.', '_')
-    num_str = num_str.replace('-', 'neg')
-    num_str = num_str.replace('+', 'plus')
-    return num_str
-
-  def name_Str(self, node):
-    return node.s
-
   def name_JoinedStr(self, node):
     # f-strings are non-differentiable; give any temporary a stable base name.
     return 'fstr'

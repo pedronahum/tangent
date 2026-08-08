@@ -117,19 +117,12 @@ class CheckpointAnalyzer(gast.NodeVisitor):
                     # range(n)
                     if isinstance(iter_node.args[0], gast.Constant):
                         return iter_node.args[0].value
-                    elif hasattr(gast, 'Num') and isinstance(iter_node.args[0], gast.Num):
-                        return iter_node.args[0].n
                 elif len(iter_node.args) == 2:
                     # range(start, stop)
                     arg0 = iter_node.args[0]
                     arg1 = iter_node.args[1]
-
-                    # Try gast.Constant (gast >= 0.3.3)
                     if isinstance(arg0, gast.Constant) and isinstance(arg1, gast.Constant):
                         return arg1.value - arg0.value
-                    # Try gast.Num (gast < 0.3.3)
-                    elif hasattr(gast, 'Num') and isinstance(arg0, gast.Num) and isinstance(arg1, gast.Num):
-                        return arg1.n - arg0.n
         return None
 
     def _find_modified_variables(self, body: List[gast.AST]) -> Set[str]:

@@ -21,12 +21,19 @@ import gast
 
 from tangent import annotations as anno
 
+# astor renamed the codegen module to code_gen in 0.7; the old name is a
+# deprecated shim that warns on import.
+try:
+  from astor import code_gen as astor_codegen
+except ImportError:
+  from astor import codegen as astor_codegen
+
 
 class TangentParseError(SyntaxError):
   pass
 
 
-class SourceWithCommentGenerator(astor.codegen.SourceGenerator):
+class SourceWithCommentGenerator(astor_codegen.SourceGenerator):
   """Source code generator that outputs comments."""
 
   def __init__(self, *args, **kwargs):
@@ -37,7 +44,7 @@ class SourceWithCommentGenerator(astor.codegen.SourceGenerator):
     self.new_indentation = True
     super(SourceWithCommentGenerator, self).body(statements)
 
-  def visit(self, node, abort=astor.codegen.SourceGenerator.abort_visit):
+  def visit(self, node, abort=astor_codegen.SourceGenerator.abort_visit):
     if anno.hasanno(node, 'comment'):
       comment = anno.getanno(node, 'comment')
       # Preprocess the comment to fit to maximum line width of 80 characters

@@ -430,14 +430,7 @@ class GradientDCE:
 
         # Docstrings are essential
         if isinstance(stmt, (ast.Expr, gast.Expr)):
-            # gast.Str/ast.Str only exist on older versions; gast >= 0.3 and
-            # ast on Python >= 3.8 use Constant.
-            constant_types = [ast.Constant, gast.Constant]
-            if hasattr(ast, 'Str'):
-                constant_types.append(ast.Str)
-            if hasattr(gast, 'Str'):
-                constant_types.append(gast.Str)
-            if isinstance(stmt.value, tuple(constant_types)):
+            if isinstance(stmt.value, (ast.Constant, gast.Constant)):
                 return True
 
         return False

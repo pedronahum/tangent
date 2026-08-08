@@ -423,11 +423,8 @@ class ReverseAD(object):
       if isinstance(iter_node.func, gast.Name) and iter_node.func.id == 'range':
         if len(iter_node.args) == 1:
           # range(n)
-          # Python 3.8+ uses gast.Constant, older versions use gast.Num
           arg = iter_node.args[0]
-          if hasattr(gast, 'Num') and isinstance(arg, gast.Num):
-            return arg.n
-          elif isinstance(arg, gast.Constant):
+          if isinstance(arg, gast.Constant):
             return arg.value
         elif len(iter_node.args) == 2:
           # range(start, stop)
@@ -436,16 +433,12 @@ class ReverseAD(object):
 
           # Get stop value
           stop_arg = iter_node.args[1]
-          if hasattr(gast, 'Num') and isinstance(stop_arg, gast.Num):
-            stop_val = stop_arg.n
-          elif isinstance(stop_arg, gast.Constant):
+          if isinstance(stop_arg, gast.Constant):
             stop_val = stop_arg.value
 
           # Get start value
           start_arg = iter_node.args[0]
-          if hasattr(gast, 'Num') and isinstance(start_arg, gast.Num):
-            start_val = start_arg.n
-          elif isinstance(start_arg, gast.Constant):
+          if isinstance(start_arg, gast.Constant):
             start_val = start_arg.value
 
           if stop_val is not None:
@@ -857,9 +850,6 @@ class ReverseAD(object):
     adjoint = template.replace('d[x] = tangent.copy(d[y])',
                                namer=self.namer, x=node, y=self.target)
     return node, adjoint
-
-  def visit_Num(self, node):
-    return node, []
 
   def visit_Constant(self, node):
     """Handle gast.Constant nodes (Python 3.8+)."""
