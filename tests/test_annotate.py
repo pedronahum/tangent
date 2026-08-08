@@ -31,9 +31,11 @@ def test_resolve():
   def f(x):
     return h(x)
 
-  node = quoting.parse_function(f)
-  with pytest.raises(AttributeError):
-    annotate.resolve_calls(f)
+  # Unresolvable calls no longer raise; they are annotated with None to mark
+  # them as non-differentiable (this also covers calls that can only be
+  # resolved at runtime, e.g. methods on local variables).
+  node = annotate.resolve_calls(f)
+  assert anno.getanno(node.body[0].body[0].value, 'func') is None
 
 
 def test_unused():

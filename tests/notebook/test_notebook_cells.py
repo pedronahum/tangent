@@ -2,8 +2,25 @@
 
 This ensures the notebook works end-to-end in Colab and locally.
 """
+import importlib.util
 import sys
 import traceback
+
+import pytest
+
+# Optional backends: cells that need them are skipped when they are missing,
+# both under pytest (skipif marks below) and when run as a script (the runner
+# records ImportErrors as skips).
+_HAS_MATPLOTLIB = importlib.util.find_spec('matplotlib') is not None
+_HAS_TENSORFLOW = importlib.util.find_spec('tensorflow') is not None
+_HAS_JAX = importlib.util.find_spec('jax') is not None
+
+skip_no_matplotlib = pytest.mark.skipif(
+    not _HAS_MATPLOTLIB, reason='matplotlib not installed')
+skip_no_tensorflow = pytest.mark.skipif(
+    not _HAS_TENSORFLOW, reason='tensorflow not installed')
+skip_no_jax = pytest.mark.skipif(
+    not _HAS_JAX, reason='jax not installed')
 
 # Track test results
 results = {
@@ -12,7 +29,9 @@ results = {
     'skipped': []
 }
 
-def test_cell(cell_name, test_func):
+# Named run_cell (not test_cell) so pytest does not collect this helper as a
+# test function - its parameters are not fixtures.
+def run_cell(cell_name, test_func):
     """Test a notebook cell and record results."""
     print(f"\n{'='*70}")
     print(f"Testing: {cell_name}")
@@ -37,6 +56,7 @@ def test_cell(cell_name, test_func):
 # Section 1: Installation & Setup
 # ============================================================================
 
+@skip_no_matplotlib
 def test_cell_3_imports():
     """Test basic imports"""
     import tangent
@@ -136,11 +156,13 @@ def test_cell_16_sigmoid():
 # Section 4: TensorFlow Integration
 # ============================================================================
 
+@skip_no_tensorflow
 def test_cell_18_tf_import():
     """Test TensorFlow import"""
     import tensorflow as tf
     assert tf.__version__ is not None
 
+@skip_no_tensorflow
 def test_cell_20_tf_quadratic():
     """Test TensorFlow quadratic gradient"""
     import tangent
@@ -155,6 +177,7 @@ def test_cell_20_tf_quadratic():
     expected = 11.0  # 4*2 + 3
     assert abs(gradient.numpy() - expected) < 1e-5
 
+@skip_no_tensorflow
 def test_cell_22_tf_layer():
     """Test TensorFlow neural network layer gradient"""
     import tangent
@@ -177,12 +200,14 @@ def test_cell_22_tf_layer():
 # Section 5: JAX Integration
 # ============================================================================
 
+@skip_no_jax
 def test_cell_24_jax_import():
     """Test JAX import"""
     import jax
     import jax.numpy as jnp
     assert jax.__version__ is not None
 
+@skip_no_jax
 def test_cell_26_jax_polynomial():
     """Test JAX polynomial gradient"""
     import tangent
@@ -197,6 +222,7 @@ def test_cell_26_jax_polynomial():
     expected = 3 * x_jax**2 - 4 * x_jax + 3
     assert jnp.allclose(gradient, expected)
 
+@skip_no_jax
 def test_cell_28_jax_relu():
     """Test JAX ReLU network gradient"""
     import tangent
@@ -434,7 +460,7 @@ if __name__ == '__main__':
 
     # Run all tests
     for name, test_func in tests:
-        test_cell(name, test_func)
+        run_cell(name, test_func)
 
     # Print summary
     print("\n" + "="*70)

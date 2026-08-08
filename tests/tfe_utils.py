@@ -62,6 +62,17 @@ def compute_gradient_tape(func, args, params=None):
   return tuple(grads) if isinstance(grads, list) else grads
 
 
+def _skip_tf_param():
+  """A parametrized value that skips the test when TensorFlow is missing.
+
+  Note: `pytest.mark.skip(...)(None)` does not mark the parameter - it
+  returns the MarkDecorator itself, which then gets passed to the test as
+  the argument value. `pytest.param(..., marks=...)` is the correct way to
+  attach a skip mark to a parametrized value.
+  """
+  return pytest.param(None, marks=pytest.mark.skip(reason='tensorflow not present'))
+
+
 def register_parametrizations(metafunc, short):
   """Create additional parametrizations required for TF tests."""
 
@@ -76,7 +87,7 @@ def register_parametrizations(metafunc, short):
               (3,) if short else (3, 5, 10))]
       tensors = [tf.constant(v, dtype=tf.float32) for v in vectors]
     else:
-      tensors = [pytest.mark.skip(None, reason='tensorflow not present')(None)]
+      tensors = [_skip_tf_param()]
     if arg in metafunc.fixturenames:
       metafunc.parametrize(arg, tensors)
 
@@ -91,7 +102,7 @@ def register_parametrizations(metafunc, short):
                 (5, 5)))]
       tensors = [tf.constant(m, dtype=tf.float32) for m in matrices]
     else:
-      tensors = [pytest.mark.skip(None, reason='tensorflow not present')(None)]
+      tensors = [_skip_tf_param()]
     if arg in metafunc.fixturenames:
       metafunc.parametrize(arg, tensors)
 
@@ -102,7 +113,7 @@ def register_parametrizations(metafunc, short):
       else:
         scalars = [tf.constant(c) for c in (0.0, 1.0, 2.0)]
     else:
-      scalars = [pytest.mark.skip(reason='tensorflow not present')(None)]
+      scalars = [_skip_tf_param()]
     metafunc.parametrize('s', scalars)
 
   for arg in ['timage', 'timage1', 'timage2']:
@@ -119,7 +130,7 @@ def register_parametrizations(metafunc, short):
         ]
         timages = [tf.constant(v, dtype=tf.float32) for v in images]
       else:
-        timages = [pytest.mark.skip(reason='tensorflow not present')(None)]
+        timages = [_skip_tf_param()]
       metafunc.parametrize(arg, timages)
 
   if 'tkernel' in metafunc.fixturenames:
@@ -135,7 +146,7 @@ def register_parametrizations(metafunc, short):
       ]
       tkernels = [tf.constant(v, dtype=tf.float32) for v in kernels]
     else:
-      tkernels = [pytest.mark.skip(reason='tensorflow not present')(None)]
+      tkernels = [_skip_tf_param()]
     metafunc.parametrize('tkernel', tkernels)
 
   if 'conv2dstrides' in metafunc.fixturenames:

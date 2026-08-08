@@ -1,4 +1,9 @@
 """Test TF subscripting issue from notebook cell 22"""
+import pytest
+
+# TensorFlow is an optional dependency; skip this module when it is missing.
+pytest.importorskip('tensorflow')
+
 import tangent
 import tensorflow as tf
 

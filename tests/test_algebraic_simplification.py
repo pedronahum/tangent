@@ -3,6 +3,12 @@ Unit tests for Algebraic Simplification.
 """
 import unittest
 import ast
+
+import pytest
+
+# SymPy is an optional dependency; skip this module when it is missing.
+pytest.importorskip('sympy')
+
 import gast
 from tangent.optimizations.algebraic_simplification import (
     ASTToSymPyConverter,
