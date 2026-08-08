@@ -520,28 +520,15 @@ def absolute_builtin(y, x):
 
 
 @adjoint(min)
-def min_builtin(y, *args):
-  """Adjoint for built-in min(): gradient flows to the minimum argument(s).
-
-  If multiple arguments have the minimum value, the gradient is distributed
-  equally among them.
-  """
-  # For each argument, check if it equals the minimum
-  # This handles the case where multiple args have the same value
-  for arg in args:
-    d[arg] = d[y] * (arg == y)
+def min_builtin(y, x1, x2):
+  d[x1] = d[y] * (x1 <= x2)
+  d[x2] = d[y] * (x2 < x1)
 
 
 @adjoint(max)
-def max_builtin(y, *args):
-  """Adjoint for built-in max(): gradient flows to the maximum argument(s).
-
-  If multiple arguments have the maximum value, the gradient is distributed
-  equally among them.
-  """
-  # For each argument, check if it equals the maximum
-  for arg in args:
-    d[arg] = d[y] * (arg == y)
+def max_builtin(y, x1, x2):
+  d[x1] = d[y] * (x1 >= x2)
+  d[x2] = d[y] * (x2 > x1)
 
 
 #

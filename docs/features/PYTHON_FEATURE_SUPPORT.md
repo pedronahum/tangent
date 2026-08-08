@@ -26,6 +26,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Nested functions** - Functions defined within functions
 - **✅ Default arguments** - Function parameters with default values
 - **✅ Keyword arguments** - Named function arguments
+- **✅ Built-in `abs`, `min`, `max`** - `min`/`max` in two-argument form, e.g. `max(x, 0.0)` (ReLU) — reverse mode
 
 ### Data Structures (Read-Only)
 - **✅ Dictionaries (read-only)** - Dict access, methods, nested dicts
