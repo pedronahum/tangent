@@ -13,65 +13,175 @@
 #      limitations under the License.
 """Moving between source code and AST."""
 from __future__ import absolute_import
+import ast
+import copy
 import inspect
 import textwrap
 
-import astor
 import gast
 
 from tangent import annotations as anno
-
-# astor renamed the codegen module to code_gen in 0.7; the old name is a
-# deprecated shim that warns on import.
-try:
-  from astor import code_gen as astor_codegen
-except ImportError:
-  from astor import codegen as astor_codegen
 
 
 class TangentParseError(SyntaxError):
   pass
 
 
-class SourceWithCommentGenerator(astor_codegen.SourceGenerator):
-  """Source code generator that outputs comments."""
+def _has_comments(node):
+  """True if any node in the tree carries a Tangent comment annotation."""
+  return any(anno.hasanno(n, 'comment') for n in ast.walk(node))
 
-  def __init__(self, *args, **kwargs):
-    super(SourceWithCommentGenerator, self).__init__(*args, **kwargs)
-    self.new_indentation = True
 
-  def body(self, statements):
-    self.new_indentation = True
-    super(SourceWithCommentGenerator, self).body(statements)
+def _comment(node):
+  """Return (location, text) for a node's comment, or (None, None)."""
+  if not anno.hasanno(node, 'comment'):
+    return None, None
+  comment = anno.getanno(node, 'comment')
+  if comment['location'] not in ('above', 'below', 'right'):
+    raise TangentParseError('Only valid comment locations are '
+                            'above, below, right')
+  return comment['location'], comment['text']
 
-  def visit(self, node, abort=astor_codegen.SourceGenerator.abort_visit):
-    if anno.hasanno(node, 'comment'):
-      comment = anno.getanno(node, 'comment')
-      # Preprocess the comment to fit to maximum line width of 80 characters
-      linewidth = 78
-      if comment['location'] in ('above', 'below'):
-        comment['text'] = comment['text'][:linewidth]
-      n_newlines = 1 if self.new_indentation else 2
-      if comment['location'] == 'above':
-        self.result.append('\n' * n_newlines)
-        self.result.append(self.indent_with * self.indentation)
-        self.result.append('# %s' % comment['text'])
-        super(SourceWithCommentGenerator, self).visit(node)
-      elif comment['location'] == 'below':
-        super(SourceWithCommentGenerator, self).visit(node)
-        self.result.append('\n')
-        self.result.append(self.indent_with * self.indentation)
-        self.result.append('# %s' % comment['text'])
-        self.result.append('\n' * (n_newlines - 1))
-      elif comment['location'] == 'right':
-        super(SourceWithCommentGenerator, self).visit(node)
-        self.result.append(' # %s' % comment['text'])
-      else:
-        raise TangentParseError('Only valid comment locations are '
-                                'above, below, right')
+
+def _emit_stmts(stmts, level, ind):
+  lines = []
+  for stmt in stmts:
+    lines.extend(_emit_stmt(stmt, level, ind))
+  return lines
+
+
+def _emit_stmt(stmt, level, ind):
+  """Emit one statement as source lines, injecting any comment annotation."""
+  pad = ind * level
+  loc, text = _comment(stmt)
+  out = []
+  if loc == 'above':
+    out.append(pad + '# ' + text[:78])
+  body = _emit_stmt_body(stmt, level, ind)
+  if loc == 'right' and body:
+    body[-1] = body[-1] + ' # ' + text
+  out.extend(body)
+  if loc == 'below':
+    out.append(pad + '# ' + text[:78])
+  return out
+
+
+def _emit_stmt_body(stmt, level, ind):
+  """Emit a statement without its comment. Compound statements are recursed
+  into so that comments nested in their bodies are emitted too; everything
+  else is delegated to ast.unparse."""
+  pad = ind * level
+  if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+    return _emit_func_or_class(stmt, level, ind)
+  if isinstance(stmt, ast.If):
+    return _emit_if(stmt, level, ind, is_elif=False)
+  if isinstance(stmt, (ast.For, ast.AsyncFor)):
+    return _emit_for(stmt, level, ind)
+  if isinstance(stmt, ast.While):
+    return _emit_while(stmt, level, ind)
+  if isinstance(stmt, (ast.With, ast.AsyncWith)):
+    return _emit_with(stmt, level, ind)
+  if isinstance(stmt, ast.Try):
+    return _emit_try(stmt, level, ind)
+  # Simple statements (and any exotic compound types Tangent does not
+  # generate, e.g. match/except*) are emitted verbatim.
+  return [pad + line for line in ast.unparse(stmt).split('\n')]
+
+
+def _emit_func_or_class(stmt, level, ind):
+  pad = ind * level
+  lines = []
+  for decorator in stmt.decorator_list:
+    lines.append(pad + '@' + ast.unparse(decorator))
+  # Reuse ast.unparse for the signature: unparse a copy with a trivial body
+  # and no decorators, then take the header line.
+  dummy = copy.copy(stmt)
+  dummy.body = [ast.Pass()]
+  dummy.decorator_list = []
+  header = ast.unparse(dummy).split('\n')[0]
+  lines.append(pad + header)
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  return lines
+
+
+def _emit_if(stmt, level, ind, is_elif):
+  pad = ind * level
+  keyword = 'elif' if is_elif else 'if'
+  lines = [pad + keyword + ' ' + ast.unparse(stmt.test) + ':']
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  if stmt.orelse:
+    if len(stmt.orelse) == 1 and isinstance(stmt.orelse[0], ast.If):
+      elif_node = stmt.orelse[0]
+      loc, text = _comment(elif_node)
+      if loc == 'above':
+        lines.append(pad + '# ' + text[:78])
+      sub = _emit_if(elif_node, level, ind, is_elif=True)
+      if loc == 'right' and sub:
+        sub[-1] = sub[-1] + ' # ' + text
+      lines.extend(sub)
+      if loc == 'below':
+        lines.append(pad + '# ' + text[:78])
     else:
-      self.new_indentation = False
-      super(SourceWithCommentGenerator, self).visit(node)
+      lines.append(pad + 'else:')
+      lines.extend(_emit_stmts(stmt.orelse, level + 1, ind))
+  return lines
+
+
+def _emit_for(stmt, level, ind):
+  pad = ind * level
+  keyword = 'async for' if isinstance(stmt, ast.AsyncFor) else 'for'
+  lines = [pad + keyword + ' ' + ast.unparse(stmt.target) + ' in ' +
+           ast.unparse(stmt.iter) + ':']
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  if stmt.orelse:
+    lines.append(pad + 'else:')
+    lines.extend(_emit_stmts(stmt.orelse, level + 1, ind))
+  return lines
+
+
+def _emit_while(stmt, level, ind):
+  pad = ind * level
+  lines = [pad + 'while ' + ast.unparse(stmt.test) + ':']
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  if stmt.orelse:
+    lines.append(pad + 'else:')
+    lines.extend(_emit_stmts(stmt.orelse, level + 1, ind))
+  return lines
+
+
+def _emit_with(stmt, level, ind):
+  pad = ind * level
+  items = []
+  for item in stmt.items:
+    piece = ast.unparse(item.context_expr)
+    if item.optional_vars is not None:
+      piece += ' as ' + ast.unparse(item.optional_vars)
+    items.append(piece)
+  keyword = 'async with' if isinstance(stmt, ast.AsyncWith) else 'with'
+  lines = [pad + keyword + ' ' + ', '.join(items) + ':']
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  return lines
+
+
+def _emit_try(stmt, level, ind):
+  pad = ind * level
+  lines = [pad + 'try:']
+  lines.extend(_emit_stmts(stmt.body, level + 1, ind))
+  for handler in stmt.handlers:
+    header = pad + 'except'
+    if handler.type is not None:
+      header += ' ' + ast.unparse(handler.type)
+    if handler.name is not None:
+      header += ' as ' + handler.name
+    lines.append(header + ':')
+    lines.extend(_emit_stmts(handler.body, level + 1, ind))
+  if stmt.orelse:
+    lines.append(pad + 'else:')
+    lines.extend(_emit_stmts(stmt.orelse, level + 1, ind))
+  if stmt.finalbody:
+    lines.append(pad + 'finally:')
+    lines.extend(_emit_stmts(stmt.finalbody, level + 1, ind))
+  return lines
 
 
 def _ensure_type_comments(node):
@@ -171,12 +281,24 @@ def to_source(node, indentation=' ' * 4):
     # Copy annotations to the converted AST
     _copy_annotations(node_gast, node_ast, annotation_map)
 
-    node = node_ast
-  generator = SourceWithCommentGenerator(indentation, False,
-                                         astor.string_repr.pretty_string)
-  generator.visit(node)
-  generator.result.append('\n')
-  return astor.source_repr.pretty_source(generator.result).lstrip()
+    # ast.unparse reads location info (e.g. for type comments); many Tangent
+    # generated nodes carry none, so fill in defaults before unparsing.
+    node = ast.fix_missing_locations(node_ast)
+
+  # Fast path: no preserved comments, so ast.unparse can emit the whole tree.
+  if not _has_comments(node):
+    return ast.unparse(node)
+
+  # Comment path: emit statement-by-statement so the preserved comments land
+  # at the right place and indentation.
+  if isinstance(node, ast.Module):
+    lines = _emit_stmts(node.body, 0, indentation)
+  elif isinstance(node, ast.stmt):
+    lines = _emit_stmt(node, 0, indentation)
+  else:
+    # An expression cannot carry a statement comment; emit it directly.
+    return ast.unparse(node)
+  return '\n'.join(lines) + '\n'
 
 
 def parse_function(fn):

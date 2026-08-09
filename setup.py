@@ -11,7 +11,6 @@ with open('LICENSE') as f:
 # extras_require below (pip install tangent[tf,jax,symbolic,viz,test]).
 install_requires = [
     'autograd>=1.2',
-    'astor>=0.8',
     'future',
     'gast>=0.6.0,<0.8.0',
     'numpy',

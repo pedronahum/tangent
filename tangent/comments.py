@@ -27,8 +27,8 @@ from tangent import annotations as anno
 def add_comment(node, text, location='above'):
   """Add a comment to the given node.
 
-  If the `SourceWithCommentGenerator` class is used these comments will be
-  output as part of the source code.
+  These comments are emitted as part of the source code when the node is
+  converted back to source with `quoting.to_source`.
 
   Note that a node can only contain one comment. Subsequent calls to
   `add_comment` will ovverride the existing comments.
