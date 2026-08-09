@@ -501,5 +501,35 @@ def test_reduce_min_gradient(backend):
     assert allclose(got, np.array([0.0, 1.0, 0.0], dtype='float32'))
 
 
+# ---------------------------------------------------------------------------
+# Conditional selection: where(condition, x, y)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_where_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([-1.0, 2.0, -3.0], dtype='float32')
+    y_np = np.array([4.0, 5.0, 6.0], dtype='float32')
+
+    # d/dx of sum(where(x>0, x, y)) is the mask (x>0); d/dy is its complement.
+    if backend == 'jax':
+        def f(x, y):
+            return jnp.sum(jnp.where(x > 0, x, y))
+    elif backend == 'tf':
+        def f(x, y):
+            return tf.reduce_sum(tf.where(x > 0, x, y))
+    elif backend == 'torch':
+        def f(x, y):
+            return torch.sum(torch.where(x > 0, x, y))
+    else:
+        def f(x, y):
+            return kops.sum(kops.where(x > 0, x, y))
+
+    df = tangent.grad(f, wrt=(0, 1))
+    gx, gy = df(to_backend(mod, x_np), to_backend(mod, y_np))
+    assert allclose(from_backend(mod, gx), np.array([0.0, 1.0, 0.0]))
+    assert allclose(from_backend(mod, gy), np.array([1.0, 0.0, 1.0]))
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

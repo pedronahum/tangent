@@ -104,6 +104,16 @@ def clip_by_value(y, x, clip_value_min, clip_value_max):
     d[x] = d[y] * tf.cast(mask, x.dtype)
 
 
+@adjoint(tf.where)
+def where(z, condition, x, y):
+    """Adjoint for tf.where(condition, x, y): gradient flows to x where the
+    condition is true and to y where it is false."""
+    d[x] = tangent.unbroadcast_tensor(
+        tf.where(condition, d[z], tf.zeros_like(d[z])), x)
+    d[y] = tangent.unbroadcast_tensor(
+        tf.where(condition, tf.zeros_like(d[z]), d[z]), y)
+
+
 # ============================================================================
 # Logarithmic Functions
 # ============================================================================
@@ -325,7 +335,7 @@ def stack(z, values, axis=0):
 # List of functions we registered
 _our_functions = [
     tf.abs, tf.square, tf.sqrt, tf.sign, tf.floor, tf.round,
-    tf.minimum, tf.clip_by_value,
+    tf.minimum, tf.clip_by_value, tf.where,
     tf.sin, tf.cos, tf.tan, tf.atan,
     tf.nn.relu, tf.nn.sigmoid, tf.nn.softmax,
     tf.transpose, tf.concat, tf.stack,
