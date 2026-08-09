@@ -13,7 +13,7 @@ install_requires = [
     'autograd>=1.2',
     'astor>=0.8',
     'future',
-    'gast>=0.3.0,<0.6.0',
+    'gast>=0.6.0,<0.8.0',
     'numpy',
     'six',
 ]
@@ -62,6 +62,7 @@ setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
