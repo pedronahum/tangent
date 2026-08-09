@@ -25,11 +25,17 @@ from copy import copy as native_copy
 from numbers import Number
 import types
 
-import autograd
 import numpy
 from tangent import annotations as anno
 from tangent import non_differentiable
 from tangent import quoting
+
+# autograd is optional: it is only needed for interop with autograd-traced
+# values (see astype below) and as a reference oracle in the test suite.
+try:
+  import autograd
+except ImportError:  # pragma: no cover - exercised only without autograd
+  autograd = None
 
 INIT_GRAD = quoting.quote('tangent.init_grad')
 ADD_GRAD = quoting.quote('tangent.add_grad')
@@ -311,7 +317,7 @@ def astype(array, y):
   Returns:
     An array or number with the same dtype as `y`.
   """
-  if isinstance(y, autograd.core.Node):
+  if autograd is not None and isinstance(y, autograd.core.Node):
     return array.astype(numpy.array(y.value).dtype)
   return array.astype(numpy.array(y).dtype)
 

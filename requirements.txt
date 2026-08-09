@@ -1,6 +1,6 @@
-# Runtime dependencies (mirrors the [project] dependencies in pyproject.toml)
-# plus pytest for running the test suite. Optional backends are installed via
-# extras:
+# Core runtime dependencies (mirrors the [project] dependencies in
+# pyproject.toml) plus what is needed to run the test suite. Optional backends
+# are installed via extras:
 #   pip install tangent[tf]       TensorFlow support
 #   pip install tangent[jax]      JAX support
 #   pip install tangent[torch]    PyTorch support
@@ -8,7 +8,9 @@
 #   pip install tangent[symbolic] SymPy-based algebraic simplification
 #   pip install tangent[viz]      matplotlib + networkx visualization
 #   pip install tangent[all]      everything above, including pytest
-autograd>=1.2
 gast>=0.6.0,<0.8.0
-pytest>=6.0
 numpy
+# Test-suite only: autograd is the reference oracle for the gradient tests and
+# is not required to use tangent itself (see the [test] extra).
+autograd>=1.2
+pytest>=6.0

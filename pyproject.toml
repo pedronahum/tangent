@@ -19,7 +19,6 @@ keywords = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "autograd>=1.2",
     "gast>=0.6.0,<0.8.0",
     "numpy",
 ]
@@ -45,7 +44,9 @@ Homepage = "https://github.com/google/tangent"
 # on aarch64 (e.g. Grace/DGX Spark) TensorFlow and the default PyTorch wheel
 # install as CPU builds.
 [project.optional-dependencies]
-test = ["pytest>=6.0"]
+# autograd is the reference oracle for the gradient test suite (and a niche
+# runtime interop); it is not required to use tangent itself.
+test = ["pytest>=6.0", "autograd>=1.2"]
 tf = ["tensorflow>=2.16"]
 jax = ["jax>=0.4.30"]
 torch = ["torch>=2.0"]
@@ -56,6 +57,7 @@ symbolic = ["sympy>=1.12"]
 # Visualization tools (tangent.visualization).
 viz = ["matplotlib>=3.7", "networkx>=3.0"]
 all = [
+    "autograd>=1.2",
     "jax>=0.4.30",
     "keras>=3.0",
     "matplotlib>=3.7",
