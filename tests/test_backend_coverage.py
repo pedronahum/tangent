@@ -179,40 +179,103 @@ def _backend_op(mod, op_name):
     return getattr(mod, op_name)
 
 
+# TF exposes some ops under tf.math / tf.nn rather than top-level.
+_TF_OP_MAP = {'arcsin': 'asin', 'arccos': 'acos', 'arctan': 'atan',
+              'floor': 'floor', 'ceil': 'ceil', 'round': 'round',
+              'sign': 'sign'}
+
+
+def _resolve_unary_op(backend, mod, op_name):
+  """Return the backend callable for a catalog unary op, or None if the
+  backend does not expose it (caller skips)."""
+  if backend == 'tf':
+    if op_name == 'relu':
+      return tf.nn.relu
+    if op_name == 'sigmoid':
+      return tf.math.sigmoid
+    if op_name in _TF_OP_MAP:
+      return getattr(tf.math, _TF_OP_MAP[op_name])
+  if backend == 'keras' and op_name in ('relu', 'sigmoid'):
+    return getattr(kops, op_name)
+  try:
+    return _backend_op(mod, UNARY_OPS[op_name][0])
+  except AttributeError:
+    return None
+
+
+def _unary_tangent_grad(backend, mod, op, x_np):
+  """Tangent's reverse-mode gradient of sum(op(x)) at x_np, as numpy."""
+  def f(x):
+    return backend_sum(backend, mod, op(x))
+
+  df = tangent.grad(f)
+  return from_backend(mod, grad_call(backend, df, to_backend(mod, x_np)))
+
+
 @pytest.mark.parametrize('backend', BACKEND_IDS)
 @pytest.mark.parametrize('op_name', sorted(UNARY_OPS))
 def test_unary_gradients(backend, op_name):
     mod = dict(BACKENDS)[backend]
-    if backend == 'tf' and op_name in ('arcsin', 'arccos', 'arctan', 'relu',
-                                       'sigmoid', 'floor', 'ceil', 'round',
-                                       'sign'):
-        # TF exposes these under tf.math / tf.nn rather than top-level.
-        tf_map = {'arcsin': tf.math.asin, 'arccos': tf.math.acos,
-                  'arctan': tf.math.atan, 'relu': tf.nn.relu,
-                  'sigmoid': tf.math.sigmoid, 'floor': tf.math.floor,
-                  'ceil': tf.math.ceil, 'round': tf.math.round,
-                  'sign': tf.math.sign}
-        op = tf_map[op_name]
-    elif backend == 'keras' and op_name == 'relu':
-        op = kops.relu
-    elif backend == 'keras' and op_name == 'sigmoid':
-        op = kops.sigmoid
-    else:
-        try:
-            op = _backend_op(mod, UNARY_OPS[op_name][0])
-        except AttributeError:
-            pytest.skip('op %s not exposed by backend %s' % (op_name, backend))
+    op = _resolve_unary_op(backend, mod, op_name)
+    if op is None:
+        pytest.skip('op %s not exposed by backend %s' % (op_name, backend))
 
     _, analytic, domain = UNARY_OPS[op_name]
     x_np = np.array(domain, dtype='float32')
-
-    def f(x):
-        return backend_sum(backend, mod, op(x))
-
-    df = tangent.grad(f)
-    got = from_backend(mod, grad_call(backend, df, to_backend(mod, x_np)))
+    got = _unary_tangent_grad(backend, mod, op, x_np)
     assert allclose(got, analytic(x_np)), \
         '%s.%s: got %s expected %s' % (backend, op_name, got, analytic(x_np))
+
+
+# ---------------------------------------------------------------------------
+# Finite-difference cross-check: an independent numerical oracle.
+#
+# The tests above compare against hand-derived analytic gradients. This one
+# compares against central finite differences computed in NumPy, so it
+# cross-validates the analytic expressions and, importantly, auto-verifies the
+# correctness of any newly added op/adjoint without a manual derivation -
+# which is what keeps the per-backend adjoint surface scalable.
+# ---------------------------------------------------------------------------
+
+# NumPy has no relu/sigmoid; provide equivalents for the FD oracle.
+_FD_OP_OVERRIDE = {
+    'relu': lambda x: np.maximum(x, 0.0),
+    'sigmoid': lambda x: 1.0 / (1.0 + np.exp(-x)),
+}
+
+
+def _fd_grad_unary(op_name, x_np, h=1e-4):
+    """Central finite-difference gradient of sum(op(x)), in float64."""
+    op = _FD_OP_OVERRIDE.get(op_name) or getattr(np, op_name)
+    x = np.asarray(x_np, dtype='float64')
+
+    def loss(v):
+        return float(np.sum(op(v)))
+
+    grad = np.zeros_like(x)
+    for i in range(x.size):
+        e = np.zeros_like(x)
+        e[i] = h
+        grad.flat[i] = (loss(x + e) - loss(x - e)) / (2.0 * h)
+    return grad
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+@pytest.mark.parametrize('op_name', sorted(UNARY_OPS))
+def test_unary_grads_match_finite_differences(backend, op_name):
+    mod = dict(BACKENDS)[backend]
+    op = _resolve_unary_op(backend, mod, op_name)
+    if op is None:
+        pytest.skip('op %s not exposed by backend %s' % (op_name, backend))
+
+    _, _, domain = UNARY_OPS[op_name]
+    x_np = np.array(domain, dtype='float32')
+    got = _unary_tangent_grad(backend, mod, op, x_np)
+    expected = _fd_grad_unary(op_name, x_np)
+    # FD is only ~1e-3 accurate for the discontinuity-free points used here;
+    # use a looser tolerance than the analytic comparison.
+    assert np.allclose(np.asarray(got), expected, atol=1e-2, rtol=1e-2), \
+        '%s.%s: got %s expected ~%s' % (backend, op_name, got, expected)
 
 
 # ---------------------------------------------------------------------------
