@@ -31,36 +31,23 @@ import utils
 # Documented limitations of second-order (reverse-over-reverse) AD.
 
 # Differentiating low-level tape operations (tangent.push/pop/Stack) twice
-# introduces spurious terms. See the "Higher-Order Differentiation" section of
-# docs/features/PYTHON_FEATURE_SUPPORT.md and the comments on these functions
-# in tests/functions.py.
+# produces correct UNOPTIMIZED second derivatives, but the optimization
+# passes' tape-pair elimination still corrupts them. See the
+# "Higher-Order Differentiation" section of
+# docs/features/PYTHON_FEATURE_SUPPORT.md and the comments on these
+# functions in tests/functions.py.
 _TAPE_GRADGRAD_LIMITED = frozenset((
     'useless_stack_ops',
     'redefining_var_as_list',
 ))
 
-# The second derivative of arccos/arcsin diverges at |x| = 1. The reference
-# (autograd) evaluates to +/-inf there, while Tangent's unoptimized adjoint
-# chain hits a 0 * inf intermediate and produces nan. Both encode "diverges",
-# but they do not compare equal. The optimized variants simplify the chain and
-# evaluate to inf, so only unoptimized runs at exactly |x| = 1 are affected.
-_SINGULAR_AT_UNIT = frozenset((
-    'numpy_arccos',
-    'numpy_arcsin',
-))
-
 
 def _test_gradgrad_array(func, optimized, *args):
   """Test gradients of functions with NumPy-compatible signatures."""
-  if func.__name__ in _TAPE_GRADGRAD_LIMITED:
+  if func.__name__ in _TAPE_GRADGRAD_LIMITED and optimized:
     pytest.xfail(
-        'Second derivatives through the low-level tape API are known to be '
-        'wrong (documented limitation).')
-  if (func.__name__ in _SINGULAR_AT_UNIT and len(args) == 1 and
-      abs(args[0]) == 1.0):
-    pytest.xfail(
-        'The second derivative diverges at |x| = 1; the unoptimized adjoint '
-        'chain yields nan where the reference yields inf.')
+        'Optimized second derivatives through the low-level tape API are '
+        'known to be wrong (documented limitation).')
 
   def tangent_func():
     func.__globals__['np'] = np

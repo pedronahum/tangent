@@ -324,12 +324,19 @@ def tanh(y, x):
 
 @adjoint(numpy.arccos)
 def arccos(y, x):
-  d[x] = -d[y] / numpy.sqrt(1.0 - x * x)
+  # Guarded division for the |x| = 1 singularity: the derivative diverges
+  # there, and plain -d[y] / sqrt(1 - x*x) evaluates to nan when the seed
+  # d[y] is zero (0/0). That nan poisons second-derivative chains that
+  # legitimately pass a zero seed through the singular point. With the
+  # guard, a zero seed contributes zero while a nonzero seed still yields
+  # the correct +/-inf.
+  d[x] = numpy.where(d[y] != 0, -d[y] / numpy.sqrt(1.0 - x * x), 0.0)
 
 
 @adjoint(numpy.arcsin)
 def arcsin(y, x):
-  d[x] = d[y] / numpy.sqrt(1.0 - x * x)
+  # See the arccos adjoint for the |x| = 1 singularity guard.
+  d[x] = numpy.where(d[y] != 0, d[y] / numpy.sqrt(1.0 - x * x), 0.0)
 
 
 @adjoint(numpy.arctan)

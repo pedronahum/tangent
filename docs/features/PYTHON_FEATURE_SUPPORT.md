@@ -55,7 +55,8 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Ellipsis indexing** - `arr[..., 0]` for NumPy arrays
 - **✅ F-strings** - Non-differentiable debug/assert messages, e.g. `f"x = {x}"`
 - **✅ Set literals** - Non-differentiable collections, e.g. `if x in {1, 2, 3}`
-- **✅ Higher-order derivatives** - `grad(grad(f))` (see caveat for the low-level tape API)
+- **✅ Higher-order derivatives** - `grad(grad(f))` (see caveat for the
+  low-level tape API)
 
 ## ⚠️ Partially Supported Features
 
@@ -370,18 +371,15 @@ This works in both optimized and unoptimized modes, and for array-valued
 functions (e.g. `sum(tanh(x))` yields the elementwise `tanh''`, the Hessian
 diagonal).
 
-**Known limitation — the low-level tape API under higher-order AD:**
+**The low-level tape API under higher-order AD:**
 
 Functions that call Tangent's internal tape API directly — `tangent.push`,
 `tangent.pop`, `tangent.push_stack`, `tangent.pop_stack`, `tangent.Stack` —
-differentiate correctly at first order, but their **second** derivatives can be
-wrong. When such a call appears in the source being differentiated, it is
-differentiated once to produce the gradient and *again* when that gradient is
-itself differentiated; that double differentiation of a tape operation
-introduces spurious terms.
+differentiate correctly at first order, and their second derivatives are
+correct in **unoptimized** mode. With `optimized=True` the optimization
+passes eliminate tape push/pop pairs and corrupt the second derivative:
 
 ```python
-# ❌ Second derivative is incorrect
 def uses_tape(a):
     _stack = tangent.Stack()
     b = a * a
@@ -389,17 +387,18 @@ def uses_tape(a):
     b = tangent.pop(_stack, 'id')
     return b            # b == a**2; d²/da² should be 2
 
-ddf = tangent.grad(tangent.grad(uses_tape))
-ddf(3.0)               # returns 38.0, not 2.0
+tangent.grad(tangent.grad(uses_tape), optimized=False)(3.0)  # 2.0 (correct)
+tangent.grad(tangent.grad(uses_tape), optimized=True)(3.0)   # wrong
 ```
 
-These functions are non-differentiable bookkeeping primitives that ordinary code
-never calls — Tangent inserts them into generated gradient code itself, and that
-generated code differentiates correctly (that is how the second derivatives
-above work). The limitation only affects hand-written use of the tape API inside
-a function you intend to differentiate twice. **Workaround:** express the
-computation with ordinary Python/NumPy operations and let Tangent manage the
-tape.
+These primitives are bookkeeping that ordinary code never calls — Tangent
+inserts them into generated gradient code itself, and that generated code
+differentiates correctly at second order with `optimized=True` (that is how
+second derivatives of ordinary functions work). The limitation only affects
+hand-written use of the tape API inside a function you intend to
+differentiate twice with optimizations enabled. **Workaround:** pass
+`optimized=False` to the outer `grad`, or express the computation with
+ordinary Python/NumPy operations and let Tangent manage the tape.
 
 ## Best Practices
 

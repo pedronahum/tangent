@@ -809,12 +809,13 @@ def gradgrad_chain_of_multcalls(a):
   return d
 
 
-# NOTE: useless_stack_ops and redefining_var_as_list call the low-level tape API
-# (tangent.push/pop/Stack) directly. Their first derivatives are correct, but
-# their SECOND derivatives are known to be wrong: differentiating a tape
-# operation twice introduces spurious terms. This is a documented limitation
-# (see docs/features/PYTHON_FEATURE_SUPPORT.md, "Higher-Order Differentiation"),
-# so the reverse-over-reverse cases for these two functions are expected to fail.
+# NOTE: useless_stack_ops and redefining_var_as_list call the low-level tape
+# API (tangent.push/pop/Stack) directly. Their first derivatives are correct,
+# and their second derivatives are correct in UNOPTIMIZED mode; with
+# optimized=True the standard optimization passes eliminate tape pairs and
+# corrupt the second derivative, so those reverse-over-reverse cases are
+# xfailed (see docs/features/PYTHON_FEATURE_SUPPORT.md,
+# "Higher-Order Differentiation").
 def useless_stack_ops(a):
   _stack = tangent.Stack()
   b = a * a
