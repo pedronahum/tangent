@@ -79,11 +79,48 @@ def test_concatenate_weighted(optimized):
     assert _allclose(gb, 2.0 * np.array([3.0]))
 
 
-def test_concatenate_variable_list_raises():
-    """A list bound to a variable (not a literal) cannot be desugared and
-    should raise a clear NotImplementedError rather than generate broken code."""
+def test_concatenate_variable_list(optimized):
+    """A list bound to a variable that is assigned exactly once to a literal
+    and never mutated is inlined, so it differentiates like the literal form."""
     def f(a, b):
         parts = [a, b]
+        return jnp.sum(jnp.concatenate(parts, axis=0))
+
+    df = tangent.grad(f, wrt=(0, 1), optimized=optimized)
+    ga, gb = df(jnp.array([1.0, 2.0]), jnp.array([3.0]))
+    assert _allclose(ga, np.ones(2))
+    assert _allclose(gb, np.ones(1))
+
+
+def test_stack_variable_list(optimized):
+    def g(a, b):
+        parts = [a, b]
+        return jnp.sum(jnp.stack(parts, axis=0))
+
+    dg = tangent.grad(g, wrt=(0, 1), optimized=optimized)
+    gx, gy = dg(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
+    assert _allclose(gx, np.ones(2))
+    assert _allclose(gy, np.ones(2))
+
+
+def test_concatenate_reassigned_list_raises():
+    """A list that is reassigned is not statically known and must raise a
+    clear NotImplementedError rather than generate broken code."""
+    def f(a, b):
+        parts = [a]
+        parts = [a, b]
+        return jnp.sum(jnp.concatenate(parts, axis=0))
+
+    with pytest.raises(NotImplementedError):
+        tangent.grad(f, wrt=(0, 1))(jnp.array([1.0]), jnp.array([2.0]))
+
+
+def test_concatenate_mutated_list_raises():
+    """A list that is modified in place (subscript assignment) is not
+    statically known and must raise a clear NotImplementedError."""
+    def f(a, b):
+        parts = [a, a]
+        parts[1] = b
         return jnp.sum(jnp.concatenate(parts, axis=0))
 
     with pytest.raises(NotImplementedError):
