@@ -21,7 +21,10 @@ ANNOTATION_FIELD = '_tangent'
 FIXED_ANNOTATIONS = set(['pop', 'push', 'add_grad', 'init_grad', 'pri', 'adj',
                          'push_func', 'pop_func', 'adjoint_var',
                          'temp_adjoint_var', 'temp_var', 'pri_call',
-                         'adj_call', 'comment', 'pre_anf'])
+                         'adj_call', 'comment', 'pre_anf',
+                         # Statements the DCE must never eliminate (e.g. the
+                         # varargs pack/template-body/unpack statements).
+                         'tangent_keep'])
 
 
 def setanno(node, key, value, safe=True):

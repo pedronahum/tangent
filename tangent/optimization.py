@@ -260,11 +260,16 @@ def dead_code_elimination(node):
 
   to_remove = set(def_[1] for def_ in annotate.unused(node)
                   if not isinstance(def_[1], (gast.arguments, gast.For))
-                  and def_[1] not in statements_in_handlers)
+                  and def_[1] not in statements_in_handlers
+                  and not anno.getanno(def_[1], 'tangent_keep', False))
   for n in list(to_remove):
     for succ in gast.walk(n):
       if anno.getanno(succ, 'push', False):
         to_remove.add(anno.getanno(succ, 'push'))
+  # Never remove statements marked keep-alive (e.g. varargs pack/unpack),
+  # even if they were pulled in via a push annotation.
+  to_remove = set(n for n in to_remove
+                  if not anno.getanno(n, 'tangent_keep', False))
   transformers.Remove(to_remove).visit(node)
   anno.clearanno(node)
   return node

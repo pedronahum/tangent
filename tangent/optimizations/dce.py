@@ -304,6 +304,8 @@ class GradientDCE:
 
     def optimize(self):
         """Apply DCE optimization with optional activity analysis."""
+        from tangent import annotations as anno  # lazy: avoid circular import
+
         # Step 1: Analyze def-use chains
         analyzer = DefUseAnalyzer(self.grad_func_ast)
 
@@ -365,8 +367,12 @@ class GradientDCE:
         # be proven safe).
         optimized_body = []
         for i, stmt in enumerate(self.grad_func_ast.body):
-            # Always keep essential statements and tape operations
+            # Always keep essential statements, tape operations, statements
+            # marked keep-alive (e.g. varargs pack/unpack), and any statement
+            # type the def-use analysis does not model (eliminating those
+            # cannot be proven safe).
             if (self._is_essential(stmt) or _touches_tape(stmt) or
+                    anno.getanno(stmt, 'tangent_keep', False) or
                     not self._is_modeled(stmt)):
                 optimized_body.append(stmt)
             # Keep relevant statements

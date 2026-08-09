@@ -1216,7 +1216,17 @@ class ReverseAD(object):
       target = gast.Tuple(elts=dto_pack, ctx=gast.Store())
       unpacking = [gast.Assign(targets=[target], value=value)]
 
-    return node, packing + adjoint + unpacking
+    adjoint_stmts = packing + adjoint + unpacking
+    if flags & inspect.CO_VARARGS:
+      # The pack / template-body / unpack statements must survive dead code
+      # elimination: the reaching-definitions analysis does not see that the
+      # unpack reads the tuple the template body defines, so it would drop
+      # them and break the gradient. Mark them keep-alive; the DCE passes
+      # respect this annotation.
+      for stmt in adjoint_stmts:
+        if isinstance(stmt, gast.stmt):
+          anno.setanno(stmt, 'tangent_keep', True)
+    return node, adjoint_stmts
 
   def visit_Expr(self, node):
     # We need to special-case pushes, e.g. utils.push(_stack,x,op_id)
