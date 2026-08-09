@@ -67,7 +67,12 @@ all = [
 ]
 
 [tool.setuptools.packages.find]
-exclude = ["tests"]
+where = ["."]
+exclude = ["tests", "build"]
+# namespaces defaults to true for pyproject discovery, which would treat every
+# top-level directory (docs, examples, benchmarks, ...) as a namespace package
+# and bloat the wheel. Only real packages (with __init__.py) should ship.
+namespaces = false
 
 [tool.setuptools.package-data]
 "*" = ["README.md", "LICENSE"]
