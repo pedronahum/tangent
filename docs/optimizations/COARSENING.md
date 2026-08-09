@@ -79,6 +79,12 @@ adj_ast = apply_coarsening(func_ast)   # None if not coarsenable
 - **NumPy only.** The lowered adjoint uses bare elementwise names bound to
   NumPy; other backends fall back to the standard pipeline. Making the
   lowering backend-aware (JAX/PyTorch/TensorFlow/Keras) is the main follow-up.
+- **Narrow elementwise op set.** Only `sin`, `cos`, `tan`, `exp`, `log` and
+  `sqrt` are coarsened. Other elementwise ops (`abs`, `sinh`, `cosh`, `tanh`,
+  `asin`, `acos`, `atan`) fall back, because their derivatives reintroduce a
+  function the SymPy-to-AST lowering cannot emit (e.g. `tanh' = 1 - tanh^2`,
+  `sinh' = cosh`, `abs' = sign`). Extending the lowering would widen the set;
+  `tests/test_coarsening.py::test_elementwise_support_set_is_exact` pins it.
 - **No reductions.** `np.sum`, `np.mean`, etc. are not part of the elementwise
   subset, so functions that reduce fall back.
 - **Scalar symbolic model.** SymPy models each value as a scalar symbol, which

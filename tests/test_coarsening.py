@@ -412,5 +412,28 @@ class TestCoarseningBenefits(unittest.TestCase):
     self.assertEqual(len(adj.body), n_inputs + 1)
 
 
+def test_elementwise_support_set_is_exact():
+  """The coarsening support set must exactly match the ops that coarsen
+  end-to-end: every op in _SUPPORTED_ELEMENTWISE coarsens, and every other
+  elementwise op falls back. This catches drift if the SymPy converters gain
+  or lose support (e.g. a newly lowerable derivative)."""
+  from tangent.optimizations.coarsening import _SUPPORTED_ELEMENTWISE
+
+  # coarsening op name -> numpy attribute name
+  np_name = {'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}
+  candidates = ['sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
+                'abs', 'sinh', 'cosh', 'tanh', 'asin', 'acos', 'atan']
+
+  coarsenable = set()
+  for op in candidates:
+    src = 'def f(x):\n    return np.%s(x)' % np_name.get(op, op)
+    if apply_coarsening(gast.parse(src).body[0]) is not None:
+      coarsenable.add(op)
+
+  assert coarsenable == set(_SUPPORTED_ELEMENTWISE), (
+      'coarsenable=%s supported=%s' % (sorted(coarsenable),
+                                       sorted(_SUPPORTED_ELEMENTWISE)))
+
+
 if __name__ == '__main__':
   unittest.main(verbosity=2)

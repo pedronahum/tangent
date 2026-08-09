@@ -48,12 +48,17 @@ class NotStraightLineError(Exception):
   """Raised when a function body cannot be treated as a straight-line segment."""
 
 
-# Elementwise primitives the symbolic round-trip understands. Kept in sync with
-# ASTToSymPyConverter's function map; anything outside this set makes the
-# segment non-coarsenable.
+# Elementwise primitives coarsening can handle end-to-end. The constraint is
+# tighter than "the SymPy converters know the function": both the forward lift
+# (ASTToSymPyConverter) and the lowering of the *derivative*
+# (SymPyToASTConverter) must succeed. That rules out ops whose derivative
+# reintroduces a function the lowering cannot emit - e.g. tanh' = 1 - tanh^2,
+# sinh' = cosh, abs' = sign - so those are excluded even though they lift fine.
+# Empirically verified: sin/cos/tan/exp/log/sqrt coarsen correctly, while
+# abs/sinh/cosh/tanh/asin/acos/atan fall back (see
+# tests/test_coarsening.py::test_elementwise_support_set_is_exact).
 _SUPPORTED_ELEMENTWISE = frozenset((
-    'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'abs',
-    'sinh', 'cosh', 'tanh', 'asin', 'acos', 'atan',
+    'sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
 ))
 
 
