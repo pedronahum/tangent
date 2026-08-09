@@ -108,6 +108,15 @@ except (ImportError, AttributeError) as e:
   warnings.warn(f"PyTorch extensions not available: {e}. Install PyTorch with: pip install torch")
   pass
 
+# Keras extensions (optional; work with any Keras 3 backend)
+try:
+  from tangent.keras_extensions import *
+except (ImportError, AttributeError) as e:
+  # Keras is optional
+  import warnings
+  warnings.warn(f"Keras extensions not available: {e}. Install Keras with: pip install keras")
+  pass
+
 # Extended NumPy gradients
 try:
   from tangent import numpy_extended

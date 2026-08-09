@@ -27,6 +27,9 @@ extras_require = {
     # PyTorch support. Wheels are platform-specific; on aarch64 the default
     # PyPI wheel is a CPU build.
     'torch': ['torch>=2.0'],
+    # Keras 3 support (backend-agnostic ops; requires one of the Keras
+    # backends - tensorflow, jax or torch).
+    'keras': ['keras>=3.0'],
     # Symbolic optimizations (tangent.optimizations.algebraic_simplification)
     'symbolic': ['sympy>=1.12'],
     # Visualization tools (tangent.visualization)

@@ -77,75 +77,65 @@ class ResolveCalls(gast.NodeVisitor):
                 'Failed to resolve name "%s" used by "%s".'% (
                     node.id, self.func.__name__))
 
-    # Map NumPy array methods to their function equivalents BEFORE resolution
-    # This allows arr.sum() to work just like numpy.sum(arr)
-    # BUT don't transform if it's already numpy.sum() or np.sum()
-    # ALSO don't transform JAX (jnp.sum, jax.numpy.sum), TensorFlow
-    # (tf.reduce_sum) or PyTorch (torch.sum) module-level calls
-    if isinstance(node.func, gast.Attribute):
-      # Check if this is already a module.function call (like np.sum, jnp.sum, tf.reshape)
-      # Support: numpy, np, jnp, jax (and jax.numpy), tf, tensorflow, torch
-      is_module_call = isinstance(node.func.value, gast.Name) and node.func.value.id in (
-          'numpy', 'np', 'jnp', 'jax', 'tf', 'tensorflow', 'torch'
-      )
-      # Also check for jax.numpy.sum() pattern
-      if not is_module_call and isinstance(node.func.value, gast.Attribute):
-        if (isinstance(node.func.value.value, gast.Name) and
-            node.func.value.value.id == 'jax' and
-            node.func.value.attr == 'numpy'):
-          is_module_call = True
-
-      if not is_module_call:
-        import numpy
-        # Common NumPy array methods that have function equivalents
-        numpy_method_map = {
-            'sum': numpy.sum,
-            'mean': numpy.mean,
-            'prod': numpy.prod,
-            'min': numpy.min,
-            'max': numpy.max,
-            'argmin': numpy.argmin,
-            'argmax': numpy.argmax,
-            'cumsum': numpy.cumsum,
-            'cumprod': numpy.cumprod,
-            'std': numpy.std,
-            'var': numpy.var,
-            'transpose': numpy.transpose,
-            'reshape': numpy.reshape,
-            'flatten': numpy.ndarray.flatten,
-            'ravel': numpy.ravel,
-            'squeeze': numpy.squeeze,
-            'clip': numpy.clip,
-            'round': numpy.round,
-            'conj': numpy.conj,
-            'conjugate': numpy.conjugate,
-            'real': numpy.real,
-            'imag': numpy.imag,
-        }
-
-        method_name = node.func.attr
-        if method_name in numpy_method_map:
-          # Map this method to its function equivalent
-          # Transform arr.sum() to numpy.sum(arr) in the AST
-          func = numpy_method_map[method_name]
-          anno.setanno(node, 'func', func)
-
-          # Transform the AST: move the object from func.value to first argument
-          # arr.sum(axis=0) -> numpy.sum(arr, axis=0)
-          obj = node.func.value
-          # Create numpy.method_name as an Attribute node
-          node.func = gast.Attribute(
-              value=gast.Name(id='numpy', ctx=gast.Load(), annotation=None),
-              attr=method_name,
-              ctx=gast.Load())
-          node.args = [obj] + node.args
-
-          # Return early - we've handled this case
-          return
-
+    # Try direct resolution first: module-function calls (np.sum, torch.sum,
+    # keras.ops.sum, ...) resolve to the actual function object, including
+    # aliased imports like `import keras.ops as kops`. Only calls that do NOT
+    # resolve (e.g. method calls on computed values like arr.sum()) fall
+    # through to the NumPy array-method mapping below.
     try:
       func = resolve(node.func)
+    except AttributeError:
+      func = None
 
+    if func is None and isinstance(node.func, gast.Attribute):
+      import numpy
+      # Common NumPy array methods that have function equivalents
+      numpy_method_map = {
+          'sum': numpy.sum,
+          'mean': numpy.mean,
+          'prod': numpy.prod,
+          'min': numpy.min,
+          'max': numpy.max,
+          'argmin': numpy.argmin,
+          'argmax': numpy.argmax,
+          'cumsum': numpy.cumsum,
+          'cumprod': numpy.cumprod,
+          'std': numpy.std,
+          'var': numpy.var,
+          'transpose': numpy.transpose,
+          'reshape': numpy.reshape,
+          'flatten': numpy.ndarray.flatten,
+          'ravel': numpy.ravel,
+          'squeeze': numpy.squeeze,
+          'clip': numpy.clip,
+          'round': numpy.round,
+          'conj': numpy.conj,
+          'conjugate': numpy.conjugate,
+          'real': numpy.real,
+          'imag': numpy.imag,
+      }
+
+      method_name = node.func.attr
+      if method_name in numpy_method_map:
+        # Map this method to its function equivalent
+        # Transform arr.sum() to numpy.sum(arr) in the AST
+        func = numpy_method_map[method_name]
+        anno.setanno(node, 'func', func)
+
+        # Transform the AST: move the object from func.value to first argument
+        # arr.sum(axis=0) -> numpy.sum(arr, axis=0)
+        obj = node.func.value
+        # Create numpy.method_name as an Attribute node
+        node.func = gast.Attribute(
+            value=gast.Name(id='numpy', ctx=gast.Load(), annotation=None),
+            attr=method_name,
+            ctx=gast.Load())
+        node.args = [obj] + node.args
+
+        # Return early - we've handled this case
+        return
+
+    if func is not None:
       # If the user has used the @tangent.trace decorator,
       # then we'll switch to tracing the function.
       if hasattr(func, 'should_trace'):
@@ -159,11 +149,9 @@ class ResolveCalls(gast.NodeVisitor):
         # for their signature. We need access tothe default values of functions
         # for proper code generation.
         func = func.fun
-      anno.setanno(node, 'func', func)
-    except AttributeError:
-      # Can't resolve this call (e.g., method on a local variable like list.append)
-      # Annotate with None to indicate it's not differentiable
-      anno.setanno(node, 'func', None)
+    # func is None for unresolvable calls (e.g. methods on local variables
+    # like list.append); that marks them non-differentiable.
+    anno.setanno(node, 'func', func)
 
 
 def resolve_calls(func):
