@@ -1,7 +1,10 @@
-# Runtime dependencies (mirrors setup.py install_requires) plus pytest for
-# running the test suite. Optional backends are installed via extras:
+# Runtime dependencies (mirrors the [project] dependencies in pyproject.toml)
+# plus pytest for running the test suite. Optional backends are installed via
+# extras:
 #   pip install tangent[tf]       TensorFlow support
 #   pip install tangent[jax]      JAX support
+#   pip install tangent[torch]    PyTorch support
+#   pip install tangent[keras]    Keras 3 support
 #   pip install tangent[symbolic] SymPy-based algebraic simplification
 #   pip install tangent[viz]      matplotlib + networkx visualization
 #   pip install tangent[all]      everything above, including pytest
