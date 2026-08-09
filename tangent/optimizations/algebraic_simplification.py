@@ -123,7 +123,9 @@ class ASTToSymPyConverter:
             if arg is None:
                 return None
 
-            # Map function names to SymPy functions
+            # Map function names to SymPy functions. The arcsin/arccos/atan
+            # aliases match NumPy's spelling (np.arcsin, ...) alongside the
+            # shorter SymPy-style names.
             func_map = {
                 'sin': sp.sin,
                 'cos': sp.cos,
@@ -138,6 +140,9 @@ class ASTToSymPyConverter:
                 'asin': sp.asin,
                 'acos': sp.acos,
                 'atan': sp.atan,
+                'arcsin': sp.asin,
+                'arccos': sp.acos,
+                'arctan': sp.atan,
             }
 
             if func_name in func_map:
@@ -295,19 +300,45 @@ class SymPyToASTConverter:
                 keywords=[]
             )
 
-        if isinstance(expr, sp.sqrt):
-            arg = self._convert_expr(expr.args[0])
-            return gast.Call(
-                func=gast.Name(id='sqrt', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
-                args=[arg],
-                keywords=[]
-            )
+        # Note: sqrt is not checked here. SymPy represents sqrt(x) as
+        # Pow(x, 1/2), which the is_Pow branch above already lowers to
+        # `x ** 0.5`. (A former `isinstance(expr, sp.sqrt)` check was a bug:
+        # sp.sqrt is a function, not a type, so isinstance raised TypeError
+        # and silently broke every function check below it, e.g. tan/asin.)
 
         if isinstance(expr, sp.tan):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
                 func=gast.Name(id='tan', ctx=gast.Load(),
+                             annotation=None, type_comment=None),
+                args=[arg],
+                keywords=[]
+            )
+
+        # Inverse trig. Emitted by their short names; the coarsening
+        # integration namespace binds asin/acos/atan to numpy.arcsin etc.
+        if isinstance(expr, sp.asin):
+            arg = self._convert_expr(expr.args[0])
+            return gast.Call(
+                func=gast.Name(id='asin', ctx=gast.Load(),
+                             annotation=None, type_comment=None),
+                args=[arg],
+                keywords=[]
+            )
+
+        if isinstance(expr, sp.acos):
+            arg = self._convert_expr(expr.args[0])
+            return gast.Call(
+                func=gast.Name(id='acos', ctx=gast.Load(),
+                             annotation=None, type_comment=None),
+                args=[arg],
+                keywords=[]
+            )
+
+        if isinstance(expr, sp.atan):
+            arg = self._convert_expr(expr.args[0])
+            return gast.Call(
+                func=gast.Name(id='atan', ctx=gast.Load(),
                              annotation=None, type_comment=None),
                 args=[arg],
                 keywords=[]

@@ -53,12 +53,15 @@ class NotStraightLineError(Exception):
 # (ASTToSymPyConverter) and the lowering of the *derivative*
 # (SymPyToASTConverter) must succeed. That rules out ops whose derivative
 # reintroduces a function the lowering cannot emit - e.g. tanh' = 1 - tanh^2,
-# sinh' = cosh, abs' = sign - so those are excluded even though they lift fine.
-# Empirically verified: sin/cos/tan/exp/log/sqrt coarsen correctly, while
-# abs/sinh/cosh/tanh/asin/acos/atan fall back (see
-# tests/test_coarsening.py::test_elementwise_support_set_is_exact).
+# sinh' = cosh, abs' = sign (and SymPy's derivative of Abs over a complex
+# symbol is not lowerable) - so those are excluded even though they lift fine.
+# The inverse-trig ops use NumPy's spelling (np.arcsin, ...); their
+# derivatives lower cleanly (arcsin' = 1/sqrt(1-x^2), arctan' = 1/(1+x^2)).
+# Empirically pinned by
+# tests/test_coarsening.py::test_elementwise_support_set_is_exact.
 _SUPPORTED_ELEMENTWISE = frozenset((
     'sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
+    'arcsin', 'arccos', 'arctan',
 ))
 
 

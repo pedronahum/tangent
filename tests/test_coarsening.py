@@ -49,6 +49,12 @@ def _primal_np(x, y):
   return c
 
 
+# Inverse-trig primal whose derivative reintroduces the inverse functions, so
+# it exercises the asin/atan lowering.
+def _inverse_trig_primal(x):
+  return np.arcsin(x) * x + np.arctan(x)
+
+
 # Longer straight-line primal used to demonstrate the size/tape benefits of
 # coarsening. Module-level for the same inspect.getsource reason.
 def _benefit_primal(a, b, c):
@@ -363,6 +369,23 @@ class TestCoarseningGradIntegration(unittest.TestCase):
     assert math.isclose(float(tangent.grad(f)(x)), expected,
                         rel_tol=1e-6, abs_tol=1e-9)
 
+  def test_inverse_trig_coarsens_and_matches(self):
+    import inspect
+
+    # Confirm it is genuinely coarsened, not silently falling back.
+    func_ast = gast.parse(inspect.getsource(_inverse_trig_primal)).body[0]
+    assert apply_coarsening(func_ast) is not None
+
+    df_std = tangent.grad(_inverse_trig_primal)
+    df_c = tangent.grad(_inverse_trig_primal,
+                        optimizations={'coarsening': True})
+    # Scalar input: the coarsening uses a scalar symbolic model, so it is
+    # exact here (for array inputs it returns a scalar gradient and the
+    # standard pipeline is the one to use).
+    x = 0.5
+    assert math.isclose(float(df_c(x)), float(df_std(x)),
+                        rel_tol=1e-6, abs_tol=1e-9)
+
 
 class TestCoarseningBenefits(unittest.TestCase):
   """Coarsening should produce a materially smaller gradient than the
@@ -428,7 +451,9 @@ def test_elementwise_support_set_is_exact():
   for op in candidates:
     src = 'def f(x):\n    return np.%s(x)' % np_name.get(op, op)
     if apply_coarsening(gast.parse(src).body[0]) is not None:
-      coarsenable.add(op)
+      # Record the callee name as it appears in the AST (the numpy spelling),
+      # which is what _SUPPORTED_ELEMENTWISE is matched against.
+      coarsenable.add(np_name.get(op, op))
 
   assert coarsenable == set(_SUPPORTED_ELEMENTWISE), (
       'coarsenable=%s supported=%s' % (sorted(coarsenable),
