@@ -816,6 +816,16 @@ def gradgrad_chain_of_multcalls(a):
 # corrupt the second derivative, so those reverse-over-reverse cases are
 # xfailed (see docs/features/PYTHON_FEATURE_SUPPORT.md,
 # "Higher-Order Differentiation").
+#
+# Root cause (localized): optimizing the FIRST derivative is safe -- the
+# corruption only appears when the SECOND derivative itself is optimized. The
+# standard optimize() passes (constant folding / dead code elimination /
+# assignment propagation) remove or reorder the push/pop/push_stack/pop_stack
+# operations that the second-order tape relies on, so a second-order gradient
+# accumulator ends up reading a primal value (e.g. ddf returns 16 instead of 0
+# for useless_stack_ops at a=2) or a pop hits a mismatched op id. A fix needs
+# to make these passes treat tape operations as barriers when higher-order
+# derivatives are being optimized.
 def useless_stack_ops(a):
   _stack = tangent.Stack()
   b = a * a
