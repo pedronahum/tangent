@@ -165,6 +165,12 @@ UNARY_OPS = {
     'sigmoid': ('sigmoid',
                 lambda x: 1.0 / (1.0 + np.exp(-x)) *
                 (1.0 - 1.0 / (1.0 + np.exp(-x))), X_ANY),
+    # Piecewise-constant ops have zero gradient everywhere (they are
+    # discontinuous); Tangent must return zeros rather than fail.
+    'floor': ('floor', lambda x: np.zeros_like(x), X_ANY),
+    'ceil': ('ceil', lambda x: np.zeros_like(x), X_ANY),
+    'round': ('round', lambda x: np.zeros_like(x), X_ANY),
+    'sign': ('sign', lambda x: np.zeros_like(x), X_ANY),
 }
 
 
@@ -178,11 +184,14 @@ def _backend_op(mod, op_name):
 def test_unary_gradients(backend, op_name):
     mod = dict(BACKENDS)[backend]
     if backend == 'tf' and op_name in ('arcsin', 'arccos', 'arctan', 'relu',
-                                       'sigmoid'):
+                                       'sigmoid', 'floor', 'ceil', 'round',
+                                       'sign'):
         # TF exposes these under tf.math / tf.nn rather than top-level.
         tf_map = {'arcsin': tf.math.asin, 'arccos': tf.math.acos,
                   'arctan': tf.math.atan, 'relu': tf.nn.relu,
-                  'sigmoid': tf.math.sigmoid}
+                  'sigmoid': tf.math.sigmoid, 'floor': tf.math.floor,
+                  'ceil': tf.math.ceil, 'round': tf.math.round,
+                  'sign': tf.math.sign}
         op = tf_map[op_name]
     elif backend == 'keras' and op_name == 'relu':
         op = kops.relu

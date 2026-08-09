@@ -193,6 +193,30 @@ def adjoint_abs(y, x):
     d[x] = tangent.keras_seed(d[y], x) * kops.sign(x)
 
 
+@adjoint(kops.floor)
+def adjoint_floor(y, x):
+    """Adjoint for keras.ops.floor: gradient is zero (piecewise constant)."""
+    d[x] = kops.zeros_like(x)
+
+
+@adjoint(kops.ceil)
+def adjoint_ceil(y, x):
+    """Adjoint for keras.ops.ceil: gradient is zero (piecewise constant)."""
+    d[x] = kops.zeros_like(x)
+
+
+@adjoint(kops.round)
+def adjoint_round(y, x):
+    """Adjoint for keras.ops.round: gradient is zero (piecewise constant)."""
+    d[x] = kops.zeros_like(x)
+
+
+@adjoint(kops.sign)
+def adjoint_sign(y, x):
+    """Adjoint for keras.ops.sign: gradient is zero (piecewise constant)."""
+    d[x] = kops.zeros_like(x)
+
+
 # Trigonometric
 @adjoint(kops.sin)
 def adjoint_sin(y, x):

@@ -530,6 +530,30 @@ def adjoint_abs(y, x):
     d[x] = tangent.torch_seed(d[y], x) * torch.sign(x)
 
 
+@adjoint(torch.floor)
+def adjoint_floor(y, x):
+    """Adjoint for torch.floor: gradient is zero (piecewise constant)."""
+    d[x] = torch.zeros_like(x)
+
+
+@adjoint(torch.ceil)
+def adjoint_ceil(y, x):
+    """Adjoint for torch.ceil: gradient is zero (piecewise constant)."""
+    d[x] = torch.zeros_like(x)
+
+
+@adjoint(torch.round)
+def adjoint_round(y, x):
+    """Adjoint for torch.round: gradient is zero (piecewise constant)."""
+    d[x] = torch.zeros_like(x)
+
+
+@adjoint(torch.sign)
+def adjoint_sign(y, x):
+    """Adjoint for torch.sign: gradient is zero (piecewise constant)."""
+    d[x] = torch.zeros_like(x)
+
+
 @adjoint(torch.maximum)
 def adjoint_maximum(z, x, y):
     """Adjoint for torch.maximum."""

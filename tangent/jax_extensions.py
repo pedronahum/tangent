@@ -515,6 +515,30 @@ def adjoint_abs(y, x):
     d[x] = d[y] * jnp.sign(x)
 
 
+@adjoint(jnp.floor)
+def adjoint_floor(y, x):
+    """Adjoint for jnp.floor: gradient is zero (piecewise constant)."""
+    d[x] = jnp.zeros_like(x)
+
+
+@adjoint(jnp.ceil)
+def adjoint_ceil(y, x):
+    """Adjoint for jnp.ceil: gradient is zero (piecewise constant)."""
+    d[x] = jnp.zeros_like(x)
+
+
+@adjoint(jnp.round)
+def adjoint_round(y, x):
+    """Adjoint for jnp.round: gradient is zero (piecewise constant)."""
+    d[x] = jnp.zeros_like(x)
+
+
+@adjoint(jnp.sign)
+def adjoint_sign(y, x):
+    """Adjoint for jnp.sign: gradient is zero (piecewise constant)."""
+    d[x] = jnp.zeros_like(x)
+
+
 @adjoint(jnp.maximum)
 def adjoint_maximum(z, x, y):
     """Adjoint for jnp.maximum: gradient flows to the larger argument."""
