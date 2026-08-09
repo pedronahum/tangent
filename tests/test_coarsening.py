@@ -49,6 +49,30 @@ def _primal_np(x, y):
   return c
 
 
+# Longer straight-line primal used to demonstrate the size/tape benefits of
+# coarsening. Module-level for the same inspect.getsource reason.
+def _benefit_primal(a, b, c):
+  t1 = a * b
+  t2 = np.sin(t1)
+  t3 = t2 + c
+  t4 = np.exp(t3)
+  t5 = t4 * a
+  t6 = np.cos(t5)
+  return t6 * b
+
+
+def _count_statements_and_tape(func_ast):
+  """Return (top-level statement count, tape-op count) for a function AST."""
+  tape_ops = ('push', 'pop', 'push_stack', 'pop_stack')
+  tape = 0
+  for node in gast.walk(func_ast):
+    if isinstance(node, gast.Call):
+      name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
+      if name in tape_ops:
+        tape += 1
+  return len(func_ast.body), tape
+
+
 # Namespace used to execute both the primal and the generated adjoint.  The
 # coarsened adjoint references elementwise primitives by bare name, so they
 # must be present here.
@@ -338,6 +362,54 @@ class TestCoarseningGradIntegration(unittest.TestCase):
     # Repeat to exercise the cache for the standard variant.
     assert math.isclose(float(tangent.grad(f)(x)), expected,
                         rel_tol=1e-6, abs_tol=1e-9)
+
+
+class TestCoarseningBenefits(unittest.TestCase):
+  """Coarsening should produce a materially smaller gradient than the
+  per-op pipeline: fewer statements and no tape traffic, because the whole
+  straight-line segment is differentiated symbolically in one shot."""
+
+  def test_fewer_statements_than_optimized_standard_grad(self):
+    import inspect
+    # The fair baseline is the *optimized* standard gradient (what users
+    # would normally run), not the raw unoptimized expansion.
+    df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=True)
+    std_ast = gast.parse(inspect.getsource(df_std)).body[0]
+    std_stmts, _ = _count_statements_and_tape(std_ast)
+
+    adj = apply_coarsening(
+        gast.parse(inspect.getsource(_benefit_primal)).body[0])
+    self.assertIsNotNone(adj)
+    c_stmts, _ = _count_statements_and_tape(adj)
+
+    self.assertLess(c_stmts, std_stmts)
+
+  def test_coarsened_adjoint_is_tape_free(self):
+    import inspect
+    # The unoptimized standard gradient emits tape push/pop pairs for the
+    # intermediates; the coarsened adjoint inlines them and emits none.
+    df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=False)
+    std_ast = gast.parse(inspect.getsource(df_std)).body[0]
+    _, std_tape = _count_statements_and_tape(std_ast)
+
+    adj = apply_coarsening(
+        gast.parse(inspect.getsource(_benefit_primal)).body[0])
+    self.assertIsNotNone(adj)
+    _, c_tape = _count_statements_and_tape(adj)
+
+    self.assertGreater(std_tape, 0)
+    self.assertEqual(c_tape, 0)
+
+  def test_coarsened_body_is_one_statement_per_input_plus_return(self):
+    import inspect
+    adj = apply_coarsening(
+        gast.parse(inspect.getsource(_benefit_primal)).body[0])
+    self.assertIsNotNone(adj)
+    # Args are the primal inputs plus the seed; the body is one adjoint
+    # assignment per input plus the return, regardless of how many
+    # intermediate ops the primal had.
+    n_inputs = len(adj.args.args) - 1
+    self.assertEqual(len(adj.body), n_inputs + 1)
 
 
 if __name__ == '__main__':
