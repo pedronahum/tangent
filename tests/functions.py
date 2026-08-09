@@ -823,9 +823,15 @@ def gradgrad_chain_of_multcalls(a):
 # assignment propagation) remove or reorder the push/pop/push_stack/pop_stack
 # operations that the second-order tape relies on, so a second-order gradient
 # accumulator ends up reading a primal value (e.g. ddf returns 16 instead of 0
-# for useless_stack_ops at a=2) or a pop hits a mismatched op id. A fix needs
-# to make these passes treat tape operations as barriers when higher-order
-# derivatives are being optimized.
+# for useless_stack_ops at a=2) or a pop hits a mismatched op id. The specific
+# culprit is the standard dead_code_elimination pass.
+#
+# A blanket fix ("treat every tape op as a DCE barrier") was evaluated and
+# REJECTED: the DCE's tape-pair elimination is required for control-flow
+# (if / for / while / ternary) gradients, so making tape ops unconditionally
+# non-removable desynchronizes their push/pop pairing and breaks those tests.
+# A correct fix must distinguish genuinely-dead tape from tape that a
+# higher-order derivative still needs.
 def useless_stack_ops(a):
   _stack = tangent.Stack()
   b = a * a
