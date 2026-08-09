@@ -358,6 +358,17 @@ def cached_grad(original_grad):
                                output_index, output_weights)
             return wrap_with_error_handler(result)
 
+        # The cache key does not encode the `optimizations` dict, so a
+        # coarsened gradient (optimizations={'coarsening': True}) must not
+        # collide with the standard one. Bypass the cache when it is on.
+        if optimizations and optimizations.get('coarsening', False):
+            if verbose >= 1:
+                print("[Cache] Bypassing cache (coarsening enabled)")
+            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
+                               verbose, checkpoint, checkpoint_config, optimizations,
+                               output_index, output_weights)
+            return wrap_with_error_handler(result)
+
         # Generate cache key (grad uses specific default parameters)
         cache_key = _generate_cache_key(
             func, wrt, 'joint', 'reverse', optimized, preserve_result,

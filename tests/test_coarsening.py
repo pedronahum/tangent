@@ -36,6 +36,9 @@ from tangent.optimizations.coarsening import (
 # NumPy is a hard dependency of Tangent; the end-to-end check below uses it.
 np = pytest.importorskip('numpy')
 
+# tangent.grad integration tests need the full library.
+import tangent
+
 
 # Module-level primal for the end-to-end check: Tangent needs real source via
 # inspect.getsource, so it cannot be defined inside a test or exec'd string.
@@ -255,6 +258,86 @@ class TestCoarseningVsTangent(unittest.TestCase):
 
     assert math.isclose(tx, cx, rel_tol=1e-6, abs_tol=1e-9)
     assert math.isclose(ty, cy, rel_tol=1e-6, abs_tol=1e-9)
+
+
+class TestCoarseningGradIntegration(unittest.TestCase):
+  """End-to-end tests of the opt-in optimizations={'coarsening': True} path
+  through tangent.grad. The coarsened gradient must agree with both the
+  analytic gradient and the standard (non-coarsened) pipeline, and anything
+  not coarsenable must transparently fall back to the standard pipeline."""
+
+  def test_coarsened_grad_matches_analytic_and_standard(self):
+    def f(x, y):
+      z = x * y
+      return np.sin(z) + x * x
+
+    x, y = 0.5, 1.1
+    z = x * y
+    ex_gx = np.cos(z) * y + 2 * x
+    ex_gy = np.cos(z) * x
+
+    df_std = tangent.grad(f, wrt=(0, 1))
+    gx_s, gy_s = df_std(x, y)
+    df_c = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
+    gx_c, gy_c = df_c(x, y)
+
+    assert math.isclose(float(gx_c), ex_gx, rel_tol=1e-6, abs_tol=1e-9)
+    assert math.isclose(float(gy_c), ex_gy, rel_tol=1e-6, abs_tol=1e-9)
+    assert math.isclose(float(gx_c), float(gx_s), rel_tol=1e-6, abs_tol=1e-9)
+    assert math.isclose(float(gy_c), float(gy_s), rel_tol=1e-6, abs_tol=1e-9)
+
+  def test_coarsened_grad_single_wrt(self):
+    def f(x, y):
+      return np.exp(x) * y
+
+    x, y = 0.4, 2.0
+    df = tangent.grad(f, wrt=(0,), optimizations={'coarsening': True})
+    # d/dx [exp(x) * y] = exp(x) * y
+    assert math.isclose(float(df(x, y)), np.exp(x) * y,
+                        rel_tol=1e-6, abs_tol=1e-9)
+
+  def test_coarsened_grad_array_inputs(self):
+    def f(x, y):
+      return np.sum(np.sin(x * y) + x * x)
+
+    x = np.array([0.5, 1.1], dtype='float32')
+    y = np.array([0.7, -0.3], dtype='float32')
+    z = x * y
+    ex_gx = np.cos(z) * y + 2 * x
+    ex_gy = np.cos(z) * x
+
+    # np.sum is not coarsenable, so this exercises the fallback; the result
+    # must still be correct.
+    df = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
+    gx, gy = df(x, y)
+    assert np.allclose(np.asarray(gx), ex_gx, atol=1e-5)
+    assert np.allclose(np.asarray(gy), ex_gy, atol=1e-5)
+
+  def test_fallback_for_control_flow(self):
+    def g(a):
+      if a > 0:
+        return a * a
+      return -a
+
+    dg = tangent.grad(g, optimizations={'coarsening': True})
+    assert math.isclose(float(dg(2.0)), 4.0, rel_tol=1e-6, abs_tol=1e-9)
+    assert math.isclose(float(dg(-3.0)), -1.0, rel_tol=1e-6, abs_tol=1e-9)
+
+  def test_cache_does_not_collide_with_standard(self):
+    # Calling with and without coarsening on the same function must both give
+    # correct results (the cache is bypassed for the coarsened variant).
+    def f(x):
+      return np.cos(x) * x
+
+    x = 0.9
+    expected = -np.sin(x) * x + np.cos(x)
+    df_std = tangent.grad(f)
+    df_c = tangent.grad(f, optimizations={'coarsening': True})
+    assert math.isclose(float(df_std(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
+    assert math.isclose(float(df_c(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
+    # Repeat to exercise the cache for the standard variant.
+    assert math.isclose(float(tangent.grad(f)(x)), expected,
+                        rel_tol=1e-6, abs_tol=1e-9)
 
 
 if __name__ == '__main__':

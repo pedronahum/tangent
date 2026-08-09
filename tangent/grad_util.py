@@ -315,6 +315,95 @@ def jvp(func,
       verbose=verbose)
 
 
+# Elementwise functions that the straight-line coarsening pass can emit by
+# bare name (see tangent/optimizations/coarsening.py), mapped to their NumPy
+# implementations so a lowered adjoint can execute in a plain namespace.
+_COARSEN_ELEMENTWISE_NUMPY = {
+    'sin': numpy.sin, 'cos': numpy.cos, 'tan': numpy.tan,
+    'exp': numpy.exp, 'log': numpy.log, 'sqrt': numpy.sqrt,
+    'abs': numpy.abs, 'sinh': numpy.sinh, 'cosh': numpy.cosh,
+    'tanh': numpy.tanh, 'asin': numpy.arcsin, 'acos': numpy.arccos,
+    'atan': numpy.arctan,
+}
+
+# Module prefixes that mark a non-NumPy backend. Coarsening lowers expressions
+# to bare elementwise names that execute as NumPy, so it is only correct for
+# primals that themselves use NumPy (or bare math) elementwise ops.
+_NON_NUMPY_PREFIXES = frozenset(
+    ('jnp', 'jax', 'torch', 'tf', 'tensorflow', 'kops', 'keras'))
+
+
+def _coarsening_backend_safe(func_ast):
+  """True if every call in func_ast is a bare name or an np.* attribute."""
+  for node in gast.walk(func_ast):
+    if not isinstance(node, gast.Call):
+      continue
+    base = node.func
+    while isinstance(base, gast.Attribute):
+      base = base.value
+    if isinstance(base, gast.Name) and base.id in _NON_NUMPY_PREFIXES:
+      return False
+  return True
+
+
+def _try_coarsened_grad(func, wrt, verbose=0):
+  """Build a reverse-mode gradient via straight-line coarsening, or None.
+
+  This is an opt-in alternative code path, enabled with
+  optimizations={'coarsening': True}. It only applies when the function is a
+  pure straight-line segment of NumPy elementwise arithmetic; otherwise it
+  returns None and the caller falls back to the standard reverse-mode
+  pipeline. The generated adjoint is a single symbolic vector-Jacobian product
+  rather than one adjoint statement per primitive op.
+  """
+  import tangent
+  from tangent.optimizations.coarsening import apply_coarsening
+
+  try:
+    node = quoting.parse_function(func)
+  except Exception:
+    return None
+  if (not isinstance(node, gast.Module) or len(node.body) != 1 or
+      not isinstance(node.body[0], gast.FunctionDef)):
+    return None
+  func_ast = node.body[0]
+  if not _coarsening_backend_safe(func_ast):
+    return None
+  adj_ast = apply_coarsening(func_ast)
+  if adj_ast is None:
+    return None
+
+  # Mirror autodiff_tree's namespace, then expose the bare elementwise names
+  # the lowered adjoint uses (e.g. `cos` rather than `numpy.cos`).
+  unwrapped = unwrap_function(func)
+  namespace = {'tangent': tangent, 'numpy': numpy}
+  namespace.update(unwrapped.__globals__)
+  if unwrapped.__closure__:
+    namespace.update(dict(zip(
+        unwrapped.__code__.co_freevars,
+        (cell.cell_contents for cell in unwrapped.__closure__))))
+  namespace.update(_COARSEN_ELEMENTWISE_NUMPY)
+
+  if verbose >= 1:
+    print('[Coarsening] Using straight-line coarsening for %s' % func.__name__)
+    print(quoting.to_source(adj_ast))
+
+  module = compile_.compile_file(gast.Module(body=[adj_ast]), namespace)
+  adj = getattr(module, adj_ast.name)
+
+  def df(*args, **kwargs):
+    init_grad = kwargs.pop('init_grad', 1.0)
+    grads = adj(*args, init_grad)
+    if not isinstance(grads, tuple):
+      grads = (grads,)
+    selected = tuple(grads[i] for i in wrt)
+    if len(selected) == 1:
+      selected, = selected
+    return selected
+
+  return df
+
+
 def _autodiff_uncached(func,
              wrt=(0,),
              optimized=True,
@@ -389,6 +478,17 @@ def _autodiff_uncached(func,
   """
   # If the function had the with insert_grad_of statements removed, retrieve them
   func = getattr(func, 'tangent', func)
+
+  # Opt-in straight-line coarsening: when requested, and the function is a
+  # pure NumPy straight-line segment, emit a single symbolic VJP instead of
+  # running the standard reverse-mode pipeline. Falls back otherwise.
+  if (mode == 'reverse' and not preserve_result and optimizations and
+      optimizations.get('coarsening', False) and
+      not (grad_config and (grad_config.get('output_index') is not None or
+                            grad_config.get('output_weights') is not None))):
+    coarsened = _try_coarsened_grad(func, wrt, verbose)
+    if coarsened is not None:
+      return coarsened
 
   # Generate the derivative
   node, namespace = autodiff_tree(func, wrt, motion, mode, preserve_result,
