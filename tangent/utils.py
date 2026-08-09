@@ -698,6 +698,55 @@ def shapes_match(a, b):
     return shape_checker(a, b)
 
 
+def seed_pytree(x):
+  """Build a pytree of ones matching the structure of ``x``.
+
+  Arrays become ones_like, scalars become 1.0, and lists/tuples/dicts are
+  mapped recursively. This is the correct reverse-mode seed for a container
+  output: it computes the gradient of the sum of every leaf.
+  """
+  if isinstance(x, dict):
+    return {k: seed_pytree(v) for k, v in x.items()}
+  if isinstance(x, (list, tuple)):
+    seeds = [seed_pytree(v) for v in x]
+    return type(x)(seeds)
+  if isinstance(x, numpy.ndarray):
+    return numpy.ones_like(x)
+  return 1.0
+
+
+def match_seed(primal, adjoint):
+  """Return a seed compatible with ``primal``.
+
+  Reconciles the supplied seed with the structure and leaf shapes of the
+  return value so the backward pass can index it leaf by leaf:
+
+  - a container primal with a matching container seed is reconciled
+    element-wise (recursively);
+  - a container primal with a scalar seed is expanded into a full pytree of
+    ones via ``seed_pytree``;
+  - an array leaf with a scalar seed is broadcast to the leaf's shape.
+
+  Scalars and already-matching seeds are returned unchanged, so ordinary
+  scalar-output functions are unaffected.
+  """
+  if isinstance(primal, dict):
+    if isinstance(adjoint, dict):
+      return {k: match_seed(primal[k], adjoint[k]) for k in primal}
+    return seed_pytree(primal)
+  if isinstance(primal, (list, tuple)):
+    if isinstance(adjoint, (list, tuple)) and len(adjoint) == len(primal):
+      return type(primal)(
+          [match_seed(p, a) for p, a in zip(primal, adjoint)])
+    return seed_pytree(primal)
+  # Leaf. Expand a scalar seed to a non-scalar array leaf's shape; leave
+  # scalar/0-d outputs and already-shaped seeds untouched.
+  if (isinstance(primal, numpy.ndarray) and primal.shape and
+      isinstance(adjoint, (Number, bool))):
+    return adjoint * numpy.ones_like(primal)
+  return adjoint
+
+
 register_all_shape_checker(
     array_shapes_match, (numpy.ndarray, Number, float, int, bool,
                          numpy.float32, numpy.float64, numpy.int32,

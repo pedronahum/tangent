@@ -348,8 +348,11 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
   optimization passes can corrupt the result. Ordinary code never calls these
   primitives directly.
 - **`break`/`continue`** are rejected at transform time.
-- **Python lists/dicts are not differentiable containers** — use NumPy/JAX/TF/
-  torch arrays for differentiated data.
+- **Containers as function arguments (pytrees)**: tuples, lists and dicts of
+  arrays can be passed as arguments and indexed/looped for first-order
+  gradients. **Returning** a container is not yet supported, and neither are
+  second derivatives through container arguments (`tangent.seed_pytree` /
+  `tangent.match_seed` are the building blocks toward that).
 - **TF seed dtype** — see [Backend Support](#-backend-support).
 - **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
   a variable assigned exactly once to a literal and never mutated; dynamically
