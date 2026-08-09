@@ -18,11 +18,7 @@ import tempfile
 from uuid import uuid4
 
 import gast
-import six
-if six.PY3:
-  from importlib import util
-else:
-  import imp
+from importlib import util
 
 from tangent import quoting
 
@@ -54,12 +50,9 @@ def compile_file(source, globals_=None):
 
   # Load the temporary file as a module
   module_name = 'tangent_%s' % uuid
-  if six.PY3:
-    spec = util.spec_from_file_location(module_name, tmpname)
-    m = util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-  else:
-    m = imp.load_source(module_name, tmpname)
+  spec = util.spec_from_file_location(module_name, tmpname)
+  m = util.module_from_spec(spec)
+  spec.loader.exec_module(m)
 
   # Update the modules namespace
   if globals_:
@@ -87,7 +80,7 @@ def compile_function(node, globals_=None):
     ValueError: If no function can be found.
   """
   if not isinstance(node, gast.AST):
-    if not isinstance(node, six.string_types):
+    if not isinstance(node, str):
       raise TypeError
     node = gast.parse(node)
   if isinstance(node, gast.Module):

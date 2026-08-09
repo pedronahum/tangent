@@ -21,7 +21,6 @@ from collections import defaultdict
 import builtins
 
 import gast
-import six
 
 from tangent import annotations as anno
 from tangent import cfg
@@ -49,11 +48,11 @@ class ResolveCalls(gast.NodeVisitor):
       seen.add(id(unwrapped))
       unwrapped = unwrapped.__wrapped__
 
-    self.namespace = six.get_function_globals(unwrapped)
-    if six.get_function_closure(unwrapped):
+    self.namespace = unwrapped.__globals__
+    if unwrapped.__closure__:
       self.namespace.update(dict(zip(
           unwrapped.__code__.co_freevars,
-          (cell.cell_contents for cell in six.get_function_closure(unwrapped)))))
+          (cell.cell_contents for cell in unwrapped.__closure__))))
 
   def visit_FunctionDef(self, node):
     self.generic_visit(node)

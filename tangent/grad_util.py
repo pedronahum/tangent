@@ -56,7 +56,6 @@ import enum
 import inspect
 import gast
 import numpy
-import six
 from tangent import anf as anf_
 from tangent import annotate
 from tangent import ast as ast_
@@ -224,13 +223,13 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
   # differentiate (see unwrap_function); e.g. a cached gradient function is
   # wrapped and would otherwise contribute Tangent's globals instead of numpy.
   unwrapped_top = unwrap_function(func)
-  namespace.update(six.get_function_globals(unwrapped_top))
+  namespace.update(unwrapped_top.__globals__)
 
   # Add closure variables to namespace
-  if six.get_function_closure(unwrapped_top):
+  if unwrapped_top.__closure__:
     namespace.update(dict(zip(
         unwrapped_top.__code__.co_freevars,
-        (cell.cell_contents for cell in six.get_function_closure(unwrapped_top)))))
+        (cell.cell_contents for cell in unwrapped_top.__closure__))))
 
   node, required = autodiff_ast(func, wrt, motion, mode, preserve_result,
                                 check_dims, verbose, checkpoint_config)
@@ -245,13 +244,13 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
     func, wrt = to_do.pop()
     # Unwrap JAX JIT functions to access __globals__
     unwrapped_func = unwrap_function(func)
-    namespace.update(six.get_function_globals(unwrapped_func))
+    namespace.update(unwrapped_func.__globals__)
 
     # Add closure variables to namespace
-    if six.get_function_closure(unwrapped_func):
+    if unwrapped_func.__closure__:
       namespace.update(dict(zip(
           unwrapped_func.__code__.co_freevars,
-          (cell.cell_contents for cell in six.get_function_closure(unwrapped_func)))))
+          (cell.cell_contents for cell in unwrapped_func.__closure__))))
 
     node, required = autodiff_ast(
         func=func,

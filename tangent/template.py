@@ -24,7 +24,6 @@ import types
 import enum
 
 import gast
-import six
 from tangent import annotations as anno
 from tangent import ast as ast_
 from tangent import create
@@ -219,7 +218,7 @@ def replace(template, replace_grad=Replace.PARTIAL,
     tree = quoting.quote(template, return_expr=True)
   # If the replacements are strings, turn them into nodes
   for k, v in replacements.items():
-    if isinstance(v, six.string_types):
+    if isinstance(v, str):
       replacements[k] = quoting.quote(v)
   # Perform the replacement
   ReplaceTransformer(replacements).visit(tree)

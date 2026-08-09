@@ -24,7 +24,6 @@ is appended with a variable for the derivative direction.
 from __future__ import absolute_import
 import inspect
 import gast
-import six
 import tangent
 from tangent import annotate
 from tangent import annotations as anno
@@ -302,22 +301,21 @@ class ForwardAD(transformers.TreeTransformer):
 
     # Let's fill in the template. The first argument is the output, which
     # was stored in a temporary variable
-    output_name = six.get_function_code(template_).co_varnames[0]
+    output_name = template_.__code__.co_varnames[0]
     arg_replacements = {output_name: self.tmp_node}
     arg_replacements.update(bound_args.arguments)
 
     # If the template uses *args, then we pack the corresponding inputs
-    flags = six.get_function_code(template_).co_flags
+    flags = template_.__code__.co_flags
 
     if flags & inspect.CO_VARARGS:
-      to_pack = node.args[six.get_function_code(template_).co_argcount - 1:]
-      vararg_name = six.get_function_code(template_).co_varnames[-1]
+      to_pack = node.args[template_.__code__.co_argcount - 1:]
+      vararg_name = template_.__code__.co_varnames[-1]
       target = gast.Name(annotation=None, id=vararg_name, ctx=gast.Store())
       value = gast.Tuple(elts=to_pack, ctx=gast.Load())
 
       # And we fill in the packed tuple into the template
-      arg_replacements[six.get_function_code(template_).co_varnames[
-          -1]] = target
+      arg_replacements[template_.__code__.co_varnames[-1]] = target
     tangent_node = template.replace(
         template_,
         replace_grad=template.Replace.TANGENT,

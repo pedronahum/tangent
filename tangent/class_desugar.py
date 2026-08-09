@@ -47,8 +47,6 @@ import inspect
 import textwrap
 import types
 
-import six
-
 
 class ClassMethodInliner(gast.NodeTransformer):
     """Inlines class method calls by substituting method bodies.
@@ -72,11 +70,11 @@ class ClassMethodInliner(gast.NodeTransformer):
         # enclosing scope of `func` (e.g. inside a test function), in which
         # case they live in the closure rather than in __globals__ - merge
         # both, mirroring annotate.ResolveCalls.
-        self.namespace = dict(six.get_function_globals(func))
-        if six.get_function_closure(func):
+        self.namespace = dict(func.__globals__)
+        if func.__closure__:
             self.namespace.update(dict(zip(
                 func.__code__.co_freevars,
-                (cell.cell_contents for cell in six.get_function_closure(func)))))
+                (cell.cell_contents for cell in func.__closure__))))
 
         # Map variable name -> class info
         # e.g., 'calc' -> {'class': Calculator, 'init_args': [...]}

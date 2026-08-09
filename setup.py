@@ -15,7 +15,6 @@ install_requires = [
     'future',
     'gast>=0.6.0,<0.8.0',
     'numpy',
-    'six',
 ]
 
 extras_require = {

@@ -27,7 +27,6 @@ import types
 
 import autograd
 import numpy
-import six
 from tangent import annotations as anno
 from tangent import non_differentiable
 from tangent import quoting
@@ -378,7 +377,7 @@ grad_initializers = {
     numpy.int64: (init_zero_int, False),
     list: (lambda obj: [init_grad(el) for el in obj], False),
     tuple: (lambda obj: [init_grad(el) for el in obj], False),
-    dict: (lambda obj: {k: init_grad(v) for k, v in six.iteritems(obj)}, False),
+    dict: (lambda obj: {k: init_grad(v) for k, v in obj.items()}, False),
     Stack: (lambda obj: Stack(), False),
     float: (lambda obj: 0.0, False),
     int: (init_zero_int, False),

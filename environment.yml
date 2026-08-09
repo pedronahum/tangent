@@ -6,7 +6,6 @@ dependencies:
   - future
   - nose
   - numpy
-  - six
   - pip:
     - autograd
     - astor>=0.6

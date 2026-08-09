@@ -13,12 +13,12 @@
 #      limitations under the License.
 """Tools for naming conventions."""
 from __future__ import absolute_import
+import functools
 import random
 import re
 import types
 
 import gast
-import six
 
 PRIMAL_NAME = 'pri_{}{}'
 ADJOINT_NAME = '_d{}d{}'
@@ -44,7 +44,7 @@ def primal_name(func, wrt):
     if not isinstance(unwrapped, types.FunctionType):
       raise TypeError(func)
 
-  varnames = six.get_function_code(unwrapped).co_varnames
+  varnames = unwrapped.__code__.co_varnames
   # Use the original function's name for consistency
   func_name = func.__name__ if hasattr(func, '__name__') else unwrapped.__name__
   return PRIMAL_NAME.format(func_name, ''.join(varnames[i] for i in wrt))
@@ -64,7 +64,7 @@ def _adjoint_name(func, wrt, template):
     if not isinstance(unwrapped, types.FunctionType):
       raise TypeError
 
-  varnames = six.get_function_code(unwrapped).co_varnames
+  varnames = unwrapped.__code__.co_varnames
   # Use the original function's name for consistency
   func_name = func.__name__ if hasattr(func, '__name__') else unwrapped.__name__
   return template.format(func_name, ''.join(varnames[i] for i in wrt))
@@ -104,7 +104,7 @@ def get_names(node):
 
 def uniqify(func):
   """Make sure that a method returns a unique name."""
-  @six.wraps(func)
+  @functools.wraps(func)
   def unique(self, *args, **kwargs):
     return self.unique(func(self, *args, **kwargs))
   return unique
@@ -112,7 +112,7 @@ def uniqify(func):
 
 def uniqify_once(func):
   """Make sure that a method returns a unique name."""
-  @six.wraps(func)
+  @functools.wraps(func)
   def unique_once(self, *args, **kwargs):
     return self.unique_once(func(self, *args, **kwargs))
   return unique_once

@@ -13,7 +13,6 @@
 #      limitations under the License.
 """Automatically test gradients with multiple inputs, modes and motions."""
 import numpy as np
-import six
 
 import functions
 import tfe_utils
@@ -58,7 +57,7 @@ def pytest_generate_tests(metafunc):
     if args:
       func_args = []
       for f in whitelist:
-        fc = six.get_function_code(f)
+        fc = f.__code__
         if fc.co_varnames[:fc.co_argcount] == args:
           func_args.append(f)
     else:

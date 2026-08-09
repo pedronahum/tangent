@@ -26,7 +26,6 @@ import inspect
 from uuid import uuid4
 
 import gast
-import six
 
 from tangent import annotate
 from tangent import annotations as anno
@@ -1177,24 +1176,23 @@ class ReverseAD(object):
 
     # Let's fill in the template. The first argument is the output, which
     # was stored in a temporary variable
-    output_name = six.get_function_code(template_).co_varnames[0]
+    output_name = template_.__code__.co_varnames[0]
     arg_replacements = {output_name: ast_.copy_node(self.target)}
     arg_replacements.update(bound_args.arguments)
 
     # If the template uses *args, then we pack the corresponding inputs
     packing = []
-    flags = six.get_function_code(template_).co_flags
+    flags = template_.__code__.co_flags
 
     if flags & inspect.CO_VARARGS:
-      to_pack = node.args[six.get_function_code(template_).co_argcount - 1:]
-      vararg_name = six.get_function_code(template_).co_varnames[-1]
+      to_pack = node.args[template_.__code__.co_argcount - 1:]
+      vararg_name = template_.__code__.co_varnames[-1]
       target = gast.Name(annotation=None, id=vararg_name, ctx=gast.Store())
       value = gast.Tuple(elts=to_pack, ctx=gast.Load())
       packing = [gast.Assign(targets=[target], value=value)]
 
       # And we fill in the packed tuple into the template
-      arg_replacements[six.get_function_code(
-          template_).co_varnames[-1]] = target
+      arg_replacements[template_.__code__.co_varnames[-1]] = target
     # For varargs templates the template assigns the tuple of partials to the
     # regular adjoint of the packed var (e.g. `barrays`), which the unpacking
     # below then reads. That requires Replace.FULL (regular adjoints); with the
