@@ -30,7 +30,9 @@ extras_require = {
     # Keras 3 support (backend-agnostic ops; requires one of the Keras
     # backends - tensorflow, jax or torch).
     'keras': ['keras>=3.0'],
-    # Symbolic optimizations (tangent.optimizations.algebraic_simplification)
+    # Symbolic optimizations (tangent.optimizations.algebraic_simplification
+    # and the straight-line coarsening prototype in
+    # tangent.optimizations.coarsening)
     'symbolic': ['sympy>=1.12'],
     # Visualization tools (tangent.visualization)
     'viz': ['matplotlib>=3.7', 'networkx>=3.0'],
