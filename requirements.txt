@@ -9,7 +9,6 @@
 #   pip install tangent[viz]      matplotlib + networkx visualization
 #   pip install tangent[all]      everything above, including pytest
 autograd>=1.2
-future
 gast>=0.6.0,<0.8.0
 pytest>=6.0
 numpy
