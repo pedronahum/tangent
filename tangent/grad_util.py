@@ -76,6 +76,7 @@ from tangent import return_desugar
 from tangent import sentinel_rename
 from tangent import lambda_desugar
 from tangent import listcomp_desugar
+from tangent import concat_desugar
 from tangent import naming
 from tangent import optimization
 from tangent import quoting
@@ -146,6 +147,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   node = comprehension_desugar.desugar_comprehensions(node)
   node = listcomp_desugar.desugar_listcomps(node)
   node = dict_method_desugar.desugar_dict_methods(node)
+  node = concat_desugar.desugar_concat(node)
   # Forward mode supports if-statements but not conditional expressions, so
   # lower ternaries to if-statements. This runs last so it also catches
   # ternaries introduced by other desugarings (e.g. d.get(k, default)). Reverse

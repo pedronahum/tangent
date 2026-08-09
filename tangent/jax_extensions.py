@@ -553,18 +553,76 @@ def adjoint_take(y, x, indices, axis=None):
             jnp.ravel(d[y])), x.shape)
 
 
-# Concatenation and stacking
+# Concatenation and stacking.
+#
+# jnp.concatenate / jnp.stack take a *list* of arrays, but Tangent can only
+# distribute gradients to varargs (a list is not a differentiable container).
+# concat_desugar rewrites list-literal calls into the varargs helpers below
+# (tangent.concat_seq / tangent.stack_seq), which carry varargs adjoints
+# modelled on the numpy.broadcast_arrays adjoint.
+
+def concat_seq(axis, *arrays):
+    """Runtime helper: concatenate a varargs sequence of arrays."""
+    return jnp.concatenate(list(arrays), axis=axis)
+
+
+def stack_seq(axis, *arrays):
+    """Runtime helper: stack a varargs sequence of arrays."""
+    return jnp.stack(list(arrays), axis=axis)
+
+
+def concat_split_points(arrays, axis):
+    """Cumulative sizes of all but the last array (split indices for jnp.split).
+
+    Shapes are static runtime values, so this is plain (non-differentiable)
+    integer arithmetic. Exposed via the tangent module so the generated code
+    can resolve it.
+    """
+    points = []
+    total = 0
+    for arr in arrays[:-1]:
+        total = total + arr.shape[axis]
+        points.append(total)
+    return points
+
+
+non_differentiable.register_non_differentiable_functions(
+    concat_split_points)
+
+
+@adjoint(concat_seq)
+def adjoint_concat_seq(z, axis, *arrays):
+    """Adjoint for concat_seq: split the gradient back to the original arrays."""
+    d[arrays] = tuple(jnp.split(d[z], tangent.concat_split_points(arrays, axis),
+                                axis=axis))
+
+
+@adjoint(stack_seq)
+def adjoint_stack_seq(z, axis, *arrays):
+    """Adjoint for stack_seq: unstack the gradient along the stacked axis."""
+    d[arrays] = tuple(jnp.moveaxis(d[z], axis, 0))
+
+
+# The list-argument forms cannot be differentiated directly; they are only
+# reachable when the desugar pass could not rewrite the call (e.g. the list is
+# a variable, not a literal). Raise a clear error rather than generating broken
+# code.
 @adjoint(jnp.concatenate)
 def adjoint_concatenate(dz, arrays, axis=0):
-    """Adjoint for jnp.concatenate: split gradient back to original arrays"""
-    sizes = [arr.shape[axis] for arr in arrays]
-    return tuple(jnp.split(dz, jnp.cumsum(jnp.array(sizes[:-1])), axis=axis))
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate jnp.concatenate/stack when the list of '
+        'arrays is a literal. Bind the list to a variable and pass its '
+        'elements explicitly, or use a list literal.')
 
 
 @adjoint(jnp.stack)
 def adjoint_stack(dz, arrays, axis=0):
-    """Adjoint for jnp.stack: unstack gradient"""
-    return tuple(jnp.moveaxis(dz, axis, 0))
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate jnp.concatenate/stack when the list of '
+        'arrays is a literal. Bind the list to a variable and pass its '
+        'elements explicitly, or use a list literal.')
 
 
 # JAX neural network activations (jax.nn.*)

@@ -1195,7 +1195,16 @@ class ReverseAD(object):
       # And we fill in the packed tuple into the template
       arg_replacements[six.get_function_code(
           template_).co_varnames[-1]] = target
-    adjoint = template.replace(template_, namer=self.namer, **arg_replacements)
+    # For varargs templates the template assigns the tuple of partials to the
+    # regular adjoint of the packed var (e.g. `barrays`), which the unpacking
+    # below then reads. That requires Replace.FULL (regular adjoints); with the
+    # default Replace.PARTIAL the template would assign a *temp* adjoint
+    # (`_barrays`) that the unpacking never reads, leaving it undefined.
+    replace_grad = (template.Replace.FULL if flags & inspect.CO_VARARGS
+                    else template.Replace.PARTIAL)
+    adjoint = template.replace(
+        template_, namer=self.namer, replace_grad=replace_grad,
+        **arg_replacements)
     unpacking = []
     if flags & inspect.CO_VARARGS:
       # If the template packs arguments, then we have to unpack the

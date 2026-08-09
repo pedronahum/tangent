@@ -205,7 +205,11 @@ def replace(template, replace_grad=Replace.PARTIAL,
     placeholders = set(arg.id for arg in tree.args.args)
     tree.args.args = []
     if tree.args.vararg:
-      placeholders.add(tree.args.vararg)
+      # In gast the vararg is a Name node; older ast used an arg node with
+      # `.arg`. Normalise to the placeholder name string so the comparison
+      # against replacements.keys() (strings) works.
+      vararg = tree.args.vararg
+      placeholders.add(vararg.id if hasattr(vararg, 'id') else vararg.arg)
       tree.args.vararg = None
     if set(replacements.keys()) != placeholders:
       raise ValueError('too many or few replacements')
