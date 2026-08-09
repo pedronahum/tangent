@@ -76,6 +76,15 @@ def keras_seed(g, like):
         g, dtype=keras.backend.standardize_dtype(like.dtype))
 
 
+def keras_dtype_name(x):
+    """The standardized dtype name of a backend tensor, as a string.
+
+    Used by adjoint templates so generated code only needs the
+    tangent namespace, not a `keras` import in the user's module.
+    """
+    return keras.backend.standardize_dtype(x.dtype)
+
+
 def keras_max_mask(x, axis=None):
     """Normalized mask selecting the maximal element(s) along an axis.
 
@@ -100,7 +109,7 @@ def keras_min_mask(x, axis=None):
 non_differentiable.register_non_differentiable_functions(
     kops.zeros, kops.ones, kops.zeros_like, kops.ones_like,
     kops.full, kops.full_like, kops.eye, kops.arange,
-    keras_seed, keras_max_mask, keras_min_mask
+    keras_seed, keras_dtype_name, keras_max_mask, keras_min_mask
 )
 
 
@@ -246,7 +255,7 @@ def adjoint_tanh(y, x):
 @adjoint(kops.relu)
 def adjoint_relu(y, x):
     """Adjoint for keras.ops.relu."""
-    mask = kops.cast(x > 0, keras.backend.standardize_dtype(x.dtype))
+    mask = kops.cast(x > 0, tangent.keras_dtype_name(x))
     d[x] = tangent.keras_seed(d[y], x) * mask
 
 
@@ -354,8 +363,8 @@ def adjoint_expand_dims(y, x, axis):
 def adjoint_maximum(z, x1, x2):
     """Adjoint for keras.ops.maximum."""
     dz = tangent.keras_seed(d[z], x1)
-    m1 = kops.cast(x1 >= x2, keras.backend.standardize_dtype(x1.dtype))
-    m2 = kops.cast(x2 > x1, keras.backend.standardize_dtype(x2.dtype))
+    m1 = kops.cast(x1 >= x2, tangent.keras_dtype_name(x1))
+    m2 = kops.cast(x2 > x1, tangent.keras_dtype_name(x2))
     d[x1] = tangent.unbroadcast(dz * m1, x1)
     d[x2] = tangent.unbroadcast(dz * m2, x2)
 
@@ -364,8 +373,8 @@ def adjoint_maximum(z, x1, x2):
 def adjoint_minimum(z, x1, x2):
     """Adjoint for keras.ops.minimum."""
     dz = tangent.keras_seed(d[z], x1)
-    m1 = kops.cast(x1 <= x2, keras.backend.standardize_dtype(x1.dtype))
-    m2 = kops.cast(x2 < x1, keras.backend.standardize_dtype(x2.dtype))
+    m1 = kops.cast(x1 <= x2, tangent.keras_dtype_name(x1))
+    m2 = kops.cast(x2 < x1, tangent.keras_dtype_name(x2))
     d[x1] = tangent.unbroadcast(dz * m1, x1)
     d[x2] = tangent.unbroadcast(dz * m2, x2)
 
@@ -375,7 +384,7 @@ def adjoint_clip(y, x, x_min, x_max):
     """Adjoint for keras.ops.clip."""
     inside = kops.cast(
         kops.logical_and(x >= x_min, x <= x_max),
-        keras.backend.standardize_dtype(x.dtype))
+        tangent.keras_dtype_name(x))
     d[x] = tangent.keras_seed(d[y], x) * inside
 
 
@@ -497,7 +506,7 @@ def tangent_transpose(y, x, axes=None):
 @tangent_(kops.relu)
 def tangent_relu(y, x):
     """Forward mode for keras.ops.relu."""
-    mask = kops.cast(x > 0, keras.backend.standardize_dtype(x.dtype))
+    mask = kops.cast(x > 0, tangent.keras_dtype_name(x))
     d[y] = d[x] * mask
 
 

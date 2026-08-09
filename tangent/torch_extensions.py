@@ -267,6 +267,11 @@ def adjoint_neg(y, x):
     d[x] = -tangent.torch_seed(d[y], x)
 
 
+# torch.negative etc. are distinct function objects from torch.neg; register
+# the same templates for the long-name aliases.
+adjoint(torch.negative)(adjoint_neg)
+
+
 # Exponential and logarithmic functions
 @adjoint(torch.exp)
 def adjoint_exp(y, x):
@@ -480,7 +485,7 @@ def adjoint_reshape(y, x, shape):
 
 
 @adjoint(torch.transpose)
-def adjoint_transpose(y, x, dim0, dim1):
+def adjoint_transpose(y, x, dim0=-2, dim1=-1):
     """Adjoint for torch.transpose (self-inverse)."""
     d[x] = torch.transpose(tangent.torch_seed(d[y], x), dim0, dim1)
 
@@ -705,7 +710,7 @@ def tangent_reshape(y, x, shape):
 
 
 @tangent_(torch.transpose)
-def tangent_transpose(y, x, dim0, dim1):
+def tangent_transpose(y, x, dim0=-2, dim1=-1):
     """Forward mode for torch.transpose."""
     d[y] = torch.transpose(d[x], dim0, dim1)
 

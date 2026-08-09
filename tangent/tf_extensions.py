@@ -400,6 +400,25 @@ def dtfreshape(y, x, shape):
   d[x] = tf.reshape(d[y], tf.shape(x))
 
 
+@adjoint(tf.transpose)
+def dtftranspose(y, x, perm=None):
+  # Transpose is its own inverse for the default (full reversal); for an
+  # explicit permutation, apply the inverse permutation.
+  if perm is None:
+    d[x] = tf.transpose(d[y])
+  else:
+    inv_perm = [0] * len(perm)
+    for i, p in enumerate(perm):
+      inv_perm[p] = i
+    d[x] = tf.transpose(d[y], inv_perm)
+
+
+@adjoint(tf.cast)
+def dtfcast(y, x, dtype):
+  # Gradients flow through a cast unchanged, cast back to the input dtype.
+  d[x] = tf.cast(d[y], x.dtype)
+
+
 @adjoint(tf.reduce_sum)
 def dtfreduce_sum(y, x, axis=None, keep_dims=False):
   # TODO: We may be able to assume unreduce_tensor works throughout.
@@ -595,6 +614,11 @@ def ttfsqueeze(y, x, axis):
 @tangent_(tf.reshape)
 def ttfreshape(y, x, shape):
   d[y] = tf.reshape(d[x], shape)
+
+
+@tangent_(tf.cast)
+def ttfcast(y, x, dtype):
+  d[y] = tf.cast(d[x], dtype)
 
 
 @tangent_(tf.reduce_sum)

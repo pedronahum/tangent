@@ -461,47 +461,58 @@ def adjoint_dot(z, x, y):
 
 
 @adjoint(jnp.matmul)
-def adjoint_matmul(dz, x, y):
-    """Adjoint for jnp.matmul (same as dot for 2D arrays)."""
-    return jnp.matmul(dz, jnp.swapaxes(y, -2, -1)), jnp.matmul(jnp.swapaxes(x, -2, -1), dz)
+def adjoint_matmul(z, x, y):
+    """Adjoint for jnp.matmul covering vector and matrix cases."""
+    if x.ndim == 1 and y.ndim == 1:
+        d[x] = d[z] * y
+        d[y] = d[z] * x
+    elif x.ndim == 2 and y.ndim == 1:
+        d[x] = jnp.outer(d[z], y)
+        d[y] = jnp.matmul(jnp.swapaxes(x, -2, -1), d[z])
+    elif x.ndim == 1 and y.ndim == 2:
+        d[x] = jnp.matmul(d[z], jnp.swapaxes(y, -2, -1))
+        d[y] = jnp.outer(x, d[z])
+    else:
+        d[x] = jnp.matmul(d[z], jnp.swapaxes(y, -2, -1))
+        d[y] = jnp.matmul(jnp.swapaxes(x, -2, -1), d[z])
 
 
 @adjoint(jnp.transpose)
-def adjoint_transpose(dz, x, axes=None):
+def adjoint_transpose(y, x, axes=None):
     """Adjoint for jnp.transpose: ∂L/∂x = transpose(∂L/∂z)"""
     if axes is None:
-        return jnp.transpose(dz)
+        d[x] = jnp.transpose(d[y])
     else:
         # Invert the permutation
         inv_axes = [0] * len(axes)
         for i, ax in enumerate(axes):
             inv_axes[ax] = i
-        return jnp.transpose(dz, inv_axes)
+        d[x] = jnp.transpose(d[y], inv_axes)
 
 
 @adjoint(jnp.reshape)
-def adjoint_reshape(dz, x, newshape):
+def adjoint_reshape(y, x, newshape):
     """Adjoint for jnp.reshape: ∂L/∂x = reshape(∂L/∂z, original_shape)"""
-    return jnp.reshape(dz, x.shape)
+    d[x] = jnp.reshape(d[y], x.shape)
 
 
 @adjoint(jnp.squeeze)
-def adjoint_squeeze(dz, x, axis=None):
-    """Adjoint for jnp.squeeze: ∂L/∂x = expand_dims(∂L/∂z)"""
-    return jnp.reshape(dz, x.shape)
+def adjoint_squeeze(y, x, axis=None):
+    """Adjoint for jnp.squeeze: ∂L/∂x = reshape back to the original shape"""
+    d[x] = jnp.reshape(d[y], x.shape)
 
 
 @adjoint(jnp.expand_dims)
-def adjoint_expand_dims(dz, x, axis):
+def adjoint_expand_dims(y, x, axis):
     """Adjoint for jnp.expand_dims: ∂L/∂x = squeeze(∂L/∂z)"""
-    return jnp.squeeze(dz, axis=axis)
+    d[x] = jnp.squeeze(d[y], axis=axis)
 
 
 # Element-wise operations
 @adjoint(jnp.abs)
-def adjoint_abs(dz, x):
+def adjoint_abs(y, x):
     """Adjoint for jnp.abs: ∂L/∂x = sign(x)·∂L/∂z"""
-    return dz * jnp.sign(x)
+    d[x] = d[y] * jnp.sign(x)
 
 
 @adjoint(jnp.maximum)
@@ -519,30 +530,27 @@ def adjoint_minimum(z, x, y):
 
 
 @adjoint(jnp.clip)
-def adjoint_clip(dz, x, a_min, a_max):
+def adjoint_clip(y, x, a_min, a_max):
     """Adjoint for jnp.clip: gradient flows only where x is not clipped"""
     mask = ((x >= a_min) & (x <= a_max)).astype(x.dtype)
-    return dz * mask, (), ()
+    d[x] = d[y] * mask
 
 
 @adjoint(jnp.where)
-def adjoint_where(dz, condition, x, y):
+def adjoint_where(z, condition, x, y):
     """Adjoint for jnp.where: gradient goes to x if condition else y"""
-    return (), jnp.where(condition, dz, jnp.zeros_like(dz)), jnp.where(condition, jnp.zeros_like(dz), dz)
+    d[x] = jnp.where(condition, d[z], jnp.zeros_like(d[z]))
+    d[y] = jnp.where(condition, jnp.zeros_like(d[z]), d[z])
 
 
 # Indexing operations
 @adjoint(jnp.take)
-def adjoint_take(dz, x, indices, axis=None):
-    """Adjoint for jnp.take: scatter gradient back to indexed positions"""
-    # This is a simplified version; full implementation needs scatter
-    dx = jnp.zeros_like(x)
-    if axis is None:
-        # Flatten case
-        return dx.flatten().at[indices].add(dz.flatten()).reshape(x.shape)
-    else:
-        # Need proper scatter along axis
-        return dx
+def adjoint_take(y, x, indices, axis=None):
+    """Adjoint for jnp.take: scatter the gradient back to the indexed
+    positions. Only the axis=None (flattened-index) form is supported."""
+    d[x] = jnp.reshape(
+        jnp.zeros_like(jnp.ravel(x)).at[jnp.ravel(indices)].add(
+            jnp.ravel(d[y])), x.shape)
 
 
 # Concatenation and stacking
