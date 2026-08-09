@@ -43,9 +43,11 @@ jobs:
         run: python -m pytest tests -q
 
   test-full:
-    # Exercises the TensorFlow, JAX, SymPy and visualization code paths as
-    # well. Pinned to a single interpreter to keep CI time bounded; the
-    # matrix job above covers interpreter breadth.
+    # Exercises the TensorFlow, JAX, PyTorch, Keras, SymPy and visualization
+    # code paths as well, so the cross-backend coverage suite
+    # (tests/test_backend_coverage.py) runs against all four backends. Pinned
+    # to a single interpreter to keep CI time bounded; the matrix job above
+    # covers interpreter breadth.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,8 +55,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install with all optional backends
-        run: >-
-          pip install -r requirements.txt
-          tensorflow jax sympy matplotlib networkx
+        run: |
+          pip install -r requirements.txt tensorflow jax keras sympy matplotlib networkx
+          # CPU-only PyTorch wheel to keep the CI image small.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Run test suite
         run: python -m pytest tests -q
