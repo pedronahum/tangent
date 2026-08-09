@@ -392,7 +392,10 @@ def dtfexpand_dims(y, x, axis):
 
 @adjoint(tf.squeeze)
 def dtfsqueeze(y, x, axis=None):
-  d[x] = tf.expand_dims(d[y], axis)
+  # Reshape back to the primal's shape; this handles axis=None (squeeze all
+  # unit dims) as well as single/multi-axis squeezes, whereas expand_dims
+  # requires a concrete axis.
+  d[x] = tf.reshape(d[y], tf.shape(x))
 
 
 @adjoint(tf.reshape)

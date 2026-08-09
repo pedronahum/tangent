@@ -375,5 +375,131 @@ def test_transpose_gradient(backend):
     assert allclose(got, np.ones((2, 3)))
 
 
+# ---------------------------------------------------------------------------
+# Clipping
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_clip_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([-1.0, 0.5, 2.0], dtype='float32')
+
+    # The clipping op and the reduction are both backend-specific, so each
+    # backend gets its own function definition.
+    if backend == 'jax':
+        def f(x):
+            return jnp.sum(jnp.clip(x, 0.0, 1.0))
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_sum(tf.clip_by_value(x, 0.0, 1.0))
+    elif backend == 'torch':
+        def f(x):
+            return torch.sum(torch.clamp(x, 0.0, 1.0))
+    else:
+        def f(x):
+            return kops.sum(kops.clip(x, 0.0, 1.0))
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
+    # Gradient is 1 inside the clip range and 0 where the value was clipped.
+    assert allclose(got, np.array([0.0, 1.0, 0.0], dtype='float32'))
+
+
+# ---------------------------------------------------------------------------
+# Dimension manipulation: squeeze / expand_dims
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_squeeze_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.arange(3.0, dtype='float32').reshape(1, 3, 1)
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.sum(jnp.squeeze(x))
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_sum(tf.squeeze(x))
+    elif backend == 'torch':
+        def f(x):
+            return torch.sum(torch.squeeze(x))
+    else:
+        def f(x):
+            return kops.sum(kops.squeeze(x))
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
+    # The gradient is broadcast back to the original (un-squeezed) shape.
+    assert allclose(got, np.ones((1, 3, 1), dtype='float32'))
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_expand_dims_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([1.0, 2.0, 3.0], dtype='float32')
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.sum(jnp.expand_dims(x, 0))
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_sum(tf.expand_dims(x, 0))
+    elif backend == 'torch':
+        def f(x):
+            return torch.sum(torch.unsqueeze(x, 0))
+    else:
+        def f(x):
+            return kops.sum(kops.expand_dims(x, 0))
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
+    assert allclose(got, np.ones(3, dtype='float32'))
+
+
+# ---------------------------------------------------------------------------
+# Reduction max / min (gradient flows to the extremal element)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_reduce_max_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([1.0, 3.0, 2.0], dtype='float32')
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.max(x)
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_max(x)
+    elif backend == 'torch':
+        def f(x):
+            return torch.max(x)
+    else:
+        def f(x):
+            return kops.max(x)
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
+    assert allclose(got, np.array([0.0, 1.0, 0.0], dtype='float32'))
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_reduce_min_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([3.0, 1.0, 2.0], dtype='float32')
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.min(x)
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_min(x)
+    elif backend == 'torch':
+        def f(x):
+            return torch.min(x)
+    else:
+        def f(x):
+            return kops.min(x)
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
+    assert allclose(got, np.array([0.0, 1.0, 0.0], dtype='float32'))
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

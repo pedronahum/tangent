@@ -416,18 +416,30 @@ def adjoint_mean(y, x, axis=None, keepdims=False):
 @adjoint(torch.max)
 def adjoint_max(y, x, axis=None, keepdims=False):
     """Adjoint for torch.max: gradient flows to the maximum element(s)."""
-    max_val = torch.max(x, dim=axis, keepdim=True).values
-    mask = (x == max_val).to(x.dtype)
-    num_max = torch.sum(mask, dim=axis, keepdim=True)
+    if axis is None:
+        # Global reduction: torch.max(x, dim=None, ...) is not a valid call.
+        max_val = torch.max(x)
+        mask = (x == max_val).to(x.dtype)
+        num_max = torch.sum(mask)
+    else:
+        max_val = torch.max(x, dim=axis, keepdim=True).values
+        mask = (x == max_val).to(x.dtype)
+        num_max = torch.sum(mask, dim=axis, keepdim=True)
     d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) * mask / num_max
 
 
 @adjoint(torch.min)
 def adjoint_min(y, x, axis=None, keepdims=False):
     """Adjoint for torch.min: gradient flows to the minimum element(s)."""
-    min_val = torch.min(x, dim=axis, keepdim=True).values
-    mask = (x == min_val).to(x.dtype)
-    num_min = torch.sum(mask, dim=axis, keepdim=True)
+    if axis is None:
+        # Global reduction: torch.min(x, dim=None, ...) is not a valid call.
+        min_val = torch.min(x)
+        mask = (x == min_val).to(x.dtype)
+        num_min = torch.sum(mask)
+    else:
+        min_val = torch.min(x, dim=axis, keepdim=True).values
+        mask = (x == min_val).to(x.dtype)
+        num_min = torch.sum(mask, dim=axis, keepdim=True)
     d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) * mask / num_min
 
 
