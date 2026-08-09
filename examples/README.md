@@ -1,41 +1,57 @@
 # Tangent Examples
 
-This directory contains example scripts and demonstrations of Tangent's capabilities.
+Runnable scripts and notebooks demonstrating Tangent's capabilities. Every
+script is self-contained and prints `PASS`/`FAIL` for each check. Optional
+backends (JAX, TensorFlow, PyTorch, Keras) are used when installed and
+skipped gracefully otherwise; NumPy always runs.
 
-## Files
+## Start here
 
-- **test_basic.py** - Basic Tangent examples with NumPy
-- **test_tf2_basic.py** - TensorFlow 2.x integration examples (9 tests)
-- **test_jax_basic.py** - JAX integration examples (13 tests)
-- **demo_error_messages.py** - Demonstration of enhanced error messages
+- **`recent_features.py`** - Showcase of recent capabilities in one script:
+  straight-line **coarsening** (one symbolic VJP instead of per-op adjoints),
+  **pytree (container) arguments**, **multi-backend** gradients (NumPy /
+  PyTorch / Keras), differentiable **concat/stack**, and **second
+  derivatives** through loops.
+  ```bash
+  python examples/recent_features.py
+  ```
 
-## Running Examples
+## Core examples
 
-### JAX Examples
-```bash
-python examples/test_jax_basic.py
-```
+| File | Demonstrates |
+|---|---|
+| `test_basic.py` | Basics on NumPy: polynomials, second derivatives, readable code |
+| `test_jax_basic.py` | JAX integration (`jax.numpy` ops, `jax.nn` activations) |
+| `test_tf2_basic.py` | TensorFlow 2.x integration (eager mode) |
+| `class_examples.py` | User-defined classes, method inlining, attributes |
+| `lambda_examples.py` | Lambdas, closures, and higher-order functions |
+| `checkpoint_demo.py` | Gradient checkpointing (memory-efficient reverse mode) |
+| `demo_error_messages.py` | Enhanced, actionable error messages |
+| `demo_visualization.py` | Generates the computation-graph / gradient-flow plots |
 
-### TensorFlow 2.x Examples
-```bash
-python examples/test_tf2_basic.py
-```
+## Notebooks
 
-### Error Messages Demo
-```bash
-python examples/demo_error_messages.py
-```
+| Notebook | Contents |
+|---|---|
+| [`Gallery_of_Gradients.ipynb`](Gallery_of_Gradients.ipynb) | Readable-gradient showcase: loops run in reverse, tape recording, conditionals, broadcasting. See [`README_GALLERY.md`](README_GALLERY.md) |
+| [`Building_Energy_Optimization_with_Tangent.ipynb`](Building_Energy_Optimization_with_Tangent.ipynb) | Real-world differentiable simulation. See [`README_BUILDING_EXAMPLE.md`](README_BUILDING_EXAMPLE.md) |
 
-## Quick Start
+A general introduction lives in [`../notebooks/tangent_tutorial.ipynb`](../notebooks/tangent_tutorial.ipynb).
+
+## Extended NumPy op demos
+
+`numpy_extended/` demonstrates the extended NumPy adjoints (matmul, reductions,
+statistics, shape ops) with its own `README.md`, `demo.py`, and tests.
+
+## Quick start
 
 ```python
 import tangent
-import jax.numpy as jnp
+import numpy as np
 
 def f(x):
-    return jnp.sum(x ** 2)
+    return np.sum(x ** 2)
 
 df = tangent.grad(f)
-gradient = df(jnp.array([1.0, 2.0, 3.0]))
-# Result: [2., 4., 6.]
+print(df(np.array([1.0, 2.0, 3.0])))   # [2. 4. 6.]
 ```

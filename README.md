@@ -208,7 +208,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Operators**: arithmetic, comparisons, boolean (`and`, `or`, `not`), augmented assignment (`+=`, `-=`, `*=`, `/=`, `**=`)
 - **Functions**: lambdas, closures and factories, nested calls, default/keyword arguments
 - **Classes**: user-defined classes with method inlining, instance attributes, method chaining, inheritance and `super()`
-- **Data**: NumPy arrays, dictionaries (string-keyed access), tuples, lists in non-differentiated code, list comprehensions
+- **Data**: NumPy arrays; **pytree arguments** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure; list comprehensions
 - **Statements**: `assert`, `pass`, early `return`
 - **Higher-order**: `grad(grad(f))` second derivatives, Hessian-vector products
 
@@ -251,14 +251,32 @@ differentiates it once, and emits a compact vector-Jacobian product:
 df = tangent.grad(f, optimizations={'coarsening': True})
 ```
 
-This is a prototype and deliberately conservative: it only applies to
-reverse-mode gradients of pure straight-line segments of NumPy elementwise
-arithmetic. Anything else — control flow, reductions such as `np.sum`,
-non-NumPy backends (JAX/PyTorch/TensorFlow/Keras), varargs, multi-output
-configurations, or `preserve_result` — transparently falls back to the
-standard pipeline, so enabling it never changes correctness. Requires the
-`symbolic` extra (`pip install "tangent[symbolic]"`). See
-[tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py).
+For a small straight-line kernel the difference is dramatic — the per-op
+reverse pass emits dozens of adjoint statements and tape pushes, while
+coarsening emits one compact VJP:
+
+```python
+def kernel(a, b, c):
+    return (np.exp(np.sin(a * b)) + c) * a
+
+# Coarsened adjoint (auto-generated):
+#   ba = bret * (c + a*b*cos(a*b)*exp(sin(a*b)) + exp(sin(a*b)))
+#   bb = bret * a**2 * cos(a*b) * exp(sin(a*b))
+#   bc = a * bret
+```
+
+It currently coarsens the elementwise ops `sin, cos, tan, exp, log, sqrt,
+arcsin, arccos, arctan` (and `+ - * / **`). It is a prototype and
+deliberately conservative: it only applies to reverse-mode gradients of pure
+straight-line segments of NumPy elementwise arithmetic. Anything else —
+control flow, reductions such as `np.sum`, non-NumPy backends
+(JAX/PyTorch/TensorFlow/Keras), varargs, multi-output configurations, or
+`preserve_result` — transparently falls back to the standard pipeline, so
+enabling it never changes correctness. Requires the `symbolic` extra
+(`pip install "tangent[symbolic]"`). See
+[tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py),
+[docs/optimizations/COARSENING.md](docs/optimizations/COARSENING.md), and the
+worked demo in [`examples/recent_features.py`](examples/recent_features.py).
 
 ---
 
@@ -399,6 +417,17 @@ dnn_dW1 = tangent.grad(neural_network, wrt=(0,))
 # ... one grad per parameter; use in your training loop
 ```
 
+### Runnable scripts
+
+See [`examples/`](examples/README.md) for self-contained, runnable demos. The
+best starting point is **[`examples/recent_features.py`](examples/recent_features.py)**,
+which showcases coarsening, pytree arguments, multi-backend gradients,
+differentiable concat/stack, and second derivatives in one script:
+
+```bash
+python examples/recent_features.py
+```
+
 ### Notebooks
 
 - [Tangent Tutorial](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb) — general introduction
@@ -410,19 +439,23 @@ dnn_dW1 = tangent.grad(neural_network, wrt=(0,))
 ## 🧪 Testing
 
 The suite covers core autodiff, every Python feature, all five backends, and
-second derivatives:
+second derivatives. The cross-backend catalog is checked two ways: against
+hand-derived analytic gradients **and** against an independent
+finite-difference oracle, so newly added adjoints are verified automatically:
 
 ```bash
 pytest tests/                        # core suite (no backends required)
-pytest tests/test_backend_coverage.py  # cross-backend op catalog
+pytest tests/test_backend_coverage.py  # cross-backend op catalog (+ FD oracle)
+pytest tests/test_coarsening.py      # straight-line coarsening
 pytest tests/test_torch.py           # PyTorch-specific tests
 pytest tests/test_keras.py           # Keras tests (any backend)
 ```
 
-Current status: **75,000+ parameterized test cases pass** with core
-dependencies only, and **77,000+** with all backends installed (0 failures;
-the 20 expected failures are the documented tape-API limitation above). CI
-runs the suite on Python 3.9–3.13.
+Current status: **77,000+ parameterized test cases pass** (0 failures). The 21
+expected failures (`xfail`) are documented limitations: the low-level tape API
+under optimized higher-order differentiation, and higher-order differentiation
+through container arguments. CI runs the suite on Python 3.9–3.13 and exercises
+the cross-backend catalog against every installed backend.
 
 ---
 
