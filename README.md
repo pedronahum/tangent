@@ -238,7 +238,27 @@ df = tangent.grad(f, optimized=False)         # all intermediate steps (educatio
 df = tangent.grad(f, optimized=True, verbose=1)  # prints what each pass did
 ```
 
-**Deep dives**: [Symbolic Optimizations](docs/optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md) · [Strength Reduction](docs/optimizations/STRENGTH_REDUCTION_COMPLETE.md) · [Performance Analysis](docs/optimizations/PERFORMANCE_ANALYSIS.md) · [DCE implementation](tangent/optimizations/dce.py)
+**Deep dives**: [Symbolic Optimizations](docs/optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md) · [Strength Reduction](docs/optimizations/STRENGTH_REDUCTION_COMPLETE.md) · [Performance Analysis](docs/optimizations/PERFORMANCE_ANALYSIS.md) · [Straight-Line Coarsening](docs/optimizations/COARSENING.md) · [DCE implementation](tangent/optimizations/dce.py)
+
+### Straight-line coarsening (opt-in)
+
+A different, symbolic strategy is available for hot straight-line kernels.
+Instead of emitting one adjoint statement (and one tape push/pop) per
+primitive op, Tangent lifts the whole segment into a single SymPy expression,
+differentiates it once, and emits a compact vector-Jacobian product:
+
+```python
+df = tangent.grad(f, optimizations={'coarsening': True})
+```
+
+This is a prototype and deliberately conservative: it only applies to
+reverse-mode gradients of pure straight-line segments of NumPy elementwise
+arithmetic. Anything else — control flow, reductions such as `np.sum`,
+non-NumPy backends (JAX/PyTorch/TensorFlow/Keras), varargs, multi-output
+configurations, or `preserve_result` — transparently falls back to the
+standard pipeline, so enabling it never changes correctness. Requires the
+`symbolic` extra (`pip install "tangent[symbolic]"`). See
+[tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py).
 
 ---
 
@@ -331,7 +351,9 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
 - **Python lists/dicts are not differentiable containers** — use NumPy/JAX/TF/
   torch arrays for differentiated data.
 - **TF seed dtype** — see [Backend Support](#-backend-support).
-- **`jnp.concatenate`/`jnp.stack` adjoints** are not yet reliable.
+- **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
+  a variable assigned exactly once to a literal and never mutated; dynamically
+  built lists raise `NotImplementedError`.
 
 ---
 

@@ -400,6 +400,16 @@ differentiate twice with optimizations enabled. **Workaround:** pass
 `optimized=False` to the outer `grad`, or express the computation with
 ordinary Python/NumPy operations and let Tangent manage the tape.
 
+**Root cause (for the curious):** the corruption is *not* caused by optimizing
+the first derivative — that is safe. It appears only when the **second**
+derivative is itself optimized. The standard `optimize()` passes (constant
+folding, dead-code elimination and assignment propagation) remove or reorder
+the `push`/`pop`/`push_stack`/`pop_stack` operations that the second-order
+tape relies on, so a second-order gradient accumulator ends up reading a
+primal value (or a `pop` hits a mismatched op id). A future fix needs to make
+those passes treat tape operations as barriers when optimizing higher-order
+derivatives.
+
 ## Best Practices
 
 ### 1. Use Supported Features When Possible
