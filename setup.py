@@ -24,6 +24,9 @@ extras_require = {
     # (e.g. Grace/DGX Spark) TensorFlow installs as a CPU build.
     'tf': ['tensorflow>=2.16'],
     'jax': ['jax>=0.4.30'],
+    # PyTorch support. Wheels are platform-specific; on aarch64 the default
+    # PyPI wheel is a CPU build.
+    'torch': ['torch>=2.0'],
     # Symbolic optimizations (tangent.optimizations.algebraic_simplification)
     'symbolic': ['sympy>=1.12'],
     # Visualization tools (tangent.visualization)

@@ -103,6 +103,14 @@ def register_unbroadcast(t, unbroadcaster_function):
   unbroadcasters[t] = unbroadcaster_function
 
 
+# Seed types that carry no backend allegiance of their own. When a gradient
+# seed has one of these types and the primal value belongs to a specific
+# backend (TF/JAX/torch), the unbroadcast/unreduce helpers dispatch to the
+# primal's backend so the gradient stays in that backend.
+_GENERIC_GRAD_TYPES = (float, int, bool, numpy.ndarray,
+                       numpy.floating, numpy.integer, numpy.bool_)
+
+
 def unbroadcast(array, like):
   """Reverse the broadcasting operation.
 
@@ -114,6 +122,12 @@ def unbroadcast(array, like):
     Tensor with certain dimensions summed to match the shape of `like`.
   """
   unbroadcaster = unbroadcasters[type(array)]
+  if (type(array) is not type(like) and type(like) in unbroadcasters and
+      isinstance(array, _GENERIC_GRAD_TYPES)):
+    # The seed is a generic type (Python scalar or NumPy) while the primal
+    # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
+    # primal's backend instead of falling back to NumPy.
+    unbroadcaster = unbroadcasters[type(like)]
   return unbroadcaster(array, like)
 
 
@@ -177,8 +191,18 @@ def unreduce_like(array, original_array, axis, keepdims):
     An array with axes broadcast to match the shape of the original array.
   """
   atype = type(array)
-  unreducer = unreducers[atype]
-  shape = shape_functions[atype]
+  otype = type(original_array)
+  cross = (atype is not otype and otype in unreducers and
+           isinstance(array, _GENERIC_GRAD_TYPES))
+  if cross:
+    # The seed is a generic type (Python scalar or NumPy) while the primal
+    # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
+    # primal's backend instead of falling back to NumPy.
+    unreducer = unreducers[otype]
+    shape = shape_functions[otype]
+  else:
+    unreducer = unreducers[atype]
+    shape = shape_functions[atype]
   return unreducer(array, shape(original_array), axis, keepdims)
 
 

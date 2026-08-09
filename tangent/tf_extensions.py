@@ -220,12 +220,15 @@ def unbroadcast_tensor(tensor, like):
   See utils.py.
 
   Args:
-    tensor: A Tensor.
+    tensor: A Tensor, or a generic seed (Python scalar/NumPy) which is
+      converted to a tensor of `like`'s dtype.
     like: A Tensor that could have been broadcasted to the shape of tensor.
 
   Returns:
     Tensor with certain dimensions summed to match the shape of `like`.
   """
+  if not isinstance(tensor, (TensorType, VariableType)):
+    tensor = tf.convert_to_tensor(tensor, dtype=getattr(like, 'dtype', None))
   return unbroadcast_tfe_to(tensor, shape_as_list(like))
 
 

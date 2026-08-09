@@ -99,6 +99,15 @@ except (ImportError, AttributeError) as e:
   warnings.warn(f"JAX extensions not available: {e}. Install JAX with: pip install jax jaxlib")
   pass
 
+# PyTorch extensions (optional)
+try:
+  from tangent.torch_extensions import *
+except (ImportError, AttributeError) as e:
+  # PyTorch is optional
+  import warnings
+  warnings.warn(f"PyTorch extensions not available: {e}. Install PyTorch with: pip install torch")
+  pass
+
 # Extended NumPy gradients
 try:
   from tangent import numpy_extended
