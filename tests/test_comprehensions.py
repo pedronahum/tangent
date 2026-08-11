@@ -1,17 +1,26 @@
-"""Test suite for set and dict comprehensions.
+"""Test suite for list, set and dict comprehensions.
 
 Building a collection element-by-element cannot be differentiated correctly, but
 a comprehension over a compile-time-constant iterable can be fully unrolled into
-a plain literal - which the normal machinery handles. So set/dict comprehensions
-over a constant ``range(...)`` or a list/tuple literal are supported:
+a plain literal - which the normal machinery handles. So list/set/dict
+comprehensions over a constant ``range(...)`` or a list/tuple literal are
+supported:
 
     {i: x ** i for i in range(1, 3)}   ->   {1: x ** 1, 2: x ** 2}
     {x * i for i in range(3)}          ->   {x * 0, x * 1, x * 2}
+    [x * i for i in range(4)]          ->   [x * 0, x * 1, x * 2, x * 3]
 
-Comprehensions that cannot be unrolled (dynamic iterable, ``if`` filter, etc.)
-fall through to the language fence and are rejected with a clear error - never
-silently mis-differentiated.
+List comprehensions additionally support ``if`` filters, evaluated at compile
+time once the loop variable is substituted:
+
+    [x * i for i in range(4) if i > 1] ->   [x * 2, x * 3]
+
+Set/dict comprehensions do not support filters, and any comprehension that
+cannot be unrolled (dynamic iterable, undecidable filter, etc.) either falls
+through to the language fence and is rejected with a clear error, or is lowered
+to an explicit loop - never silently mis-differentiated on the supported paths.
 """
+import numpy as np
 import pytest
 
 import tangent
@@ -85,6 +94,48 @@ class TestSetComprehension:
 
         # {2, 4} contains 2 -> gradient of x*x is 2x = 6 at x = 3
         assert tangent.grad(f)(3.0) == pytest.approx(6.0)
+
+
+class TestListComprehension:
+    def test_no_filter_sum(self):
+        def f(x):
+            vals = [x * i for i in range(4)]
+            return np.sum(vals)
+
+        # x * (0 + 1 + 2 + 3) = 6x -> gradient 6
+        assert tangent.grad(f)(2.0) == pytest.approx(6.0)
+
+    def test_filtered_index(self):
+        def f(x):
+            vals = [x * i for i in range(4) if i > 1]
+            return vals[0]
+
+        # vals = [2x, 3x]; vals[0] = 2x -> gradient 2
+        assert tangent.grad(f)(2.0) == pytest.approx(2.0)
+
+    def test_filtered_sum_modulo(self):
+        def f(x):
+            vals = [x * i for i in range(5) if i % 2 == 0]
+            return np.sum(vals)
+
+        # i in {0, 2, 4}: x * (0 + 2 + 4) = 6x -> gradient 6
+        assert tangent.grad(f)(2.0) == pytest.approx(6.0)
+
+    def test_over_list_literal(self):
+        def f(x):
+            vals = [x * c for c in [1.0, 2.0, 3.0]]
+            return np.sum(vals)
+
+        # x * (1 + 2 + 3) = 6x -> gradient 6
+        assert tangent.grad(f)(2.0) == pytest.approx(6.0)
+
+    def test_forward_mode(self):
+        def f(x):
+            vals = [x * i for i in range(4) if i > 1]
+            return vals[0]
+
+        df = tangent.autodiff(f, mode='forward', preserve_result=False)
+        assert df(2.0, 1.0) == pytest.approx(2.0)
 
 
 class TestUnsupportedComprehensions:

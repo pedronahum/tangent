@@ -37,6 +37,8 @@ import copy
 
 import gast
 
+from tangent import quoting
+
 
 class _NameSubstituter(gast.NodeTransformer):
   """Replace reads of a single variable name with a given expression."""
@@ -49,6 +51,42 @@ class _NameSubstituter(gast.NodeTransformer):
     if isinstance(node.ctx, gast.Load) and node.id == self.name:
       return copy.deepcopy(self.replacement)
     return node
+
+
+class _FreeNameFinder(gast.NodeVisitor):
+  """Detects whether an expression still reads any (unbound) name."""
+
+  def __init__(self):
+    self.found = False
+
+  def visit_Name(self, node):
+    if isinstance(node.ctx, gast.Load):
+      self.found = True
+    self.generic_visit(node)
+
+
+def _constant_filters_keep(ifs, var, value_node):
+  """Decide at compile time whether a listcomp element survives its filters.
+
+  Substitutes the loop variable with the concrete value and evaluates each
+  `if` clause. Returns True/False when every clause is a closed constant
+  expression, or None when a clause still references a name (or fails to
+  evaluate) and therefore cannot be decided statically; the caller then leaves
+  the comprehension for a later pass instead of guessing.
+  """
+  for cond in ifs:
+    bound = _NameSubstituter(var, value_node).visit(copy.deepcopy(cond))
+    finder = _FreeNameFinder()
+    finder.visit(bound)
+    if finder.found:
+      return None
+    try:
+      keep = bool(eval(quoting.to_source(bound), {'__builtins__': {}}, {}))
+    except Exception:
+      return None
+    if not keep:
+      return False
+  return True
 
 
 def _constant_iter_values(iter_node):
@@ -93,6 +131,40 @@ class ComprehensionUnroller(gast.NodeTransformer):
     elts = [_NameSubstituter(var, v).visit(copy.deepcopy(node.elt))
             for v in values]
     return gast.copy_location(gast.Set(elts=elts), node)
+
+  def visit_ListComp(self, node):
+    """Unroll a list comprehension over a constant iterable into a list
+    literal, so that it differentiates like the literal it is.
+
+    Unlike set/dict comprehensions, `if` filters are supported when they can be
+    decided at compile time (i.e. once the loop variable is substituted they are
+    closed constant expressions). A filter that still references a name cannot
+    be decided statically, so the comprehension is left as-is for a later pass.
+    """
+    self.generic_visit(node)
+    if len(node.generators) != 1:
+      return node
+    gen = node.generators[0]
+    if getattr(gen, 'is_async', 0):
+      return node
+    if not isinstance(gen.target, gast.Name):
+      return node
+    values = _constant_iter_values(gen.iter)
+    if not values:  # None or empty: leave for a later pass to handle/reject.
+      return node
+    var = gen.target.id
+    elts = []
+    for v in values:
+      if gen.ifs:
+        keep = _constant_filters_keep(gen.ifs, var, v)
+        if keep is None:
+          return node  # filter not statically decidable; don't guess.
+        if not keep:
+          continue
+      elts.append(_NameSubstituter(var, v).visit(copy.deepcopy(node.elt)))
+    # A parsed list literal always carries ctx=Load(); forward mode reads it, so
+    # the synthesized literal must set it too.
+    return gast.copy_location(gast.List(elts=elts, ctx=gast.Load()), node)
 
   def visit_DictComp(self, node):
     self.generic_visit(node)
