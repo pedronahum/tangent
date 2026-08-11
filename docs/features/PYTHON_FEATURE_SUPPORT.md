@@ -23,11 +23,13 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Augmented assignments** - `+=`, `-=`, `*=`, `/=`, `**=`, `//=`, `%=` (on variables; not on subscripts/attributes such as `a[i] += x`)
 
 ### Functions
-- **✅ Lambda functions** - Anonymous functions with full inlining
-- **✅ Closures** - Functions capturing variables from outer scope
-- **✅ Nested functions** - Functions defined within functions
+- **⚠️ Lambda functions** - Supported when assigned to a variable and called (`sq = lambda y: y*y; sq(x)`) — the lambda is inlined. An inline lambda *call* (`(lambda y: y*y)(x)`) is rejected
+- **✅ Closures (external)** - A closure created *outside* the differentiated function (e.g. returned by a factory) is supported; its captured variables are made available to the gradient. See [Closure Support](CLOSURE_SUPPORT_COMPLETE.md)
+- **❌ Nested function definitions** - A `def` written *inside* the body of the differentiated function is rejected with a clear error (hoist it to module level, or use an assigned lambda)
+- **❌ Recursion** - Rejected with a clear error
 - **✅ Default arguments** - Function parameters with default values
 - **✅ Keyword arguments** - Named function arguments
+- **❌ Variadic `*args` / `**kwargs`** - Rejected with a clear error
 - **✅ Built-in `abs`, `min`, `max`** - `min`/`max` in two-argument form, e.g. `max(x, 0.0)` (ReLU) — reverse mode
 
 ### Data Structures (Read-Only)
@@ -37,11 +39,11 @@ This document provides a comprehensive reference of Python language features and
 - **✅ NumPy arrays** - Full support with comprehensive gradients
 
 ### Comprehensions (Partial)
-- **✅ List comprehensions** - Syntactic support (lists not differentiable)
+- **✅ List comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a list literal, so they differentiate correctly). `if` filters are supported when decidable at compile time
 - **✅ Dict comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a dict literal)
 - **✅ Set comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a set literal)
 - **❌ Generator expressions** - Not supported
-- **Note**: Comprehensions with dynamic iterables or `if` filters are rejected with a clear error
+- **Note**: Set/dict comprehensions with `if` filters are rejected with a clear error; comprehensions with dynamic iterables are not unrolled (list comprehensions fall back to an explicit loop)
 
 ### Statements
 - **✅ Assert statements** - Input validation and runtime checks
@@ -96,7 +98,7 @@ This document provides a comprehensive reference of Python language features and
 - **❌ Import statements** - Inside functions (use module-level imports)
 
 ### Operators
-- **❌ Walrus operator** (`:=`) - Assignment expressions not supported correctly
+- **❌ Walrus operator** (`:=`) - Rejected with a clear error (the bound name is not tracked, so it used to silently return a zero gradient)
 
 ### String Features
 - **❌ String interpolation** - % formatting, .format() in limited contexts
@@ -104,12 +106,13 @@ This document provides a comprehensive reference of Python language features and
 ### Data Structures
 - **❌ Set operations** - Union/intersection/etc. not supported (literals as membership guards are supported)
 - **❌ Generator expressions** - Not supported
-- **⚠️ Set/dict comprehensions** - Only over constant ranges/literals (dynamic iterables and `if` filters rejected)
+- **⚠️ Comprehensions** - Only over constant ranges/literals. Set/dict comprehensions with `if` filters are rejected; list comprehensions support compile-time filters
 
 ### Advanced Features
 - **❌ Generators** - Generator functions and expressions not supported
 - **❌ Decorators** - Function decorators not supported (except @tangent.grad)
 - **❌ Classes** - Class definitions not supported
+- **❌ Nested function definitions / recursion** - A `def` inside the differentiated function, and recursion, are rejected with a clear error (external closures are supported; see Functions)
 - **❌ Async/await** - Asynchronous programming not supported
 - **❌ Type hints** - Annotations ignored (don't cause errors)
 
@@ -506,8 +509,9 @@ All tuple unpacking patterns have been tested and produce correct gradients.
 | **If/else** | ✅ | ✅ | ✅ | ✅ |
 | **For loops** | ✅ (constant range) | ✅ | ✅ | ✅ |
 | **While loops** | ✅ (no break) | ✅ | ⚠️ | ⚠️ |
-| **Lambdas** | ✅ | ✅ | ✅ | ✅ |
-| **Closures** | ✅ | ✅ | ✅ | ✅ |
+| **Lambdas** | ⚠️ (assigned only) | ✅ | ✅ | ✅ |
+| **Closures (external)** | ✅ | ✅ | ✅ | ✅ |
+| **Nested defs inside fn** | ❌ | ✅ | ✅ | ✅ |
 | **Dict (read)** | ✅ | ✅ | ✅ | ✅ |
 | **Dict (construct)** | ✅ (string keys) | ✅ | ✅ | ✅ |
 | **Dict (mutate)** | ❌ | ✅ | ✅ | ✅ |
@@ -524,10 +528,16 @@ Comprehensive tests available:
 
 ## Summary Statistics
 
-- **Fully Supported**: 34+ features (including early returns, tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, and constant-range set/dict comprehensions!)
+- **Fully Supported**: 34+ features (including early returns, tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, constant-range list/set/dict comprehensions, and subscript assignment such as `a[i] = x` / `a[sl] = x`)
 - **Partially Supported**: 1 feature (some loops)
 - **Not Supported**: 10+ features
 - **Overall Coverage**: ~62% of common Python features
+
+> Note: features that cannot be differentiated are rejected with a clear,
+> actionable error rather than silently returning a wrong gradient. Nested
+> function definitions inside the differentiated function and recursion fall in
+> this category (they crashed before); assigned lambdas, external closures and
+> constant-range comprehensions are the supported alternatives.
 
 ## Recommendations
 
@@ -545,9 +555,10 @@ For maximum compatibility with Tangent:
    - Use try/except blocks
    - Use break/continue in loops
    - Use set operations (union/intersection); set literals and constant-range comprehensions are fine
+   - Define nested functions or use recursion inside a differentiated function (hoist helpers to module level); assigned lambdas and external closures are fine
 
 3. **⚠️ BE CAREFUL**:
-   - Set/dict comprehensions must range over a constant `range(...)`/list/tuple (no dynamic iterables or `if` filters)
+   - Comprehensions must range over a constant `range(...)`/list/tuple; set/dict comprehensions don't support `if` filters, list comprehensions support compile-time filters
    - Loop ranges must be compile-time constants
    - Early returns in if/elif/else are supported; returns inside loops are not
 
