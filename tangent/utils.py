@@ -128,10 +128,14 @@ def unbroadcast(array, like):
   """
   unbroadcaster = unbroadcasters[type(array)]
   if (type(array) is not type(like) and type(like) in unbroadcasters and
-      isinstance(array, _GENERIC_GRAD_TYPES)):
+      isinstance(array, _GENERIC_GRAD_TYPES) and
+      not isinstance(like, _GENERIC_GRAD_TYPES)):
     # The seed is a generic type (Python scalar or NumPy) while the primal
     # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
-    # primal's backend instead of falling back to NumPy.
+    # primal's backend instead of falling back to NumPy. The `like` guard keeps
+    # this restricted to real backend tensors: when `like` is itself a generic
+    # scalar/array we must use `array`'s own unbroadcaster so the reduction to
+    # `like`'s shape actually happens (the scalar unbroadcasters are identity).
     unbroadcaster = unbroadcasters[type(like)]
   return unbroadcaster(array, like)
 

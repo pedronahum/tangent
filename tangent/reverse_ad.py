@@ -859,8 +859,22 @@ class ReverseAD(object):
     return node, adjoint
 
   def visit_Name(self, node):
-    adjoint = template.replace('d[x] = tangent.copy(d[y])',
-                               namer=self.namer, x=node, y=self.target)
+    # When the assignment target is a subscript (`a[i] = x` / `a[sl] = x`), the
+    # RHS is broadcast across every element covered by the index/slice, so the
+    # gathered container gradient must be summed back down to the RHS's shape.
+    # Without this, a scalar RHS written into several elements returns the
+    # un-reduced per-element gradient (wrong shape and value). unbroadcast is a
+    # no-op when the shapes already match, so the plain case is unchanged.
+    target_node = self.target
+    is_subscript_target = (
+        anno.hasanno(target_node, 'temp_var') and
+        isinstance(anno.getanno(target_node, 'temp_var'), gast.Subscript))
+    if is_subscript_target:
+      adjoint = template.replace('d[x] = tangent.unbroadcast(d[y], x)',
+                                 namer=self.namer, x=node, y=target_node)
+    else:
+      adjoint = template.replace('d[x] = tangent.copy(d[y])',
+                                 namer=self.namer, x=node, y=target_node)
     return node, adjoint
 
   def visit_Constant(self, node):

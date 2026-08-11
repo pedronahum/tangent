@@ -97,5 +97,68 @@ class TestDictValueAccumulation:
         assert df(2.0) == pytest.approx(10.0)
 
 
+class TestSubscriptScatterReduce:
+    """Gradient of subscript assignment (scatter) with broadcasting.
+
+    For `a[...] = x` the RHS is broadcast across every element covered by the
+    index/slice, so the adjoint must gather the covered elements of the
+    container's gradient and reduce (sum) them back to the RHS's shape. This
+    previously returned the un-reduced per-element gradient, giving a result
+    with the wrong shape and value (e.g. `[1, 1]` instead of `2.0`).
+    """
+
+    def test_scalar_broadcast_into_slice(self):
+        def f(x):
+            a = np.zeros(4)
+            a[0:2] = x
+            return np.sum(a)
+
+        # d/dx (2x) = 2
+        df = tangent.grad(f)
+        assert df(2.0) == pytest.approx(2.0)
+
+    def test_scalar_into_single_element(self):
+        def f(x):
+            a = np.zeros(4)
+            a[1] = x
+            return np.sum(a)
+
+        # d/dx (x) = 1
+        df = tangent.grad(f)
+        assert df(2.0) == pytest.approx(1.0)
+
+    def test_matching_shape_no_reduce(self):
+        def f(x):
+            a = np.zeros(2)
+            a[0:2] = x
+            return np.sum(a)
+
+        # x already matches the slice shape, so the gradient passes through.
+        df = tangent.grad(f)
+        assert np.allclose(df(np.array([2.0, 3.0])), [1.0, 1.0])
+
+    def test_scalar_scatter_in_loop(self):
+        def f(x):
+            y = np.zeros(3)
+            for i in range(3):
+                y[i] = x * 2.0
+            return np.sum(y)
+
+        # d/dx (6x) = 6
+        df = tangent.grad(f)
+        assert df(2.0) == pytest.approx(6.0)
+
+    def test_elementwise_scatter_in_loop(self):
+        def f(x):
+            y = np.zeros_like(x)
+            for i in range(3):
+                y[i] = x[i]
+            return np.sum(y)
+
+        # d/dx (sum x) = ones
+        df = tangent.grad(f)
+        assert np.allclose(df(np.array([1.0, 2.0, 3.0])), [1.0, 1.0, 1.0])
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
