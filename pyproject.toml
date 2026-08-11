@@ -45,8 +45,9 @@ Homepage = "https://github.com/google/tangent"
 # install as CPU builds.
 [project.optional-dependencies]
 # autograd is the reference oracle for the gradient test suite (and a niche
-# runtime interop); it is not required to use tangent itself.
-test = ["pytest>=6.0", "autograd>=1.2"]
+# runtime interop); it is not required to use tangent itself. pytest-cov powers
+# the line-coverage report (see [tool.coverage] below).
+test = ["pytest>=6.0", "autograd>=1.2", "pytest-cov>=4.0"]
 tf = ["tensorflow>=2.16"]
 jax = ["jax>=0.4.30"]
 torch = ["torch>=2.0"]
@@ -63,6 +64,7 @@ all = [
     "matplotlib>=3.7",
     "networkx>=3.0",
     "pytest>=6.0",
+    "pytest-cov>=4.0",
     "sympy>=1.12",
     "tensorflow>=2.16",
     "torch>=2.0",
@@ -85,4 +87,28 @@ filterwarnings = [
     # deprecated ast aliases (ast.Num, ast.Str, ...) at import time. This is
     # upstream noise that cannot be fixed from here.
     "ignore:ast\\..* is deprecated:DeprecationWarning",
+]
+
+# Line-coverage reporting. Run with:
+#   pytest --cov --cov-report=term-missing tests/
+# (requires the `test` extra, which provides pytest-cov). This measures the
+# library's own line coverage, complementing the Python *language-feature*
+# coverage tracked in tests/test_feature_matrix.py and
+# docs/features/PYTHON_FEATURE_SUPPORT.md.
+[tool.coverage.run]
+branch = true
+source = ["tangent"]
+omit = [
+    "*/tests/*",
+    "*/.venv*/*",
+    "*/benchmarks/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
 ]

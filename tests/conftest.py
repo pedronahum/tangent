@@ -18,17 +18,39 @@ import functions
 import tfe_utils
 
 
+# Functions excluded from the parametrized gradient harness. Each entry carries
+# a reason; the goal is to shrink this list. (Previously this was a silent
+# blacklist that hid broken behavior - keep it audited.) Where a function works
+# in a narrower mode, a dedicated test pins that down - see
+# tests/test_first_order_gaps.py.
 blacklisted = [
+    # insert_grad_of / context-manager inlining path is not harness-compatible.
     'inlining_contextmanager',
+    # List comprehension over a *dynamic* iterable is lowered to an .append()
+    # loop and crashes naming (AttributeError). Constant-range listcomps are
+    # unrolled and supported (see tests/test_comprehensions.py).
     'listcomp',
+    # Returns (r, theta) via np.arctan(b, a); raises TypeError during adjoint
+    # naming. Multi-output polar transform not yet supported.
     'cart2polar',
+    # Nested function definitions are rejected with TangentParseError by design
+    # (single-exit reverse transform); see tests/test_fence.py.
     'iterpower_with_nested_def',
+    # Multi-output (2*a, a): correct in first-order reverse mode (pinned in
+    # tests/test_first_order_gaps.py) but not yet supported by forward mode or
+    # reverse-over-reverse, which the full harness exercises.
     'fn_multiple_return',
+    # Custom-gradient insertion helper; not a plain differentiable function.
     'insert_grad_of',
+    # TensorFlow tracing helpers - require TF and the tracing path; exercised in
+    # tests/test_tensorflow.py when TF is installed, not in the core harness.
     '_trace_mul',
     '_nontrace_mul',
-    'active_subscript',  # TODO: fix then remove from blacklist
-    'init_array_grad_maybe_active',  # TODO: fix then remove from blacklist
+    # Subscript scatter into a freshly-initialised array: correct in first-order
+    # reverse mode (pinned in tests/test_first_order_gaps.py) but not yet
+    # supported by forward mode or reverse-over-reverse.
+    'active_subscript',
+    'init_array_grad_maybe_active',
 ]
 
 funcs = [f for f in functions.__dict__.values() if callable(f)]
