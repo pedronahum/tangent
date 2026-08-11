@@ -37,6 +37,8 @@ tuple of variables (nested tuples are expanded).
 
 """
 from __future__ import absolute_import
+import copy
+
 import gast
 
 from tangent import annotations as anno
@@ -180,6 +182,26 @@ class ANF(transformers.TreeTransformer):
     self.src = quoting.unquote(node)
     self.trivializing = True
     self.namer.target = node.target
+
+    if isinstance(node.target, gast.Subscript):
+      # `a[i] += x` must expand to `a[i] = a[i] + x`, keeping the subscript as
+      # the write target and reading it back on the RHS. Trivializing the target
+      # (the generic path below) would bind it to a fresh temporary and drop the
+      # write-back to `a[i]`, silently corrupting both value and gradient. Route
+      # the expanded form through the subscript-assignment path, whose scatter
+      # adjoint reduces the gathered gradient to the RHS shape.
+      read = copy.deepcopy(node.target)
+      read.ctx = gast.Load()
+      assign = gast.Assign(
+          targets=[node.target],
+          value=gast.BinOp(left=read, op=node.op, right=node.value))
+      gast.copy_location(assign, node)
+      self.mark(assign)
+      self.trivializing = False
+      result = self.visit_Assign(assign)
+      self.namer.target = None
+      return result
+
     right = self.trivialize(node.value)
     target = self.trivialize(node.target)
     left = gast.Name(id=target.id, ctx=gast.Load(), annotation=None)

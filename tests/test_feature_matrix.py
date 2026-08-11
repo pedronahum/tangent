@@ -85,6 +85,12 @@ def _default_arg(x, p=2.0):
   return x ** p
 
 
+def _augassign_subscript(x):
+  a = np.zeros(4)
+  a[0:2] += x
+  return np.sum(a)
+
+
 CORRECT_GRADIENTS = [
     # (function, input, expected gradient)
     (_assigned_lambda, 2.0, 4.0),          # d/dx x^2 = 2x
@@ -98,6 +104,7 @@ CORRECT_GRADIENTS = [
     (_zip_loop, 2.0, 11.0),                # (1*3 + 2*4) x = 11x
     (_fstring_assert, 2.0, 4.0),           # x^2
     (_default_arg, 2.0, 4.0),              # x^2
+    (_augassign_subscript, 2.0, 2.0),      # a[0:2] += x scatters into 2 elts
 ]
 
 
@@ -234,6 +241,12 @@ def _int_cast(x):
   return float(int(x)) + x
 
 
+def _augassign_attribute(x):
+  a = np.zeros(3)
+  a.real += x
+  return np.sum(a)
+
+
 REJECTIONS = [
     (_walrus, TangentParseError),
     (_raise, TangentParseError),
@@ -255,6 +268,7 @@ REJECTIONS = [
     (_import_inside, TangentParseError),
     (_builtin_sum, GradientNotFoundError),
     (_int_cast, GradientNotFoundError),
+    (_augassign_attribute, TangentParseError),
 ]
 
 

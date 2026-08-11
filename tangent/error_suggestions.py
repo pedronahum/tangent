@@ -5,17 +5,16 @@ This module provides context-aware suggestions for common errors.
 
 # Dictionary mapping error patterns to helpful suggestions
 UNSUPPORTED_FEATURE_SUGGESTIONS = {
-    'Augmented assignment to a subscript or attribute': '''In-place update of a
-single element (e.g. a[i] += x) is not supported: the update is lost during
-normalization, which would corrupt both the value and the gradient.
+    'Augmented assignment to an attribute': '''In-place update of an attribute
+(e.g. obj.attr += x) is not supported: attribute gradients are not implemented.
 
 Workarounds:
-  ❌ a[0] += x
-  ✅ a = a + tangent.some_full_array_update(...)   # operate on the whole array
-  ✅ y = a[0] + x                                   # use a new variable
-  ✅ update = np.zeros_like(a); update[0] = x; a = a + update
+  ❌ obj.weight += x
+  ✅ y = obj.weight + x        # use a new variable
+  ✅ operate on whole arrays   # use NumPy arrays and subscript updates
 
-Plain augmented assignment on a variable (x += y) is fully supported.
+Note: augmented assignment to a SUBSCRIPT (a[i] += x) IS supported, as is plain
+augmented assignment on a variable (x += y).
 ''',
 
     'F-Strings': '''F-strings are not yet supported in Tangent.
