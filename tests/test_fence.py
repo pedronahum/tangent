@@ -310,5 +310,109 @@ def test_classdef():
   _assert_tangent_parse_error(f, 'Class')
 
 
+def test_raise():
+
+  def f(x):
+    if x < 0:
+      raise ValueError('negative')
+    return x * x
+
+  _assert_tangent_parse_error(f, 'Raise statements')
+
+
+def test_try():
+
+  def f(x):
+    try:
+      return x * x
+    except Exception:
+      return x
+
+  _assert_tangent_parse_error(f, 'Try/Except')
+
+
+def test_walrus():
+  # The walrus operator binds a name that the reverse pass cannot track, which
+  # used to silently produce a zero gradient; it must be rejected instead.
+  def f(x):
+    if (y := x * 2) > 1:
+      return y
+    return x
+
+  _assert_tangent_parse_error(f, 'walrus')
+
+
+def test_varargs():
+
+  def f(*xs):
+    return xs[0] * xs[0]
+
+  _assert_tangent_parse_error(f, 'Variadic positional arguments')
+
+
+def test_varkw():
+
+  def f(x, **kw):
+    return x * x
+
+  _assert_tangent_parse_error(f, 'Variadic keyword arguments')
+
+
+def _assert_nested_def_rejected(func):
+  try:
+    fence.validate_no_nested_functions(
+        quoting.parse_function(func), inspect.getsource(func))
+    assert False
+  except fence.TangentParseError as expected:
+    assert 'Nested function definitions' in str(expected)
+
+
+def test_nested_function():
+  # A nested def introduces a second FunctionDef whose return breaks the
+  # single-exit reverse transform; it used to crash with a raw ValueError.
+
+  def f(x):
+    def inner(y):
+      return y * 2
+    return inner(x)
+
+  _assert_nested_def_rejected(f)
+
+
+def test_closure():
+
+  def f(x):
+    scale = 3.0
+
+    def inner(y):
+      return y * scale
+    return inner(x)
+
+  _assert_nested_def_rejected(f)
+
+
+def test_recursion():
+
+  def f(x):
+    def rec(n, acc):
+      if n == 0:
+        return acc
+      return rec(n - 1, acc + x)
+    return rec(3, 0.0)
+
+  _assert_nested_def_rejected(f)
+
+
+def test_lambda_assigned_is_inlined_not_nested():
+  # An assigned lambda is NOT a nested def: lambda_desugar inlines it, so it
+  # must pass the nested-def check (and the whole pipeline supports it).
+  def f(x):
+    sq = lambda y: y * y
+    return sq(x)
+
+  fence.validate_no_nested_functions(
+      quoting.parse_function(f), inspect.getsource(f))
+
+
 if __name__ == '__main__':
   assert not pytest.main([__file__])

@@ -244,6 +244,63 @@ Workaround:
   Simply stop using the variable instead of deleting it.
 ''',
 
+    'Raise statements': '''Raise statements are not supported inside
+differentiated functions.
+
+Workaround:
+  Validate inputs with assertions (supported) and keep exception handling
+  outside the differentiated function.
+  ❌ if x < 0: raise ValueError("negative")
+  ✅ assert x >= 0, "x must be non-negative"
+''',
+
+    'Assignment expressions (the walrus operator ":=")': '''The walrus operator
+(y := expr) binds a name in expression position, and that binding is not
+tracked as an active intermediate, so the gradient of any branch that uses it
+is silently dropped.
+
+Workaround:
+  Assign in a normal statement instead.
+  ❌ if (y := x * 2) > 1: return y
+  ✅ y = x * 2
+     if y > 1:
+         return y
+''',
+
+    'Variadic positional arguments (*args)': '''Variadic positional arguments
+(*args) are not supported because activity analysis indexes arguments by
+position, which is ill-defined for a variable-length pack.
+
+Workaround:
+  Use a fixed number of positional arguments, or pass a NumPy array / tuple
+  and index into it.
+  ❌ def f(*xs): return xs[0] ** 2
+  ✅ def f(x): return x ** 2
+''',
+
+    'Variadic keyword arguments (**kwargs)': '''Variadic keyword arguments
+(**kwargs) are not supported.
+
+Workaround:
+  Declare the keyword arguments you need explicitly (defaults are supported).
+  ❌ def f(x, **kw): return x ** kw['p']
+  ✅ def f(x, p=2.0): return x ** p
+''',
+
+    'Nested function definitions': '''Nested function definitions (a def inside
+another def), closures, and recursion are not supported. The reverse pass
+requires a single function with exactly one (normalized) return.
+
+Workaround:
+  ✅ Lambdas assigned to a variable and called are inlined and DO work:
+       sq = lambda y: y ** 2
+       return sq(x)
+  ✅ Hoist helpers to module level and call them (they are differentiated as
+     part of the call tree):
+       def _square(y): return y ** 2
+       def f(x): return _square(x)
+''',
+
 }
 
 

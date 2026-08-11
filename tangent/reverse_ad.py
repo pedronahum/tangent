@@ -60,6 +60,19 @@ def _generate_op_id():
   return quoting.quote("'_{}'".format(uuid4().hex[:8]))
 
 
+def _source_retrievable(func):
+  """Whether we can obtain source code to differentiate `func` by stepping in.
+
+  Builtins and C-implemented callables (e.g. `sum`, `int`, `float`) have no
+  Python source, so Tangent cannot step into them to compute an adjoint.
+  """
+  try:
+    inspect.getsource(func)
+  except (OSError, TypeError):
+    return False
+  return True
+
+
 def get_push_pop():
   """Create pop and push nodes that are linked.
 
@@ -1121,6 +1134,16 @@ class ReverseAD(object):
     # If we don't have an adjoint, we will have to step into the called
     # function and differentiate it
     if func not in grads.adjoints:
+      # Stepping in requires the callee's source. Builtins and C functions
+      # (e.g. `sum`, `int`, `float`) have none, so raise a clear error here
+      # instead of crashing later with an opaque TypeError in naming/primal_name.
+      if not _source_retrievable(func):
+        raise errors.GradientNotFoundError(
+            'No gradient definition found for %r, and its source code is not '
+            'available to differentiate it. Register an adjoint with '
+            '@tangent.grad(...) or avoid this call inside a differentiated '
+            'function.' % (func,))
+
       # Only consider Name nodes as potential active arguments
       # Other node types (Constant, Compare, etc.) are not differentiable
       active_args = tuple(i for i, arg in enumerate(node.args)

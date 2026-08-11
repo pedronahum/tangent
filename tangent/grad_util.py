@@ -136,6 +136,9 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   """
   # Parse the function and desugar classes, lambdas and list comprehensions first
   node = quoting.parse_function(func)
+  # Nested defs crash several of the desugaring passes and the reverse transform;
+  # reject them up front with a clear error, before any pass sees them.
+  node = fence.validate_no_nested_functions(node, inspect.getsource(func))
   node = sentinel_rename.rename_sentinel_vars(node)
   node = class_desugar.inline_class_methods(node, func)  # Pass func for __globals__
   node = lambda_desugar.desugar_lambdas(node)

@@ -36,6 +36,52 @@ def validate(node, source):
   return node
 
 
+class _NestedFunctionFinder(ast.NodeVisitor):
+  """Detects a function definition nested inside another function body.
+
+  Tangent differentiates a single function with exactly one (normalized)
+  return. A nested def introduces a second FunctionDef whose return breaks the
+  reverse transform, and closures/recursion cannot be represented at all. This
+  must run before any desugaring pass, because passes such as
+  explicit_loop_indexes also choke on nested defs with an opaque IndexError.
+  """
+
+  def __init__(self, source):
+    self._source = source
+    self._function_depth = 0
+
+  def _visit_def(self, node):
+    if self._function_depth >= 1:
+      feature = 'Nested function definitions'
+      message = '%s are not supported' % feature
+      suggestion = error_suggestions.get_suggestion(feature)
+      if suggestion:
+        message = error_suggestions.format_error_with_suggestion(
+            feature, message)
+      lineno = getattr(node, 'lineno', 1)
+      offset = getattr(node, 'col_offset', 0)
+      lines = self._source.splitlines()
+      line = lines[lineno - 1] if 0 < lineno <= len(lines) else ''
+      # TangentParseError is a SyntaxError: (msg, (filename, lineno, offset,
+      # text)), matching LanguageFence._raise_error.
+      raise TangentParseError(message, ('<stdin>', lineno, offset + 1, line))
+    self._function_depth += 1
+    self.generic_visit(node)
+    self._function_depth -= 1
+
+  def visit_FunctionDef(self, node):
+    self._visit_def(node)
+
+  def visit_AsyncFunctionDef(self, node):
+    self._visit_def(node)
+
+
+def validate_no_nested_functions(node, source):
+  """Reject nested function definitions early, before any desugaring pass."""
+  _NestedFunctionFinder(source).visit(node)
+  return node
+
+
 class LanguageFence(ast.NodeVisitor):
   """An AST visitor that raises an error for unsupported language features.
 
@@ -274,6 +320,14 @@ class LanguageFence(ast.NodeVisitor):
   def visit_IfExp(self, node):
     self._allow_and_continue(node)
 
+  def visit_NamedExpr(self, node):
+    # The walrus operator (y := expr) binds a name in expression position. The
+    # bound variable is not tracked as an active intermediate, so the adjoint of
+    # any branch that uses it is dropped and the gradient comes back silently
+    # wrong (usually zero). Reject it rather than return an incorrect result.
+    self._reject(node, 'Assignment expressions (the walrus operator ":=") are '
+                        'not supported')
+
   def visit_Attribute(self, node):
     self._allow_and_continue(node)
 
@@ -326,7 +380,10 @@ class LanguageFence(ast.NodeVisitor):
     self._allow_and_continue(node)
 
   def visit_Raise(self, node):
-    self._allow_and_continue(node)
+    # Raise statements cannot be differentiated: the reverse pass has no way to
+    # propagate adjoints across an exception edge. Reject up front rather than
+    # fail later with an opaque "Unknown node type" error.
+    self._reject(node, 'Raise statements are not supported')
 
   def visit_Assert(self, node):
     if __debug__:
@@ -376,7 +433,12 @@ class LanguageFence(ast.NodeVisitor):
     self._reject(node, 'Continue statements are not supported')
 
   def visit_Try(self, node):
-    self._allow_and_continue(node)
+    # On Python 3.8+ there is a single `Try` node (the old TryExcept /
+    # TryFinally nodes are gone). Try blocks are not differentiable: multiple
+    # returns across handler blocks also defeat the single-exit transform.
+    # Reject here instead of crashing in reverse mode with "function must have
+    # exactly one return statement".
+    self._reject(node, 'Try/Except blocks are not supported')
 
   def visit_TryFinally(self, node):
     self._reject(node, 'Try/Finally blocks are not supported')
@@ -400,6 +462,16 @@ class LanguageFence(ast.NodeVisitor):
     self._reject(node, 'Lambda functions are not supported')
 
   def visit_arguments(self, node):
+    # *args / **kwargs cannot be differentiated: the activity analysis indexes
+    # positional arguments by position (wrt), which is ill-defined for a
+    # variable-length argument pack and crashes with an IndexError. Plain
+    # positional and keyword arguments with defaults are fine.
+    if node.vararg is not None:
+      self._reject(node, 'Variadic positional arguments (*args) are not '
+                          'supported')
+    if node.kwarg is not None:
+      self._reject(node, 'Variadic keyword arguments (**kwargs) are not '
+                          'supported')
     self._allow_and_continue(node)
 
   def visit_arg(self, node):
