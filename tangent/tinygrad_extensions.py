@@ -310,20 +310,29 @@ def tg_max_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
     dye = dz4.reshape((n, channels, ho, wo, 1, 1)).expand(
         (n, channels, ho, wo, k[0], k[1]))
     dxw = dye * mask / ties                   # (N, C, Ho, Wo, kh, kw)
-    dxwp = dxw.permute(4, 5, 0, 1, 2, 3)      # (kh, kw, N, C, Ho, Wo)
-    eye = Tensor.eye(k[0] * k[1], dtype=x.dtype)
     padded_h, padded_w = xp.shape[2], xp.shape[3]
-    total = None
-    for pi in range(k[0]):
-        for qi in range(k[1]):
-            kernel = eye[pi * k[1] + qi].reshape(1, 1, k[0], k[1]).expand(
-                channels, 1, k[0], k[1])
-            output_padding = (padded_h - ((ho - 1) * s[0] + k[0]),
-                              padded_w - ((wo - 1) * s[1] + k[1]))
-            contrib = dxwp[pi, qi].conv_transpose2d(
-                kernel, stride=s, padding=0, output_padding=output_padding,
-                groups=channels)
-            total = contrib if total is None else total + contrib
+    if s == k and ho * k[0] == padded_h and wo * k[1] == padded_w:
+        # Non-overlapping windows tile the padded input exactly, so folding
+        # dxw back is a pure permute+reshape with no scatter accumulation.
+        # The delta-kernel transposed convs below cost a dedicated strided
+        # scatter kernel (~2.5 ms on an 8x16x56x56 pool); this form stays a
+        # view that the tinygrad scheduler fuses into the elementwise kernel.
+        total = dxw.permute(0, 1, 2, 4, 3, 5).reshape(
+            (n, channels, padded_h, padded_w))
+    else:
+        dxwp = dxw.permute(4, 5, 0, 1, 2, 3)      # (kh, kw, N, C, Ho, Wo)
+        eye = Tensor.eye(k[0] * k[1], dtype=x.dtype)
+        total = None
+        for pi in range(k[0]):
+            for qi in range(k[1]):
+                kernel = eye[pi * k[1] + qi].reshape(1, 1, k[0], k[1]).expand(
+                    channels, 1, k[0], k[1])
+                output_padding = (padded_h - ((ho - 1) * s[0] + k[0]),
+                                  padded_w - ((wo - 1) * s[1] + k[1]))
+                contrib = dxwp[pi, qi].conv_transpose2d(
+                    kernel, stride=s, padding=0, output_padding=output_padding,
+                    groups=channels)
+                total = contrib if total is None else total + contrib
     if any(p):
         total = total.pad(((0, 0), (0, 0), (-p[0], -p[0]), (-p[1], -p[1])))
     return total if x.ndim == 4 else total.reshape(x.shape)
