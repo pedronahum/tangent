@@ -633,13 +633,41 @@ class TestConvAndPool:
                          tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_stride2_input_grad(self):
-        # The input gradient supports stride > 1; the weight gradient raises.
+        # The input gradient supports stride > 1 via a transposed conv.
         def f(x, w):
             return x.conv2d(w, stride=2).sum()
 
         x, w, _ = self._conv_args()
         assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
                          tinygrad_ref(f, x, w, wrt=0))
+
+    def test_conv2d_stride2_weight_grad(self):
+        # The weight gradient handles the floor-remainder of the output-size
+        # computation by cropping the swapped stride/dilation correlation.
+        def f(x, w):
+            return x.conv2d(w, stride=2).sum()
+
+        x, w, _ = self._conv_args()
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
+                         tinygrad_ref(f, x, w, wrt=1))
+
+    def test_conv2d_dilation_weight_grad(self):
+        def f(x, w):
+            return x.conv2d(w, dilation=2).sum()
+
+        x, w, _ = self._conv_args()
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
+                         tinygrad_ref(f, x, w, wrt=1))
+
+    def test_conv2d_stride_dilation_weight_grad(self):
+        def f(x, w):
+            return x.conv2d(w, stride=2, dilation=2).sum()
+
+        rs = np.random.RandomState(0)
+        x = Tensor(rs.randn(2, 3, 9, 9).astype(np.float32))
+        w = Tensor(rs.randn(4, 3, 3, 3).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
+                         tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_bias(self):
         def f(x, w, b):
@@ -663,12 +691,35 @@ class TestConvAndPool:
         x = Tensor(np.random.RandomState(0).randn(2, 3, 8, 8).astype(np.float32))
         assert _allclose(tangent.grad(f)(x), tinygrad_ref(f, x, wrt=0))
 
-    def test_max_pool2d_not_implemented(self):
+    def test_max_pool2d(self):
         def f(x):
             return x.max_pool2d().sum()
 
+        x = Tensor(np.random.RandomState(0).randn(2, 3, 8, 8).astype(np.float32))
+        assert _allclose(tangent.grad(f)(x), tinygrad_ref(f, x, wrt=0))
+
+    def test_max_pool2d_overlap_and_ties(self):
+        def f(x):
+            return x.max_pool2d(kernel_size=3, stride=2).sum()
+
+        rs = np.random.RandomState(0)
+        # Round to create duplicate maxima (ties) within windows.
+        x = Tensor((np.round(rs.randn(2, 3, 8, 8) * 2) / 2).astype(np.float32))
+        assert _allclose(tangent.grad(f)(x), tinygrad_ref(f, x, wrt=0))
+
+    def test_max_pool2d_padding(self):
+        def f(x):
+            return x.max_pool2d(padding=1).sum()
+
+        x = Tensor(np.random.RandomState(0).randn(2, 3, 8, 8).astype(np.float32))
+        assert _allclose(tangent.grad(f)(x), tinygrad_ref(f, x, wrt=0))
+
+    def test_max_pool2d_unsupported_raises(self):
+        def f(x):
+            return x.max_pool2d(dilation=2).sum()
+
         df = tangent.grad(f)
-        x = Tensor(np.random.RandomState(0).randn(1, 1, 4, 4).astype(np.float32))
+        x = Tensor(np.random.RandomState(0).randn(1, 1, 8, 8).astype(np.float32))
         with pytest.raises(NotImplementedError):
             df(x)
 

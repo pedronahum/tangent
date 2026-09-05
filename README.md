@@ -154,10 +154,11 @@ Backend notes worth knowing:
   and fuses.
 - **The `@` operator** — `x @ y` differentiates for NumPy, tinygrad, JAX and
   TensorFlow (backend-dispatched via `tangent.utils.register_matmul_grad`).
-  tinygrad limitations: `max_pool2d` gradients are not implemented (they raise
-  `NotImplementedError`), and the `conv2d` *weight* gradient requires
-  `stride=1, dilation=1, groups=1` (the input gradient supports arbitrary
-  stride/dilation/padding).
+  tinygrad limitations: `conv2d` gradients require `groups=1` (input gradient
+  supports any stride/dilation/padding; weight gradient any stride/dilation);
+  `max_pool2d` gradients require `dilation=1`, no `ceil_mode`, symmetric
+  padding; `avg_pool2d` gradients require the defaults (`count_include_pad`,
+  no `ceil_mode`). Unsupported configurations raise `NotImplementedError`.
 
 A shared cross-backend test suite (`tests/test_backend_coverage.py`) runs one
 op catalog — arithmetic, exp/log, trig, activations, reductions, matmul,
