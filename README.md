@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb)
 
-**A Python library for automatic differentiation that generates readable, inspectable gradient code — with NumPy, JAX, TensorFlow, PyTorch, and Keras 3 support.**
+**A Python library for automatic differentiation that generates readable, inspectable gradient code — with NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad support.**
 
 Originally developed by Google Research, now maintained and enhanced by [@pedronahum](https://github.com/pedronahum).
 
@@ -25,7 +25,7 @@ Tangent performs **source-to-source** automatic differentiation: it transforms y
 - **📖 Readable**: Generated gradient code is pure Python you can inspect
 - **🔍 Debuggable**: Step through gradient computation line by line
 - **🎨 Visual**: Interactive computation graphs and gradient flow diagrams
-- **🔧 Flexible**: One API across NumPy, JAX, TensorFlow, PyTorch, and Keras 3 (any backend)
+- **🔧 Flexible**: One API across NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad
 - **🐍 Pythonic**: Control flow, closures, classes, comprehensions, and second derivatives
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
@@ -55,6 +55,7 @@ pip install "tangent[jax]"        # JAX support
 pip install "tangent[tf]"         # TensorFlow support
 pip install "tangent[torch]"      # PyTorch support
 pip install "tangent[keras]"      # Keras 3 (backend-agnostic keras.ops)
+pip install "tangent[tinygrad]"   # tinygrad (method-based tensor API)
 pip install "tangent[viz]"        # matplotlib + networkx visualization
 pip install "tangent[symbolic]"   # SymPy-based algebraic optimizations
 pip install "tangent[all]"        # everything above, plus pytest
@@ -103,7 +104,11 @@ def f_torch(x):
 def f_keras(x):
     return kops.sum(kops.tanh(x))
 
-for f in (f_np, f_jax, f_tf, f_torch, f_keras):
+# tinygrad — method-based tensor API
+def f_tinygrad(x):
+    return x.tanh().sum()
+
+for f in (f_np, f_jax, f_tf, f_torch, f_keras, f_tinygrad):
     df = tangent.grad(f)
 ```
 
@@ -122,6 +127,7 @@ forward-mode tangents; see the per-extension lists in
 | TensorFlow 2.x | `tangent/tf_extensions.py` + `tf_extended.py` | 45+ | 20+ | Eager-mode TF; includes conv/pooling, linalg, and reductions |
 | PyTorch | `tangent/torch_extensions.py` | 45+ | 30+ | Functional `torch.*` API, verified against `torch.autograd` |
 | Keras 3 | `tangent/keras_extensions.py` | 35+ | ~20 | Backend-agnostic `keras.ops`; runs on the TF, JAX, or torch backend |
+| tinygrad | `tangent/tinygrad_extensions.py` | 65+ | ~20 | Method-based `Tensor.*` API incl. conv2d/avg_pool2d/layernorm/batchnorm; generated gradient code is a tinygrad graph that tinygrad's own compiler fuses. Verified against tinygrad's autodiff |
 
 Backend notes worth knowing:
 
@@ -138,11 +144,25 @@ Backend notes worth knowing:
   float64 Python-float seeds with float32 tensors.
 - **Aliases** — torch aliases (`torch.negative`/`subtract`/`multiply`/`divide`)
   are registered alongside the short names.
+- **tinygrad's method API** — tinygrad exposes ops as methods (`x.relu()`,
+  `x.sum()`). Tangent resolves calls against a function's globals, so a method
+  on a computed tensor isn't statically resolvable; the tinygrad extension
+  registers a method resolver that rewrites such calls to unbound form
+  (`Tensor.sum(x)`). This is scoped to functions whose module actually imports
+  tinygrad, so plain NumPy `.sum()` elsewhere is unaffected. The generated
+  gradient code is itself a tinygrad graph, which tinygrad's compiler schedules
+  and fuses.
+- **The `@` operator** — `x @ y` differentiates for NumPy, tinygrad, JAX and
+  TensorFlow (backend-dispatched via `tangent.utils.register_matmul_grad`).
+  tinygrad limitations: `max_pool2d` gradients are not implemented (they raise
+  `NotImplementedError`), and the `conv2d` *weight* gradient requires
+  `stride=1, dilation=1, groups=1` (the input gradient supports arbitrary
+  stride/dilation/padding).
 
 A shared cross-backend test suite (`tests/test_backend_coverage.py`) runs one
 op catalog — arithmetic, exp/log, trig, activations, reductions, matmul,
 reshape, transpose — through every installed backend and checks the results
-against analytic gradients, keeping all five extensions at the same coverage
+against analytic gradients, keeping all six extensions at the same coverage
 bar.
 
 ---
@@ -438,7 +458,7 @@ python examples/recent_features.py
 
 ## 🧪 Testing
 
-The suite covers core autodiff, every Python feature, all five backends, and
+The suite covers core autodiff, every Python feature, all six backends, and
 second derivatives. The cross-backend catalog is checked two ways: against
 hand-derived analytic gradients **and** against an independent
 finite-difference oracle, so newly added adjoints are verified automatically:
@@ -449,6 +469,7 @@ pytest tests/test_backend_coverage.py  # cross-backend op catalog (+ FD oracle)
 pytest tests/test_coarsening.py      # straight-line coarsening
 pytest tests/test_torch.py           # PyTorch-specific tests
 pytest tests/test_keras.py           # Keras tests (any backend)
+pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
 Current status: **77,000+ parameterized test cases pass** (0 failures). The 21

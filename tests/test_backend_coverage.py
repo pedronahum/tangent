@@ -54,6 +54,12 @@ try:
 except ImportError:
     HAS_KERAS = False
 
+try:
+    from tinygrad import Tensor as TGTensor
+    HAS_TINYGRAD = True
+except ImportError:
+    HAS_TINYGRAD = False
+
 
 BACKENDS = []
 if HAS_JAX:
@@ -64,13 +70,19 @@ if HAS_TORCH:
     BACKENDS.append(('torch', torch))
 if HAS_KERAS:
     BACKENDS.append(('keras', kops))
+if HAS_TINYGRAD:
+    # tinygrad is method-based, so we register the Tensor class itself: the
+    # catalog's `mod.op(x)` calls then become unbound method calls
+    # (Tensor.op(x)), which resolve statically and carry the registered
+    # adjoints.
+    BACKENDS.append(('tinygrad', TGTensor))
 
 BACKEND_IDS = [b[0] for b in BACKENDS]
 
 
 def requires_backend(name):
     available = {'jax': HAS_JAX, 'tf': HAS_TF, 'torch': HAS_TORCH,
-                 'keras': HAS_KERAS}[name]
+                 'keras': HAS_KERAS, 'tinygrad': HAS_TINYGRAD}[name]
     return pytest.mark.skipif(not available,
                               reason='%s not installed' % name)
 
@@ -78,6 +90,8 @@ def requires_backend(name):
 def to_backend(mod, arr):
     """Convert a numpy array to the backend's tensor type."""
     arr = np.asarray(arr, dtype='float32')
+    if HAS_TINYGRAD and mod is TGTensor:
+        return TGTensor(arr)
     if mod is jnp:
         return jnp.asarray(arr)
     if mod is tf:
@@ -91,6 +105,8 @@ def from_backend(mod, t):
     """Convert a backend tensor back to numpy."""
     if isinstance(t, np.ndarray):
         return t
+    if HAS_TINYGRAD and isinstance(t, TGTensor):
+        return t.numpy()
     if mod is jnp:
         return np.asarray(t)
     if mod is tf:
@@ -184,6 +200,10 @@ _TF_OP_MAP = {'arcsin': 'asin', 'arccos': 'acos', 'arctan': 'atan',
               'floor': 'floor', 'ceil': 'ceil', 'round': 'round',
               'sign': 'sign'}
 
+# tinygrad names a few methods differently from the catalog.
+_TINYGRAD_OP_MAP = {'negative': 'neg', 'arcsin': 'asin', 'arccos': 'acos',
+                    'arctan': 'atan'}
+
 
 def _resolve_unary_op(backend, mod, op_name):
   """Return the backend callable for a catalog unary op, or None if the
@@ -197,6 +217,9 @@ def _resolve_unary_op(backend, mod, op_name):
       return getattr(tf.math, _TF_OP_MAP[op_name])
   if backend == 'keras' and op_name in ('relu', 'sigmoid'):
     return getattr(kops, op_name)
+  if backend == 'tinygrad':
+    name = _TINYGRAD_OP_MAP.get(op_name, UNARY_OPS[op_name][0])
+    return getattr(TGTensor, name, None)
   try:
     return _backend_op(mod, UNARY_OPS[op_name][0])
   except AttributeError:
@@ -205,8 +228,15 @@ def _resolve_unary_op(backend, mod, op_name):
 
 def _unary_tangent_grad(backend, mod, op, x_np):
   """Tangent's reverse-mode gradient of sum(op(x)) at x_np, as numpy."""
-  def f(x):
-    return backend_sum(backend, mod, op(x))
+  if backend == 'tinygrad':
+    # Dedicated function body: Tangent resolves every call in the source,
+    # including dead branches of the shared backend_sum helper, so the
+    # tinygrad arm must not reference backends that may not be installed.
+    def f(x):
+      return TGTensor.sum(op(x))
+  else:
+    def f(x):
+      return backend_sum(backend, mod, op(x))
 
   df = tangent.grad(f)
   return from_backend(mod, grad_call(backend, df, to_backend(mod, x_np)))
@@ -311,6 +341,12 @@ def test_binary_gradients(backend, op_name):
                   'maximum': tf.maximum, 'minimum': tf.minimum,
                   'add': tf.add}
         op = tf_map[op_name]
+    elif backend == 'tinygrad':
+        tg_map = {'subtract': 'sub', 'multiply': 'mul', 'divide': 'div',
+                  'power': 'pow'}
+        op = getattr(TGTensor, tg_map.get(op_name, name), None)
+        if op is None:
+            pytest.skip('op %s not exposed by tinygrad' % op_name)
     else:
         try:
             op = _backend_op(mod, name)
@@ -323,8 +359,12 @@ def test_binary_gradients(backend, op_name):
     else:
         x1_np, x2_np = np.array(X1), np.array(X2)
 
-    def f(x1, x2):
-        return backend_sum(backend, mod, op(x1, x2))
+    if backend == 'tinygrad':
+        def f(x1, x2):
+            return TGTensor.sum(op(x1, x2))
+    else:
+        def f(x1, x2):
+            return backend_sum(backend, mod, op(x1, x2))
 
     df = tangent.grad(f, wrt=(0,))
     got = from_backend(mod, grad_call(backend, df, to_backend(mod, x1_np), to_backend(mod, x2_np)))
@@ -342,8 +382,12 @@ def test_sum_gradient(backend):
     mod = dict(BACKENDS)[backend]
     x_np = np.array([1.0, 2.0, 3.0], dtype='float32')
 
-    def f(x):
-        return backend_sum(backend, mod, x)
+    if backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(x)
+    else:
+        def f(x):
+            return backend_sum(backend, mod, x)
 
     got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
     assert allclose(got, np.ones(3))
@@ -354,8 +398,12 @@ def test_mean_gradient(backend):
     mod = dict(BACKENDS)[backend]
     x_np = np.array([1.0, 2.0, 3.0, 4.0], dtype='float32')
 
-    def f(x):
-        return backend_mean(backend, mod, x)
+    if backend == 'tinygrad':
+        def f(x):
+            return TGTensor.mean(x)
+    else:
+        def f(x):
+            return backend_mean(backend, mod, x)
 
     got = from_backend(mod, grad_call(backend, tangent.grad(f), to_backend(mod, x_np)))
     assert allclose(got, np.full(4, 0.25))
@@ -374,6 +422,9 @@ def test_matmul_gradient(backend):
     if backend == 'keras':
         def f(x, w):
             return kops.sum(kops.matmul(x, w))
+    elif backend == 'tinygrad':
+        def f(x, w):
+            return TGTensor.sum(TGTensor.matmul(x, w))
     else:
         def f(x, w):
             return backend_sum(backend, mod, mod.matmul(x, w))
@@ -393,8 +444,15 @@ def test_vector_dot_gradient(backend):
     x_np = np.array([1.0, 2.0, 3.0], dtype='float32')
     y_np = np.array([4.0, 5.0, 6.0], dtype='float32')
 
-    def f(x, y):
-        return mod.matmul(x, y) if backend != 'keras' else kops.matmul(x, y)
+    if backend == 'keras':
+        def f(x, y):
+            return kops.matmul(x, y)
+    elif backend == 'tinygrad':
+        def f(x, y):
+            return TGTensor.matmul(x, y)
+    else:
+        def f(x, y):
+            return mod.matmul(x, y)
 
     got = from_backend(mod, grad_call(backend, tangent.grad(f, wrt=(0,)),
                                         to_backend(mod, x_np), to_backend(mod, y_np)))
@@ -413,6 +471,9 @@ def test_reshape_gradient(backend):
     if backend == 'keras':
         def f(x):
             return kops.sum(kops.reshape(x, (2, 3)))
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.reshape(x, (2, 3)))
     else:
         def f(x):
             return backend_sum(backend, mod, mod.reshape(x, (2, 3)))
@@ -439,6 +500,9 @@ def test_transpose_gradient(backend):
         def f(x):
             # torch.transpose requires explicit dimensions
             return backend_sum(backend, mod, mod.transpose(x, 0, 1))
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.transpose(x))
     else:
         def f(x):
             return backend_sum(backend, mod, mod.transpose(x))
@@ -467,6 +531,9 @@ def test_clip_gradient(backend):
     elif backend == 'torch':
         def f(x):
             return torch.sum(torch.clamp(x, 0.0, 1.0))
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.clip(x, 0.0, 1.0))
     else:
         def f(x):
             return kops.sum(kops.clip(x, 0.0, 1.0))
@@ -494,6 +561,9 @@ def test_squeeze_gradient(backend):
     elif backend == 'torch':
         def f(x):
             return torch.sum(torch.squeeze(x))
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.squeeze(x))
     else:
         def f(x):
             return kops.sum(kops.squeeze(x))
@@ -517,6 +587,9 @@ def test_expand_dims_gradient(backend):
     elif backend == 'torch':
         def f(x):
             return torch.sum(torch.unsqueeze(x, 0))
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.unsqueeze(x, 0))
     else:
         def f(x):
             return kops.sum(kops.expand_dims(x, 0))
@@ -543,6 +616,9 @@ def test_reduce_max_gradient(backend):
     elif backend == 'torch':
         def f(x):
             return torch.max(x)
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.max(x)
     else:
         def f(x):
             return kops.max(x)
@@ -565,6 +641,9 @@ def test_reduce_min_gradient(backend):
     elif backend == 'torch':
         def f(x):
             return torch.min(x)
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.min(x)
     else:
         def f(x):
             return kops.min(x)
@@ -593,6 +672,9 @@ def test_where_gradient(backend):
     elif backend == 'torch':
         def f(x, y):
             return torch.sum(torch.where(x > 0, x, y))
+    elif backend == 'tinygrad':
+        def f(x, y):
+            return TGTensor.sum(TGTensor.where(x > 0, x, y))
     else:
         def f(x, y):
             return kops.sum(kops.where(x > 0, x, y))
@@ -601,6 +683,36 @@ def test_where_gradient(backend):
     gx, gy = df(to_backend(mod, x_np), to_backend(mod, y_np))
     assert allclose(from_backend(mod, gx), np.array([0.0, 1.0, 0.0]))
     assert allclose(from_backend(mod, gy), np.array([1.0, 0.0, 1.0]))
+
+
+# ---------------------------------------------------------------------------
+# The @ (matrix multiplication) operator
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_matmul_operator_gradient(backend):
+    if backend in ('torch', 'keras'):
+        pytest.skip('torch/keras have no `@` matmul-gradient registration')
+    mod = dict(BACKENDS)[backend]
+    x_np = np.array([[1.0, 2.0], [3.0, 4.0]], dtype='float32')
+    w_np = np.array([[0.5, -0.5], [1.0, 0.0]], dtype='float32')
+
+    if backend == 'tf':
+        def f(x, w):
+            return tf.reduce_sum(x @ w)
+    else:
+        def f(x, w):
+            return mod.sum(x @ w)
+
+    dfx = tangent.grad(f, wrt=(0,))
+    got = from_backend(mod, grad_call(backend, dfx,
+                                      to_backend(mod, x_np), to_backend(mod, w_np)))
+    assert allclose(got, np.ones((2, 2)) @ w_np.T)
+
+    dfw = tangent.grad(f, wrt=(1,))
+    got = from_backend(mod, grad_call(backend, dfw,
+                                      to_backend(mod, x_np), to_backend(mod, w_np)))
+    assert allclose(got, x_np.T @ np.ones((2, 2)))
 
 
 if __name__ == '__main__':

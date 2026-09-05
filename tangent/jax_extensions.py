@@ -139,6 +139,29 @@ for num_type in [float, int, Number]:
     except ValueError:
         pass  # Already registered
 
+
+# `@` (matmul) operator gradients for JAX arrays
+def jax_matmul_grad_x(dz, x, y):
+    dz = jnp.asarray(dz)
+    if x.ndim == 1 and y.ndim == 1:
+        return dz * y
+    if x.ndim == 2 and y.ndim == 1:
+        return jnp.outer(dz, y)
+    return jnp.matmul(dz, jnp.swapaxes(y, -1, -2))
+
+
+def jax_matmul_grad_y(dz, x, y):
+    dz = jnp.asarray(dz)
+    if x.ndim == 1 and y.ndim == 1:
+        return dz * x
+    if x.ndim == 1 and y.ndim == 2:
+        return jnp.outer(x, dz)
+    return jnp.matmul(jnp.swapaxes(x, -1, -2), dz)
+
+
+_utils.register_matmul_grad(ArrayType, jax_matmul_grad_x, jax_matmul_grad_y)
+
+
 # Type mixing support: NumPy <-> JAX conversion
 # This handles cases where Python operators (like **) return NumPy arrays
 # when operating on JAX arrays, causing type mixing in gradient accumulation

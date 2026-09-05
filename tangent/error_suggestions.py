@@ -171,12 +171,14 @@ Workaround:
   Place all imports at the module level (top of file).
 ''',
 
-    'MatMult operator': '''The @ (matrix multiplication) operator is not yet supported.
+    'MatMult operator': '''The @ (matrix multiplication) operator is supported for backends that
+register matmul gradients (NumPy, tinygrad, JAX, TensorFlow). If you see a
+"No `@` (matmul) gradient registered" error, your backend has no registration.
 
 Workaround:
   ❌ result = A @ B
   ✅ result = np.dot(A, B)
-  ✅ result = np.matmul(A, B)
+  ✅ result = np.matmul(A, B)   (or the backend's matmul function/method)
 ''',
 
     'Floor Div operator': '''The // (floor division) operator has limited support.

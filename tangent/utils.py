@@ -311,6 +311,62 @@ def register_unreduce(t, unreducer_function):
   unreducers[t] = unreducer_function
 
 
+# Some tensor backends (notably tinygrad) expose their operations as methods
+# on the tensor object (`x.relu()`, `x.sum()`) rather than as module-level
+# functions. Tangent resolves calls against the differentiated function's
+# global namespace, so a method call on a computed value (e.g. `x = a + b`
+# followed by `x.sum()`) does not resolve statically and would otherwise be
+# treated as non-differentiable. Backends register a `MethodResolver` so that
+# such unresolved method calls are rewritten into an unbound call
+# (`Tensor.sum(x)`) annotated with the corresponding function object, letting
+# the adjoint registered for that function apply. See `annotate.ResolveCalls`.
+class MethodResolver(object):
+  """A claim by a tensor backend over unresolved method calls.
+
+  Args:
+    methods: Mapping of method name to the unbound backend function, e.g.
+      `{'relu': Tensor.relu}`. The value is used as the `func` annotation so
+      it must be the same object the adjoint/tangent is registered against.
+    uses_backend: Predicate over the differentiated function's namespace. The
+      claim only applies when this returns True, so e.g. a NumPy `x.sum()` is
+      left untouched in code that does not use this backend.
+    base_node: Given the namespace, returns the gast expression node for the
+      tensor class the method should be called on (e.g. `Tensor` or
+      `tinygrad.Tensor`). The call `x.m(args)` is rewritten to
+      `<base_node>.m(x, args)`.
+    tuple_arg_methods: Iterable of method names whose multiple positional
+      arguments should be packed into a single tuple argument before binding
+      (e.g. `reshape(2, 3)` -> `reshape((2, 3))`), so the adjoint template
+      receives one bindable parameter.
+  """
+
+  def __init__(self, methods, uses_backend, base_node, tuple_arg_methods=()):
+    self.methods = dict(methods)
+    self.uses_backend = uses_backend
+    self.base_node = base_node
+    self.tuple_arg_methods = set(tuple_arg_methods)
+
+
+method_resolvers = []
+
+
+def register_method_resolver(resolver):
+  """Register a backend method resolver. See `MethodResolver`."""
+  method_resolvers.append(resolver)
+
+
+def resolve_backend_method(namespace, method_name):
+  """Return the first registered resolver claiming `method_name`, else None.
+
+  A resolver only claims the method when its `uses_backend` predicate accepts
+  the namespace, so backends are scoped to code that actually uses them.
+  """
+  for resolver in method_resolvers:
+    if method_name in resolver.methods and resolver.uses_backend(namespace):
+      return resolver
+  return None
+
+
 def astype(array, y):
   """A functional form of the `astype` method.
 
@@ -602,6 +658,49 @@ def add_grad(left, right):
   if right_type is ZeroGradient:
     return left
   return grad_adders[(left_type, right_type)](left, right)
+
+
+# The values are functions fn(dz, x, y) returning the partial gradient of
+# z = x @ y with respect to x / y respectively. Backends register the exact
+# runtime array type (e.g. tf EagerTensor, jax ArrayImpl) so dispatch works
+# with subclasses of the public class.
+matmul_grad_xs = {}
+matmul_grad_ys = {}
+
+
+def register_matmul_grad(t, grad_x_function, grad_y_function):
+  """Register the partial gradients of the `@` (matmul) operator for type t.
+
+  Args:
+    t: A Python type object. The array type the operands belong to.
+    grad_x_function: A ternary function fn(dz, x, y) returning d[z]/d[x]
+      contributions for z = x @ y (including any rank-promotion cases).
+    grad_y_function: A ternary function fn(dz, x, y) returning d[z]/d[y].
+  """
+  matmul_grad_xs[t] = grad_x_function
+  matmul_grad_ys[t] = grad_y_function
+
+
+def matmul_grad_x(dz, x, y):
+  """Partial gradient of z = x @ y with respect to x, backend-dispatched."""
+  grad_fn = matmul_grad_xs.get(type(x))
+  if grad_fn is None:
+    raise NotImplementedError(
+        'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
+        'matmul function (e.g. x.matmul(y)) or register one with '
+        'tangent.utils.register_matmul_grad.' % type(x).__name__)
+  return grad_fn(dz, x, y)
+
+
+def matmul_grad_y(dz, x, y):
+  """Partial gradient of z = x @ y with respect to y, backend-dispatched."""
+  grad_fn = matmul_grad_ys.get(type(y))
+  if grad_fn is None:
+    raise NotImplementedError(
+        'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
+        'matmul function (e.g. x.matmul(y)) or register one with '
+        'tangent.utils.register_matmul_grad.' % type(y).__name__)
+  return grad_fn(dz, x, y)
 
 
 def array_shapes_match(a, b):

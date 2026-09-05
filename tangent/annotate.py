@@ -87,6 +87,28 @@ class ResolveCalls(gast.NodeVisitor):
       func = None
 
     if func is None and isinstance(node.func, gast.Attribute):
+      method_name = node.func.attr
+
+      # Give registered tensor backends first claim on this unresolved method
+      # call. Some backends (tinygrad) are method-based: x.sum() on a computed
+      # value cannot be resolved statically, but can be rewritten to an
+      # unbound call Tensor.sum(x) annotated with the backend's method, so the
+      # registered adjoint applies. This must run before the NumPy fallback
+      # below, which would otherwise hijack e.g. .sum() for all backends.
+      resolver = utils.resolve_backend_method(self.namespace, method_name)
+      if resolver is not None:
+        # Transform x.m(args) to Base.m(x, args) in the AST
+        obj = node.func.value
+        if method_name in resolver.tuple_arg_methods and len(node.args) > 1:
+          node.args = [gast.Tuple(elts=node.args, ctx=gast.Load())]
+        node.func = gast.Attribute(
+            value=resolver.base_node(self.namespace),
+            attr=method_name,
+            ctx=gast.Load())
+        node.args = [obj] + node.args
+        anno.setanno(node, 'func', resolver.methods[method_name])
+        return
+
       import numpy
       # Common NumPy array methods that have function equivalents
       numpy_method_map = {

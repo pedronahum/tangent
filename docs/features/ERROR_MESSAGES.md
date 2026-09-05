@@ -174,7 +174,6 @@ This is a known issue in Tangent. See: docs/bugs/DICT_CONSTRUCTION_BUG.md
 | In Operator | TangentParseError | ✅ |
 | Not In Operator | TangentParseError | ✅ |
 | Import Statements (in functions) | TangentParseError | ✅ |
-| MatMult Operator (@) | TangentParseError | ✅ |
 | Floor Div (//) | TangentParseError | ✅ |
 | Bitwise Operators | TangentParseError | ✅ |
 | Walrus Operator (:=) | TangentParseError | ✅ |

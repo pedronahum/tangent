@@ -40,6 +40,7 @@ import gast
 import numpy
 import tangent
 from tangent import tracing
+from tangent import utils
 
 
 # TODO: Avoid requiring non-differentiables to define @tangent_s.
@@ -279,6 +280,39 @@ def usub(y, x):
 @adjoint(gast.UAdd)
 def uadd(y, x):
   d[x] = d[y]
+
+
+# Matrix multiplication operator: z = x @ y. The partial gradients dispatch on
+# the operand type through tangent.matmul_grad_x/_y so each backend (NumPy,
+# tinygrad, JAX, TF, ...) supplies its own rank-promotion handling.
+@adjoint(gast.MatMult)
+def matmult(z, x, y):
+  d[x] = tangent.matmul_grad_x(d[z], x, y)
+  d[y] = tangent.matmul_grad_y(d[z], x, y)
+
+
+def matmul_grad_x_numpy(dz, x, y):
+  """d[x] for z = x @ y, covering the vector/matrix rank promotions."""
+  dz = numpy.asarray(dz)
+  if x.ndim == 1 and y.ndim == 1:
+    return dz * y
+  if x.ndim == 2 and y.ndim == 1:
+    return numpy.outer(dz, y)
+  return numpy.matmul(dz, numpy.swapaxes(y, -1, -2))
+
+
+def matmul_grad_y_numpy(dz, x, y):
+  """d[y] for z = x @ y, covering the vector/matrix rank promotions."""
+  dz = numpy.asarray(dz)
+  if x.ndim == 1 and y.ndim == 1:
+    return dz * x
+  if x.ndim == 1 and y.ndim == 2:
+    return numpy.outer(x, dz)
+  return numpy.matmul(numpy.swapaxes(x, -1, -2), dz)
+
+
+utils.register_matmul_grad(
+    numpy.ndarray, matmul_grad_x_numpy, matmul_grad_y_numpy)
 
 
 #

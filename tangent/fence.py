@@ -264,8 +264,9 @@ class LanguageFence(ast.NodeVisitor):
     self._reject(node, 'Bitwise And operator is not supported')
 
   def visit_MatMult(self, node):
-    # TODO: Add support for this.
-    self._reject(node, 'MatMult operator is not supported')
+    # Supported through the backend-dispatched matmul gradient rules
+    # (tangent.matmul_grad_x / _y).
+    self._allow_and_continue(node)
 
   def visit_BoolOp(self, node):
     self._allow_and_continue(node)

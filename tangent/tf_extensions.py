@@ -146,6 +146,37 @@ except ValueError as e:
     if "already mapped" not in str(e):
         raise
 
+
+# `@` (matmul) operator gradients for TF tensors. tf.matmul requires rank >= 2,
+# so the vector cases use einsum instead.
+def tf_matmul_grad_x(dz, x, y):
+    dz = tf.cast(tf.convert_to_tensor(dz), x.dtype)
+    if x.shape.rank == 1 and y.shape.rank == 1:
+        return dz * y
+    if x.shape.rank == 2 and y.shape.rank == 1:
+        return tf.einsum('n,m->nm', dz, y)
+    if x.shape.rank == 1 and y.shape.rank == 2:
+        return tf.einsum('n,nm->m', dz, y)
+    return tf.matmul(dz, y, transpose_b=True)
+
+
+def tf_matmul_grad_y(dz, x, y):
+    dz = tf.cast(tf.convert_to_tensor(dz), y.dtype)
+    if x.shape.rank == 1 and y.shape.rank == 1:
+        return dz * x
+    if x.shape.rank == 1 and y.shape.rank == 2:
+        return tf.einsum('m,n->mn', x, dz)
+    if x.shape.rank == 2 and y.shape.rank == 1:
+        return tf.einsum('nm,n->m', x, dz)
+    return tf.matmul(x, dz, transpose_a=True)
+
+
+_utils.register_matmul_grad(TensorType, tf_matmul_grad_x, tf_matmul_grad_y)
+if VariableType is not TensorType:
+    _utils.register_matmul_grad(VariableType, tf_matmul_grad_x,
+                                tf_matmul_grad_y)
+
+
 # Type mixing support: NumPy <-> TensorFlow conversion
 # This handles cases where Python's ** operator returns NumPy arrays
 # when operating on TensorFlow tensors

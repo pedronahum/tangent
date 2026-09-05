@@ -30,6 +30,8 @@ from tangent.utils import copy
 from tangent.utils import grad_dot
 from tangent.utils import init_grad
 from tangent.utils import insert_grad_of
+from tangent.utils import matmul_grad_x
+from tangent.utils import matmul_grad_y
 from tangent.utils import pop
 from tangent.utils import pop_stack
 from tangent.utils import get_shape
@@ -117,6 +119,15 @@ except (ImportError, AttributeError) as e:
   # Keras is optional
   import warnings
   warnings.warn(f"Keras extensions not available: {e}. Install Keras with: pip install keras")
+  pass
+
+# tinygrad extensions (optional; tinygrad's method-based tensor API)
+try:
+  from tangent.tinygrad_extensions import *
+except (ImportError, AttributeError) as e:
+  # tinygrad is optional
+  import warnings
+  warnings.warn(f"tinygrad extensions not available: {e}. Install with: pip install tinygrad")
   pass
 
 # Extended NumPy gradients

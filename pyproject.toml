@@ -52,6 +52,7 @@ tf = ["tensorflow>=2.16"]
 jax = ["jax>=0.4.30"]
 torch = ["torch>=2.0"]
 keras = ["keras>=3.0"]
+tinygrad = ["tinygrad>=0.14"]
 # Symbolic optimizations (tangent.optimizations.algebraic_simplification and the
 # straight-line coarsening prototype in tangent.optimizations.coarsening).
 symbolic = ["sympy>=1.12"]
@@ -67,6 +68,7 @@ all = [
     "pytest-cov>=4.0",
     "sympy>=1.12",
     "tensorflow>=2.16",
+    "tinygrad>=0.14",
     "torch>=2.0",
 ]
 

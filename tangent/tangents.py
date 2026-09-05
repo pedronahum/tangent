@@ -116,6 +116,11 @@ def tusub(z, x):
   d[z] = -d[x]
 
 
+@tangent_(gast.MatMult)
+def tmatmult(z, x, y):
+  d[z] = d[x] @ y + x @ d[y]
+
+
 #
 # Collection tangents
 #
