@@ -24,6 +24,7 @@ from autograd import grad as ag_grad
 import autograd.numpy as ag_np
 import numpy as np
 import pytest
+import sys
 import tangent
 import utils
 
@@ -77,6 +78,46 @@ def test_reverse_over_reverse_binary(func, a, b, optimized):
 
 def test_reverse_over_reverse_ternary(func, optimized, a, b, c):
   _test_gradgrad_array(func, optimized, a, b, c)
+
+
+def test_third_derivative_polynomial(optimized):
+  """Third derivatives of ordinary functions (reverse-over-reverse-over-reverse).
+
+  Requires the adjoints registered for Tangent's own accumulation helpers
+  (tangent.unreduce_like etc.) so that differentiating second-order adjoint
+  code does not step into their type-dispatch bodies. `optimized` is supplied
+  by conftest for both modes.
+  """
+  def f(x):
+    return np.sum(x * x * x)
+
+  x = np.array([1.0, 2.0])
+  old_limit = sys.getrecursionlimit()
+  sys.setrecursionlimit(max(old_limit, 20000))
+  try:
+    d3 = tangent.grad(tangent.grad(tangent.grad(f, optimized=optimized),
+                                    optimized=optimized), optimized=optimized)
+    got = d3(x)
+  finally:
+    sys.setrecursionlimit(old_limit)
+  # d^3/dx^3 sum(x^3) = 6 elementwise.
+  assert np.allclose(got, np.array([6.0, 6.0]), atol=1e-2)
+
+
+def test_third_derivative_exp(optimized):
+  def f(x):
+    return np.sum(np.exp(x))
+
+  x = np.array([0.5, 1.0])
+  old_limit = sys.getrecursionlimit()
+  sys.setrecursionlimit(max(old_limit, 20000))
+  try:
+    d3 = tangent.grad(tangent.grad(tangent.grad(f, optimized=optimized),
+                                    optimized=optimized), optimized=optimized)
+    got = d3(x)
+  finally:
+    sys.setrecursionlimit(old_limit)
+  assert np.allclose(got, np.exp(x), atol=1e-2)
 
 
 if __name__ == '__main__':

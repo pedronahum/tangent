@@ -141,17 +141,23 @@ class ResolveCalls(gast.NodeVisitor):
         # Map this method to its function equivalent
         # Transform arr.sum() to numpy.sum(arr) in the AST
         func = numpy_method_map[method_name]
+        obj = node.func.value
+        method_args = node.args
+        # reshape(2, 3) and transpose(1, 0) accept the shape/axes as varargs,
+        # but numpy.reshape / numpy.transpose take a single sequence argument.
+        # Pack multiple positional args into a tuple so the call binds.
+        if method_name in ('reshape', 'transpose') and len(method_args) > 1:
+          method_args = [gast.Tuple(elts=method_args, ctx=gast.Load())]
         anno.setanno(node, 'func', func)
 
         # Transform the AST: move the object from func.value to first argument
         # arr.sum(axis=0) -> numpy.sum(arr, axis=0)
-        obj = node.func.value
         # Create numpy.method_name as an Attribute node
         node.func = gast.Attribute(
             value=gast.Name(id='numpy', ctx=gast.Load(), annotation=None),
             attr=method_name,
             ctx=gast.Load())
-        node.args = [obj] + node.args
+        node.args = [obj] + method_args
 
         # Return early - we've handled this case
         return

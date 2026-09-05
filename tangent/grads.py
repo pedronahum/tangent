@@ -423,8 +423,8 @@ def reshape(y, x, y_shape):
 
 
 @adjoint(numpy.transpose)
-def transpose(y, x):
-  d[x] = numpy.transpose(d[y])
+def transpose(y, x, axes=None):
+  d[x] = numpy.transpose(d[y], tangent.transpose_inverse_axes(axes))
 
 
 @adjoint(numpy.broadcast_arrays)
@@ -580,6 +580,15 @@ def max_builtin(y, x1, x2):
 @adjoint(tangent.unreduce)
 def aunreduce(y, x, shape, axis, keepdims):
   d[x] = tangent.unbroadcast(d[y], x)
+
+
+@adjoint(tangent.unreduce_like)
+def aunreduce_like(y, array, original_array, axis, keepdims):
+  # unreduce_like broadcasts `array` to original_array's shape; the adjoint of
+  # that broadcast reduces back to `array`'s shape. Without this adjoint,
+  # third-order derivatives step into the helper's type-dispatch body and fail
+  # on the builtin `type()` call.
+  d[array] = tangent.unbroadcast(d[y], array)
 
 
 @adjoint(tangent.unbroadcast)

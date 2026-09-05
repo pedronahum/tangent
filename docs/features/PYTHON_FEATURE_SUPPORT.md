@@ -353,9 +353,10 @@ def with_condition(x):
     return result
 ```
 
-### Higher-Order Differentiation (Second Derivatives)
+### Higher-Order Differentiation (Second and Third Derivatives)
 
-**Status**: ✅ Supported — differentiate a gradient function again
+**Status**: ✅ Supported — differentiate a gradient function again (second
+and, for ordinary NumPy functions, third derivatives)
 
 Tangent can differentiate a generated gradient function, so second derivatives
 (and Hessian-vector products) work by nesting `grad`:
@@ -373,6 +374,14 @@ ddf(2.0)  # 12.0  (d²/dx² x³ = 6x)
 This works in both optimized and unoptimized modes, and for array-valued
 functions (e.g. `sum(tanh(x))` yields the elementwise `tanh''`, the Hessian
 diagonal).
+
+**Third derivatives** also work for ordinary NumPy functions — nesting `grad`
+a third time differentiates the second-order adjoint code. This relies on
+adjoints registered for Tangent's own accumulation helpers (`tangent.unreduce`,
+`tangent.unreduce_like`, `tangent.unbroadcast`, `tangent.add_grad`, ...), so
+the third pass does not step into their type-dispatch bodies. Fourth and higher
+orders are not yet reliable: the unoptimized path reaches the low-level tape
+machinery (see below) and the optimized path can return incorrect values.
 
 **The low-level tape API under higher-order AD:**
 

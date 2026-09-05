@@ -33,6 +33,7 @@ from tangent.utils import insert_grad_of
 from tangent.utils import matmul_grad_x
 from tangent.utils import matmul_grad_y
 from tangent.utils import pop
+from tangent.utils import transpose_inverse_axes
 from tangent.utils import pop_stack
 from tangent.utils import get_shape
 from tangent.utils import push

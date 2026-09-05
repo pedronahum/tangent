@@ -224,8 +224,8 @@ def tatleast_3d(z, x):
 
 
 @tangent_(numpy.transpose)
-def ttranspose(z, x):
-  d[z] = numpy.transpose(d[x])
+def ttranspose(z, x, axes=None):
+  d[z] = numpy.transpose(d[x], axes)
 
 
 @tangent_(numpy.sum)
@@ -262,6 +262,11 @@ def trollaxis(z, a, axis, start=0):
 @tangent_(numpy.shape)
 def tshape(z, x):
   d[z] = numpy.shape(d[x])
+
+
+@tangent_(tangent.transpose_inverse_axes)
+def ttranspose_inverse_axes(z, x):
+  d[z] = tangent.transpose_inverse_axes(d[x])
 
 
 @tangent_(numpy.array)

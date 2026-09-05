@@ -111,8 +111,10 @@ def register_unbroadcast(t, unbroadcaster_function):
 # Seed types that carry no backend allegiance of their own. When a gradient
 # seed has one of these types and the primal value belongs to a specific
 # backend (TF/JAX/torch), the unbroadcast/unreduce helpers dispatch to the
-# primal's backend so the gradient stays in that backend.
-_GENERIC_GRAD_TYPES = (float, int, bool, numpy.ndarray,
+# primal's backend so the gradient stays in that backend. Containers (list,
+# tuple) are generic too: their gradients are handled element-wise, and they
+# must not take part in the backend cross-dispatch below.
+_GENERIC_GRAD_TYPES = (float, int, bool, list, tuple, numpy.ndarray,
                        numpy.floating, numpy.integer, numpy.bool_)
 
 
@@ -138,6 +140,24 @@ def unbroadcast(array, like):
     # `like`'s shape actually happens (the scalar unbroadcasters are identity).
     unbroadcaster = unbroadcasters[type(like)]
   return unbroadcaster(array, like)
+
+
+def unbroadcast_container(array, like):
+  """Unbroadcast a list/tuple gradient element-wise against `like`.
+
+  Gradients of container values are containers of gradients; at fourth order
+  and beyond, adjoint code accumulates them via unbroadcast, so each element
+  is unbroadcast against its counterpart.
+  """
+  unbroadcasted = [unbroadcast(a, l) for a, l in zip(array, like)]
+  if isinstance(array, tuple):
+    return tuple(unbroadcasted)
+  return unbroadcasted
+
+
+unbroadcasters[list] = unbroadcast_container
+unbroadcasters[tuple] = lambda array, like: tuple(
+    unbroadcast(a, l) for a, l in zip(array, like))
 
 
 def create_unbroadcast_axis(shape, broadcast_shape):
@@ -943,8 +963,25 @@ def push_stack(stack, substack, op_id):
     stack.append(substack)
 
 
+def transpose_inverse_axes(axes):
+  """Inverse of a transpose `axes` permutation, or None if `axes` is None.
+
+  Used by the adjoint of numpy.transpose: the gradient of transpose(x, axes)
+  is transpose(dy, inverse(axes)). Kept as a non-differentiable helper so the
+  inverse-permutation loop never appears in generated code (where it would be
+  mangled), mirroring the tinygrad permute adjoint.
+  """
+  if axes is None:
+    return None
+  axes = list(axes)
+  inverse = [0] * len(axes)
+  for i, ax in enumerate(axes):
+    inverse[ax] = i
+  return inverse
+
+
 non_differentiable.register_non_differentiable_functions(
-    init_grad, array_size, Stack)
+    init_grad, array_size, Stack, transpose_inverse_axes)
 
 
 def insert_grad_of(var):
