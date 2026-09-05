@@ -26,7 +26,7 @@ Tangent performs **source-to-source** automatic differentiation: it transforms y
 - **🔍 Debuggable**: Step through gradient computation line by line
 - **🎨 Visual**: Interactive computation graphs and gradient flow diagrams
 - **🔧 Flexible**: One API across NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad
-- **🐍 Pythonic**: Control flow, closures, classes, comprehensions, and second derivatives
+- **🐍 Pythonic**: Control flow, closures, classes, comprehensions, and second and third derivatives
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 
@@ -127,7 +127,7 @@ forward-mode tangents; see the per-extension lists in
 | TensorFlow 2.x | `tangent/tf_extensions.py` + `tf_extended.py` | 45+ | 20+ | Eager-mode TF; includes conv/pooling, linalg, and reductions |
 | PyTorch | `tangent/torch_extensions.py` | 45+ | 30+ | Functional `torch.*` API, verified against `torch.autograd` |
 | Keras 3 | `tangent/keras_extensions.py` | 35+ | ~20 | Backend-agnostic `keras.ops`; runs on the TF, JAX, or torch backend |
-| tinygrad | `tangent/tinygrad_extensions.py` | 65+ | ~20 | Method-based `Tensor.*` API incl. conv2d/avg_pool2d/layernorm/batchnorm; generated gradient code is a tinygrad graph that tinygrad's own compiler fuses. Verified against tinygrad's autodiff |
+| tinygrad | `tangent/tinygrad_extensions.py` | 65+ | ~20 | Method-based `Tensor.*` API incl. conv2d/max_pool2d/avg_pool2d/layernorm/batchnorm; generated gradient code is a tinygrad graph that tinygrad's own compiler fuses. Verified against tinygrad's autodiff |
 
 Backend notes worth knowing:
 
@@ -152,13 +152,15 @@ Backend notes worth knowing:
   tinygrad, so plain NumPy `.sum()` elsewhere is unaffected. The generated
   gradient code is itself a tinygrad graph, which tinygrad's compiler schedules
   and fuses.
+- **tinygrad conv/pool limitations** — `conv2d` gradients require `groups=1`
+  (the input gradient supports any stride/dilation/padding; the weight gradient
+  any stride/dilation); `max_pool2d` gradients require `dilation=1`, no
+  `ceil_mode`, no `return_indices`, 3-D/4-D inputs, and symmetric padding;
+  `avg_pool2d` gradients require the defaults (`count_include_pad`, no
+  `ceil_mode`). Unsupported configurations raise `NotImplementedError`.
 - **The `@` operator** — `x @ y` differentiates for NumPy, tinygrad, JAX and
-  TensorFlow (backend-dispatched via `tangent.utils.register_matmul_grad`).
-  tinygrad limitations: `conv2d` gradients require `groups=1` (input gradient
-  supports any stride/dilation/padding; weight gradient any stride/dilation);
-  `max_pool2d` gradients require `dilation=1`, no `ceil_mode`, symmetric
-  padding; `avg_pool2d` gradients require the defaults (`count_include_pad`,
-  no `ceil_mode`). Unsupported configurations raise `NotImplementedError`.
+  TensorFlow (backend-dispatched via `tangent.utils.register_matmul_grad`);
+  torch has no registration and raises a clear `NotImplementedError`.
 
 A shared cross-backend test suite (`tests/test_backend_coverage.py`) runs one
 op catalog — arithmetic, exp/log, trig, activations, reductions, matmul,
@@ -231,7 +233,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Classes**: user-defined classes with method inlining, instance attributes, method chaining, inheritance and `super()`
 - **Data**: NumPy arrays; **pytree arguments** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure; list comprehensions
 - **Statements**: `assert`, `pass`, early `return`
-- **Higher-order**: `grad(grad(f))` second derivatives, Hessian-vector products
+- **Higher-order**: `grad(grad(f))` second derivatives, third derivatives for NumPy functions, Hessian-vector products
 
 **📖 Complete reference with examples**: [Python Feature Support Guide](docs/features/PYTHON_FEATURE_SUPPORT.md) — plus 16 focused feature docs under [`docs/features/`](docs/features/).
 
@@ -355,7 +357,7 @@ df_rev = tangent.grad(f)                          # reverse mode (default)
 df_fwd = tangent.autodiff(f, mode='forward')      # forward mode
 ```
 
-### Second derivatives
+### Second and third derivatives
 
 ```python
 def f(x):
@@ -363,11 +365,16 @@ def f(x):
 
 ddf = tangent.grad(tangent.grad(f))
 print(ddf(2.0))   # 12.0  (d²/dx² x³ = 6x)
+
+dddf = tangent.grad(ddf)
+print(dddf(2.0))  # 6.0   (d³/dx³ x³ = 6)
 ```
 
 Second derivatives work in both optimized and unoptimized modes, including
-through loops and across backends. See [Known Limitations](#-known-limitations)
-for the tape-API caveat.
+through loops and across backends. Third derivatives (differentiating the
+second-order adjoint code again) work for ordinary NumPy functions in both
+modes. Fourth order and above is not yet reliable. See
+[Known Limitations](#-known-limitations) for the tape-API caveat.
 
 ### Automatic caching
 
@@ -386,6 +393,10 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
   first order and in *unoptimized* second order; with `optimized=True` the
   optimization passes can corrupt the result. Ordinary code never calls these
   primitives directly.
+- **Fourth-order and higher derivatives**: second and third derivatives are
+  supported, but the fourth and beyond are not yet reliable — the optimized
+  path can return incorrect values and the unoptimized path reaches the tape
+  machinery above.
 - **`break`/`continue`** are rejected at transform time.
 - **Containers as function arguments (pytrees)**: tuples, lists and dicts of
   arrays can be passed as arguments and indexed/looped for first-order
@@ -460,14 +471,16 @@ python examples/recent_features.py
 ## 🧪 Testing
 
 The suite covers core autodiff, every Python feature, all six backends, and
-second derivatives. The cross-backend catalog is checked two ways: against
-hand-derived analytic gradients **and** against an independent
+second and third derivatives. The cross-backend catalog is checked two ways:
+against hand-derived analytic gradients **and** against an independent
 finite-difference oracle, so newly added adjoints are verified automatically:
 
 ```bash
 pytest tests/                        # core suite (no backends required)
 pytest tests/test_backend_coverage.py  # cross-backend op catalog (+ FD oracle)
 pytest tests/test_coarsening.py      # straight-line coarsening
+pytest tests/test_matmul_operator.py # @ operator (NumPy)
+pytest tests/test_numpy_method_calls.py  # NumPy array-method rewrite
 pytest tests/test_torch.py           # PyTorch-specific tests
 pytest tests/test_keras.py           # Keras tests (any backend)
 pytest tests/test_tinygrad.py        # tinygrad-specific tests
