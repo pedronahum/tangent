@@ -86,10 +86,20 @@ def tg_seed(g, like):
     called without an explicit init_grad, and as NumPy arrays after passing
     through NumPy-generic helpers. tinygrad does not mix with those types in
     arithmetic, so every adjoint coerces its incoming seed first.
+
+    Python/NumPy scalars go through ``Tensor(float)`` so tinygrad keeps them as
+    lazy constants: expanding a constant seed (e.g. in the adjoint of ``sum``)
+    then folds into the consumer kernels instead of materializing a full-size
+    buffer.
     """
     if isinstance(g, Tensor):
         return g
-    seed = Tensor(np.asarray(g))
+    if isinstance(g, (float, int, bool, np.floating, np.integer, np.bool_)):
+        seed = Tensor(float(g))
+    elif isinstance(g, np.ndarray):
+        seed = Tensor(g)
+    else:
+        seed = Tensor(np.asarray(g))
     if isinstance(like, Tensor):
         seed = seed.cast(like.dtype)
     return seed
@@ -362,10 +372,18 @@ non_differentiable.register_non_differentiable_functions(
     Tensor.rand, Tensor.randn, Tensor.randint,
     Tensor.arange, Tensor.linspace, Tensor.eye,
     Tensor.argmax, Tensor.argmin,
-    tg_shape, tg_size, tg_seed, tg_inv_perm, tg_clip_mask, tg_broadcast_axis,
+    tg_shape, tg_size, tg_inv_perm, tg_clip_mask, tg_broadcast_axis,
     tg_reduce_except, tg_conv2d_grad_input, tg_conv2d_grad_weight,
     tg_avg_pool2d_grad_input, tg_max_pool2d_grad_input,
 )
+
+
+# tg_seed is the identity on gradient values (it only coerces foreign seed
+# types), so it gets a real adjoint instead of a non-differentiable marking:
+# second-order derivatives must keep flowing through the seed coercion.
+@adjoint(tg_seed)
+def adjoint_tg_seed(y, g, like):
+    d[g] = d[y]
 
 
 def _tg_add(l, r):
@@ -792,27 +810,19 @@ def adjoint_mean(y, x, axis=None, keepdim=False):
 
 @adjoint(Tensor.max)
 def adjoint_max(y, x, axis=None, keepdim=False):
-    if axis is None:
-        max_val = x.max()
-        mask = x == max_val
-        num_max = mask.sum()
-    else:
-        max_val = x.max(axis=axis, keepdim=True)
-        mask = x == max_val
-        num_max = mask.sum(axis=axis, keepdim=True)
+    # Branchless: keepdim maxima broadcast against x for both axis=None and
+    # explicit axes; num_max splits the gradient among ties.
+    max_val = x.max(axis=axis, keepdim=True)
+    mask = x == max_val
+    num_max = mask.sum(axis=axis, keepdim=True)
     d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * mask / num_max
 
 
 @adjoint(Tensor.min)
 def adjoint_min(y, x, axis=None, keepdim=False):
-    if axis is None:
-        min_val = x.min()
-        mask = x == min_val
-        num_min = mask.sum()
-    else:
-        min_val = x.min(axis=axis, keepdim=True)
-        mask = x == min_val
-        num_min = mask.sum(axis=axis, keepdim=True)
+    min_val = x.min(axis=axis, keepdim=True)
+    mask = x == min_val
+    num_min = mask.sum(axis=axis, keepdim=True)
     d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * mask / num_min
 
 
@@ -852,34 +862,21 @@ def adjoint_cumsum(y, x, axis=0):
 
 @adjoint(Tensor.matmul)
 def adjoint_matmul(z, x, y):
-    dz = tangent.tg_seed(d[z], x)
-    if len(x.shape) == 1 and len(y.shape) == 1:
-        d[x] = dz * y
-        d[y] = dz * x
-    elif len(x.shape) == 2 and len(y.shape) == 2:
-        d[x] = dz.matmul(y.transpose())
-        d[y] = x.transpose().matmul(dz)
-    elif len(x.shape) == 2 and len(y.shape) == 1:
-        d[x] = dz.unsqueeze(1).matmul(y.unsqueeze(0))
-        d[y] = x.transpose().matmul(dz)
-    elif len(x.shape) == 1 and len(y.shape) == 2:
-        d[x] = dz.matmul(y.transpose())
-        d[y] = x.unsqueeze(1).matmul(dz.unsqueeze(0))
-    else:
-        d[x] = dz.matmul(y.transpose(-2, -1))
-        d[y] = x.transpose(-2, -1).matmul(dz)
+    # The rank-promotion case analysis lives in the (shared `@` operator)
+    # gradient helpers rather than in template branches: branch-local d[x]
+    # assignments make reverse_ad initialize and accumulate one gradient
+    # variable per branch, materializing a full-size zero tensor for every
+    # dead branch at runtime.
+    d[x] = tangent.tg_matmul_grad_x(d[z], x, y)
+    d[y] = tangent.tg_matmul_grad_y(d[z], x, y)
 
 
 @adjoint(Tensor.dot)
 def adjoint_dot(z, x, y):
-    # tinygrad's dot accepts a 2-D x 2-D or a 2-D x 1-D operand.
-    dz = tangent.tg_seed(d[z], x)
-    if len(y.shape) == 1:
-        d[x] = dz.unsqueeze(1).matmul(y.unsqueeze(0))
-        d[y] = x.transpose().matmul(dz)
-    else:
-        d[x] = dz.matmul(y.transpose())
-        d[y] = x.transpose().matmul(dz)
+    # tinygrad's dot accepts a 2-D x 2-D or a 2-D x 1-D operand; the matmul
+    # helpers cover both (see adjoint_matmul for why this is not branched).
+    d[x] = tangent.tg_matmul_grad_x(d[z], x, y)
+    d[y] = tangent.tg_matmul_grad_y(d[z], x, y)
 
 
 @adjoint(Tensor.softmax)

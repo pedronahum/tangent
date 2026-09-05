@@ -128,6 +128,10 @@ def unbroadcast(array, like):
   Returns:
     Tensor with certain dimensions summed to match the shape of `like`.
   """
+  if isinstance(array, ZeroGradient):
+    # A zero gradient stays zero under any (linear) shape operation; passing
+    # the sentinel through keeps add_grad's identity handling intact.
+    return array
   unbroadcaster = unbroadcasters[type(array)]
   if (type(array) is not type(like) and type(like) in unbroadcasters and
       isinstance(array, _GENERIC_GRAD_TYPES) and
@@ -203,6 +207,8 @@ def unreduce(array, shape, axis, keepdims):
   Returns:
     An array with axes broadcast to match the shape of the original array.
   """
+  if isinstance(array, ZeroGradient):
+    return array
   unreducer = unreducers[type(array)]
   return unreducer(array, shape, axis, keepdims)
 
@@ -219,6 +225,8 @@ def unreduce_like(array, original_array, axis, keepdims):
   Returns:
     An array with axes broadcast to match the shape of the original array.
   """
+  if isinstance(array, ZeroGradient):
+    return array
   atype = type(array)
   otype = type(original_array)
   cross = (atype is not otype and otype in unreducers and

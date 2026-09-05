@@ -435,6 +435,19 @@ class TestHigherOrder:
         x = Tensor([1.0, 2.0])
         assert _allclose(ddg(x), np.array([6.0, 12.0]))
 
+    def test_gradgrad_matmul(self):
+        def f(x, w):
+            return (x.matmul(w) * x.matmul(w)).sum()
+
+        w_np = np.array([[0.5, 0.0], [0.0, 1.0]], dtype=np.float32)
+        x = Tensor(np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32))
+        w = Tensor(w_np)
+        ddf = tangent.grad(tangent.grad(f, wrt=(0,)), wrt=(0,))
+        # d/dx sum((x@w)^2) = 2 (x@w) @ w^T; differentiating that again with a
+        # scalar seed gives 2 * rowsum(w @ w^T) broadcast over the rows.
+        expect = np.broadcast_to(2.0 * np.sum(w_np @ w_np.T, axis=1), (2, 2))
+        assert _allclose(ddf(x, w), expect)
+
 
 class TestForwardMode:
     """Forward-mode differentiation of tinygrad code."""
