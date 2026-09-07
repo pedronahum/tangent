@@ -16,7 +16,9 @@ from __future__ import absolute_import
 
 import numpy
 import tangent
+from tangent import non_differentiable
 from tangent.grads import adjoint
+from tangent.tangents import tangent_
 
 # ============================================================================
 # Element-wise Operations
@@ -183,27 +185,83 @@ def expand_dims(y, x, axis):
     d[x] = numpy.squeeze(d[y], axis=axis)
 
 
-@adjoint(numpy.concatenate)
-def concatenate(z, arrays, axis=0):
-    """Adjoint for numpy.concatenate: split gradient back to original arrays"""
-    # Compute split indices based on array sizes
-    sizes = [arr.shape[axis] for arr in arrays]
-    split_indices = numpy.cumsum(sizes[:-1])
+# numpy.concatenate / numpy.stack take a *list* of arrays, which Tangent
+# cannot distribute gradients into. concat_desugar rewrites list-literal calls
+# into the varargs helpers below (mirroring the JAX concat_seq/stack_seq
+# machinery), whose varargs adjoints split the gradient back per input.
 
-    # Split the gradient
-    grads = numpy.split(d[z], split_indices, axis=axis)
-    for i, arr in enumerate(arrays):
-        d[arr] = grads[i]
+def np_concat_seq(axis, *arrays):
+    """Runtime helper: concatenate a varargs sequence of arrays."""
+    return numpy.concatenate(list(arrays), axis=axis)
+
+
+def np_stack_seq(axis, *arrays):
+    """Runtime helper: stack a varargs sequence of arrays."""
+    return numpy.stack(list(arrays), axis=axis)
+
+
+def np_concat_grads(dz, arrays, axis):
+    """Split a concatenated gradient back into per-input gradients."""
+    dz = numpy.asarray(dz)
+    points = numpy.cumsum([a.shape[axis] for a in arrays[:-1]])
+    return tuple(numpy.split(dz, points, axis=axis))
+
+
+def np_stack_grads(dz, arrays, axis):
+    """Unstack a stacked gradient along the stacking axis."""
+    dz = numpy.asarray(dz)
+    return tuple(numpy.moveaxis(dz, axis, 0))
+
+
+non_differentiable.register_non_differentiable_functions(
+    np_concat_grads, np_stack_grads)
+
+
+@adjoint(np_concat_seq)
+def adjoint_np_concat_seq(z, axis, *arrays):
+    """Adjoint for np_concat_seq: split the gradient back per input."""
+    d[arrays] = tangent.np_concat_grads(d[z], arrays, axis)
+
+
+@adjoint(np_stack_seq)
+def adjoint_np_stack_seq(z, axis, *arrays):
+    """Adjoint for np_stack_seq: unstack the gradient."""
+    d[arrays] = tangent.np_stack_grads(d[z], arrays, axis)
+
+
+@tangent_(np_concat_seq)
+def tangent_np_concat_seq(z, axis, *arrays):
+    """Forward mode for np_concat_seq."""
+    d[z] = tangent.np_concat_seq(axis, *d[arrays])
+
+
+@tangent_(np_stack_seq)
+def tangent_np_stack_seq(z, axis, *arrays):
+    """Forward mode for np_stack_seq."""
+    d[z] = tangent.np_stack_seq(axis, *d[arrays])
+
+
+# The list-argument forms are only reachable when the desugar pass could not
+# rewrite the call (e.g. the list is built dynamically). Raise a clear error
+# rather than silently producing zero gradients (which is what the previous
+# loop-style adjoint did: gradient templates cannot assign through a loop
+# variable).
+@adjoint(numpy.concatenate)
+def concatenate(dz, arrays, axis=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate numpy.concatenate/stack when the '
+        'list of arrays is a literal. Bind the list to a variable assigned '
+        'once from a literal, or pass a list literal directly.')
 
 
 @adjoint(numpy.stack)
-def stack(z, arrays, axis=0):
-    """Adjoint for numpy.stack: unstack gradient along the stacking axis"""
-    # Move the stacked axis to the front, then unstack
-    d_moved = numpy.moveaxis(d[z], axis, 0)
-    # Split along first dimension (now the stacked axis)
-    for i, arr in enumerate(arrays):
-        d[arr] = d_moved[i]
+def stack(dz, arrays, axis=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate numpy.concatenate/stack when the '
+        'list of arrays is a literal. Bind the list to a variable assigned '
+        'once from a literal, or pass a list literal directly.')
 
 
 # ============================================================================
@@ -238,6 +296,186 @@ def where(result, condition, x, y):
     d[x] = tangent.unbroadcast(numpy.where(condition, d[result], numpy.zeros_like(d[result])), x)
     # Gradient for y: where condition is False
     d[y] = tangent.unbroadcast(numpy.where(condition, numpy.zeros_like(d[result]), d[result]), y)
+
+
+# ============================================================================
+# Forward-mode (tangent) definitions
+#
+# These mirror the adjoints above. Elementwise rules use the input tangent
+# directly (multiplication broadcasts a scalar seed); shape/linear-algebra
+# rules broadcast the tangent to the input's shape first, because
+# forward-mode seeds arrive as scalars and those operations need a
+# full-shape operand (same convention as tangents.py).
+# ============================================================================
+
+@tangent_(numpy.absolute)
+def tabsolute(z, x):
+    """Forward mode for numpy.absolute: dz = dx * sign(x)."""
+    d[z] = d[x] * numpy.sign(x)
+
+
+# Register alias (numpy.abs is numpy.absolute, but keep symmetry with the
+# adjoint registrations above in case they ever diverge).
+tangent_(numpy.abs)(tabsolute)
+
+
+@tangent_(numpy.reciprocal)
+def treciprocal(z, x):
+    """Forward mode for numpy.reciprocal: dz = -dx / x**2."""
+    d[z] = -d[x] / (x * x)
+
+
+@tangent_(numpy.log10)
+def tlog10(z, x):
+    """Forward mode for numpy.log10: dz = dx / (x * ln(10))."""
+    d[z] = d[x] / (x * numpy.log(10.0))
+
+
+@tangent_(numpy.log2)
+def tlog2(z, x):
+    """Forward mode for numpy.log2: dz = dx / (x * ln(2))."""
+    d[z] = d[x] / (x * numpy.log(2.0))
+
+
+@tangent_(numpy.log1p)
+def tlog1p(z, x):
+    """Forward mode for numpy.log1p: dz = dx / (1 + x)."""
+    d[z] = d[x] / (1.0 + x)
+
+
+@tangent_(numpy.expm1)
+def texpm1(z, x):
+    """Forward mode for numpy.expm1: dz = dx * exp(x)."""
+    d[z] = d[x] * numpy.exp(x)
+
+
+@tangent_(numpy.min)
+def tmin(z, x, axis=None, keepdims=False):
+    """Forward mode for numpy.min: the tangent of the minimal element(s)."""
+    if axis is None:
+        min_val = z
+    else:
+        min_val = numpy.expand_dims(z, axis) if not keepdims else z
+    mask = (x == min_val).astype(x.dtype)
+    num_min = numpy.sum(mask, axis=axis, keepdims=keepdims)
+    d[z] = numpy.sum(d[x] * mask, axis=axis, keepdims=keepdims) / num_min
+
+
+@tangent_(numpy.max)
+def tmax(z, x, axis=None, keepdims=False):
+    """Forward mode for numpy.max: the tangent of the maximal element(s)."""
+    if axis is None:
+        max_val = z
+    else:
+        max_val = numpy.expand_dims(z, axis) if not keepdims else z
+    mask = (x == max_val).astype(x.dtype)
+    num_max = numpy.sum(mask, axis=axis, keepdims=keepdims)
+    d[z] = numpy.sum(d[x] * mask, axis=axis, keepdims=keepdims) / num_max
+
+
+@tangent_(numpy.prod)
+def tprod(z, x, axis=None, keepdims=False):
+    """Forward mode for numpy.prod: dz = sum(dx * prod(x) / x_i)."""
+    d[z] = numpy.sum(
+        d[x] * tangent.unreduce(z, numpy.shape(x), axis, keepdims) / x,
+        axis=axis, keepdims=keepdims)
+
+
+@tangent_(numpy.matmul)
+def tmatmul(z, x, y):
+    """Forward mode for numpy.matmul: dz = dx @ y + x @ dy."""
+    d[z] = (numpy.matmul(numpy.broadcast_to(d[x], numpy.shape(x)), y) +
+            numpy.matmul(x, numpy.broadcast_to(d[y], numpy.shape(y))))
+
+
+@tangent_(numpy.linalg.inv)
+def tinv(z, x):
+    """Forward mode for numpy.linalg.inv: dz = -z @ dx @ z."""
+    d[z] = -numpy.matmul(
+        numpy.matmul(z, numpy.broadcast_to(d[x], numpy.shape(x))), z)
+
+
+@tangent_(numpy.outer)
+def touter(z, a, b):
+    """Forward mode for numpy.outer: dz = outer(da, b) + outer(a, db)."""
+    d[z] = (numpy.outer(numpy.broadcast_to(d[a], numpy.shape(a)), b) +
+            numpy.outer(a, numpy.broadcast_to(d[b], numpy.shape(b))))
+
+
+@tangent_(numpy.trace)
+def ttrace(z, x):
+    """Forward mode for numpy.trace: dz = trace(dx)."""
+    d[z] = numpy.trace(numpy.broadcast_to(d[x], numpy.shape(x)))
+
+
+@tangent_(numpy.squeeze)
+def tsqueeze(z, x, axis=None):
+    """Forward mode for numpy.squeeze."""
+    d[z] = numpy.squeeze(
+        numpy.broadcast_to(d[x], numpy.shape(x)), axis=axis)
+
+
+@tangent_(numpy.expand_dims)
+def texpand_dims(z, x, axis):
+    """Forward mode for numpy.expand_dims."""
+    d[z] = numpy.expand_dims(
+        numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+
+
+@tangent_(numpy.clip)
+def tclip(z, x, a_min, a_max):
+    """Forward mode for numpy.clip: the tangent flows where x is unclipped."""
+    d[z] = d[x] * numpy.logical_and(x >= a_min, x <= a_max).astype(x.dtype)
+
+
+@tangent_(numpy.where)
+def twhere(result, condition, x, y):
+    """Forward mode for numpy.where: pick the tangent of the selected arm."""
+    d[result] = numpy.where(condition, d[x], d[y])
+
+
+@tangent_(numpy.sign)
+def tsign(z, x):
+    """Forward mode for numpy.sign: zero tangent (piecewise constant)."""
+    d[z] = numpy.zeros_like(x)
+
+
+@tangent_(numpy.floor)
+def tfloor(z, x):
+    """Forward mode for numpy.floor: zero tangent (piecewise constant)."""
+    d[z] = numpy.zeros_like(x)
+
+
+@tangent_(numpy.ceil)
+def tceil(z, x):
+    """Forward mode for numpy.ceil: zero tangent (piecewise constant)."""
+    d[z] = numpy.zeros_like(x)
+
+
+@tangent_(numpy.var)
+def tvar(z, x, axis=None, ddof=0, keepdims=False):
+    """Forward mode for numpy.var: dz = sum(2 (x - mean) dx) / (n - ddof)."""
+    x_mean = numpy.mean(x, axis=axis, keepdims=True)
+    if axis is None:
+        n = x.size
+    else:
+        n = numpy.prod([x.shape[i]
+                        for i in (axis if isinstance(axis, tuple) else (axis,))])
+    d[z] = numpy.sum(2.0 * (x - x_mean) * d[x],
+                     axis=axis, keepdims=keepdims) / (n - ddof)
+
+
+@tangent_(numpy.std)
+def tstd(z, x, axis=None, ddof=0, keepdims=False):
+    """Forward mode for numpy.std: dz = sum((x - mean) dx) / ((n - ddof) z)."""
+    x_mean = numpy.mean(x, axis=axis, keepdims=True)
+    if axis is None:
+        n = x.size
+    else:
+        n = numpy.prod([x.shape[i]
+                        for i in (axis if isinstance(axis, tuple) else (axis,))])
+    d[z] = numpy.sum((x - x_mean) * d[x],
+                     axis=axis, keepdims=keepdims) / ((n - ddof) * z)
 
 
 # ============================================================================
@@ -332,6 +570,28 @@ _our_functions = [
 # Remove from UNIMPLEMENTED_ADJOINTS
 for func in _our_functions:
     _grads_module.UNIMPLEMENTED_ADJOINTS.discard(func)
+
+# Same for the forward-mode registry: UNIMPLEMENTED_TANGENTS is computed at
+# tangents.py load time, before this module registers its tangents.
+from tangent import tangents as _tangents_module
+
+_our_tangent_functions = [
+    numpy.absolute, numpy.abs, numpy.reciprocal,
+    numpy.log10, numpy.log2, numpy.log1p, numpy.expm1,
+    numpy.min, numpy.max, numpy.prod,
+    numpy.matmul, numpy.linalg.inv, numpy.outer, numpy.trace,
+    numpy.squeeze, numpy.expand_dims,
+    numpy.clip, numpy.where,
+    numpy.sign, numpy.floor, numpy.ceil,
+    numpy.var, numpy.std,
+    # numpy.concatenate / numpy.stack deliberately stay unimplemented as
+    # direct tangents: list-literal calls are desugared to np_concat_seq /
+    # np_stack_seq (which have tangents), and anything else should raise a
+    # clear forward-mode not-implemented error.
+]
+
+for func in _our_tangent_functions:
+    _tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)
 
 import logging as _logging
 _logging.getLogger('tangent').debug(

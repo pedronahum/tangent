@@ -40,6 +40,13 @@ def create_grad(node, namer, tangent=False):
         Node has an `adjoint_var` annotation referring to the node it is an
         adjoint of.
   """
+  # A tuple of variables (e.g. a template vararg packed by forward_ad) maps
+  # elementwise: the gradient of `(a, b)` is `(da, db)`.
+  if isinstance(node, gast.Tuple):
+    return gast.Tuple(
+        elts=[create_grad(elt, namer, tangent) for elt in node.elts],
+        ctx=None)
+
   # gast.Constant replaces gast.Str in gast >= 0.3.0
   if not isinstance(node, (gast.Subscript, gast.Name, gast.Constant)):
     raise TypeError

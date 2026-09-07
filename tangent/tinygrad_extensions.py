@@ -1059,6 +1059,17 @@ def tangent_relu(y, x):
     d[y] = (x > 0).where(d[x], 0.0)
 
 
+@tangent_(Tensor.softmax)
+def tangent_softmax(y, x, axis=-1):
+    d[y] = y * (d[x] - (d[x] * y).sum(axis=axis, keepdim=True))
+
+
+@tangent_(Tensor.log_softmax)
+def tangent_log_softmax(y, x, axis=-1):
+    # dy = dx - sum(softmax(x) * dx); exp(y) is softmax(x).
+    d[y] = d[x] - (y.exp() * d[x]).sum(axis=axis, keepdim=True)
+
+
 @tangent_(Tensor.sin)
 def tangent_sin(y, x):
     d[y] = d[x] * x.cos()

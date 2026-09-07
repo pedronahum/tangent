@@ -306,13 +306,16 @@ class ForwardAD(transformers.TreeTransformer):
     flags = template_.__code__.co_flags
 
     if flags & inspect.CO_VARARGS:
+      # Pack the trailing call arguments into a tuple node standing in for
+      # the template's vararg. Plain uses of the vararg become the primal
+      # tuple `(a, b)`, and `d[<vararg>]` becomes the tuple of tangents
+      # `(da, db)` (ReplaceGradTransformer/create_grad map over tuples), so
+      # a template like `d[z] = helper(axis, *d[args])` expands correctly.
       to_pack = node.args[template_.__code__.co_argcount - 1:]
-      vararg_name = template_.__code__.co_varnames[-1]
-      target = gast.Name(annotation=None, id=vararg_name, ctx=gast.Store())
-      value = gast.Tuple(elts=to_pack, ctx=gast.Load())
-
-      # And we fill in the packed tuple into the template
-      arg_replacements[template_.__code__.co_varnames[-1]] = target
+      code = template_.__code__
+      vararg_name = code.co_varnames[code.co_argcount + code.co_kwonlyargcount]
+      arg_replacements[vararg_name] = gast.Tuple(
+          elts=to_pack, ctx=gast.Load())
     tangent_node = template.replace(
         template_,
         replace_grad=template.Replace.TANGENT,
@@ -331,16 +334,6 @@ class ForwardAD(transformers.TreeTransformer):
       for succ in gast.walk(_node):
         if isinstance(succ, gast.Name) and succ.id == tmp_grad_name:
           succ.id = ans_grad_node.id
-
-    if flags & inspect.CO_VARARGS:
-      # If the template packs arguments, then we have to unpack the
-      # derivatives afterwards
-      # We also have to update the replacements tuple then
-      dto_pack = [
-          create.create_temp_grad(arg, self.namer, True) for arg in to_pack
-      ]
-      value = create.create_grad(target, self.namer, tangent=True)
-      target = gast.Tuple(elts=dto_pack, ctx=gast.Store())
 
     # Stack pops have to be special-cased, we have
     # to set the 'push' attribute, so we know that if we

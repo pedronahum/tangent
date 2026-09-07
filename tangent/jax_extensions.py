@@ -739,6 +739,18 @@ def adjoint_jax_selu(y, x):
     d[x] = d[y] * scale * jnp.where(x > 0, 1.0, alpha * jnp.exp(x))
 
 
+@adjoint(jax.nn.softmax)
+def adjoint_jax_softmax(y, x, axis=-1):
+    """Adjoint for jax.nn.softmax: d[x] = y * (dy - sum(dy * y, axis))."""
+    d[x] = y * (d[y] - jnp.sum(d[y] * y, axis=axis, keepdims=True))
+
+
+@adjoint(jax.nn.log_softmax)
+def adjoint_jax_log_softmax(y, x, axis=-1):
+    """Adjoint for jax.nn.log_softmax: d[x] = dy - exp(y) * sum(dy, axis)."""
+    d[x] = d[y] - jnp.exp(y) * jnp.sum(d[y], axis=axis, keepdims=True)
+
+
 @adjoint(jax.nn.gelu)
 def adjoint_jax_gelu(y, x, approximate=True):
     """Adjoint for jax.nn.gelu: Gaussian Error Linear Unit."""
@@ -1037,6 +1049,19 @@ def tangent_jnp_stack(result, arrays, axis=0):
     d[result] = jnp.stack(tangent_arrays, axis=axis)
 
 
+# Varargs concatenation helpers (targets of the concat_desugar rewrite).
+@tangent_(concat_seq)
+def tangent_concat_seq(z, axis, *arrays):
+    """Forward mode for concat_seq."""
+    d[z] = tangent.concat_seq(axis, *d[arrays])
+
+
+@tangent_(stack_seq)
+def tangent_stack_seq(z, axis, *arrays):
+    """Forward mode for stack_seq."""
+    d[z] = tangent.stack_seq(axis, *d[arrays])
+
+
 # Neural Network Activation Functions
 @tangent_(jax.nn.relu)
 def tangent_jax_relu(y, x):
@@ -1086,6 +1111,18 @@ def tangent_jax_selu(y, x):
     # Gradient
     grad = jnp.where(jnp.greater(x, 0), scale, scale * alpha * jnp.exp(x))
     d[y] = jnp.multiply(d[x], grad)
+
+
+@tangent_(jax.nn.softmax)
+def tangent_jax_softmax(y, x, axis=-1):
+    """Forward mode for jax.nn.softmax."""
+    d[y] = y * (d[x] - jnp.sum(d[x] * y, axis=axis, keepdims=True))
+
+
+@tangent_(jax.nn.log_softmax)
+def tangent_jax_log_softmax(y, x, axis=-1):
+    """Forward mode for jax.nn.log_softmax: dy = dx - sum(softmax(x) * dx)."""
+    d[y] = d[x] - jnp.sum(jnp.exp(y) * d[x], axis=axis, keepdims=True)
 
 
 @tangent_(jax.nn.gelu)

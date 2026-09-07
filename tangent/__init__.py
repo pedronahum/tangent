@@ -186,12 +186,18 @@ except (ImportError, AttributeError) as e:
 # Extended NumPy gradients (only requires numpy, so a failure here is a bug)
 try:
   from tangent import numpy_extended
+  # Varargs concat/stack helpers referenced by generated code as tangent.<name>
+  from tangent.numpy_extended import (np_concat_seq, np_stack_seq,
+                                      np_concat_grads, np_stack_grads)
 except (ImportError, AttributeError) as e:
   _warnings.warn(f'Extended NumPy gradients not available: {e}')
 
 # Extended TensorFlow gradients
 try:
   from tangent import tf_extended
+  # Varargs concat/stack helpers referenced by generated code as tangent.<name>
+  from tangent.tf_extended import (tf_concat_seq, tf_stack_seq,
+                                   tf_concat_grads, tf_stack_grads)
 except (ImportError, AttributeError) as e:
   if _backend_status.get('tensorflow') == 'available':
     _warnings.warn(f'Extended TensorFlow gradients not available: {e}')

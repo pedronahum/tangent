@@ -143,7 +143,7 @@ class ReplaceGradTransformer(transformers.TreeTransformer):
         node.slice = self.visit(node.slice)
         return node
 
-      if not isinstance(slice_value, (gast.Subscript, gast.Name)):
+      if not isinstance(slice_value, (gast.Subscript, gast.Name, gast.Tuple)):
         # This happens when the gradient of a constant is taken
         if self.replace_grad == Replace.TANGENT:
           new_node = gast.Constant(value=0, kind=None)

@@ -416,6 +416,93 @@ def adjoint_where(z, condition, x1, x2):
     d[x2] = kops.where(condition, kops.zeros_like(dz), dz)
 
 
+# Softmax family
+@adjoint(kops.softmax)
+def adjoint_softmax(y, x, axis=-1):
+    """Adjoint for keras.ops.softmax: d[x] = y * (dz - sum(dz * y, axis))."""
+    s = tangent.keras_seed(d[y], x)
+    d[x] = y * (s - kops.sum(s * y, axis=axis, keepdims=True))
+
+
+@adjoint(kops.log_softmax)
+def adjoint_log_softmax(y, x, axis=-1):
+    """Adjoint for keras.ops.log_softmax: d[x] = dz - exp(y) * sum(dz, axis)."""
+    s = tangent.keras_seed(d[y], x)
+    d[x] = s - kops.exp(y) * kops.sum(s, axis=axis, keepdims=True)
+
+
+# Concatenation and stacking.
+#
+# keras.ops.concatenate / stack take a *list* of tensors, which Tangent
+# cannot distribute gradients into. concat_desugar rewrites list-literal
+# calls into the varargs helpers below (mirroring the JAX
+# concat_seq/stack_seq machinery), whose varargs adjoints split the gradient
+# back per input.
+
+def keras_concat_seq(axis, *tensors):
+    """Runtime helper: concatenate a varargs sequence of tensors."""
+    return kops.concatenate(list(tensors), axis=axis)
+
+
+def keras_stack_seq(axis, *tensors):
+    """Runtime helper: stack a varargs sequence of tensors."""
+    return kops.stack(list(tensors), axis=axis)
+
+
+def keras_concat_grads(dz, tensors, axis):
+    """Split a concatenated gradient back into per-input gradients."""
+    dz = keras_seed(dz, tensors[0])
+    points = []
+    total = 0
+    for t in tensors[:-1]:
+        total += int(t.shape[axis])
+        points.append(total)
+    return tuple(kops.split(dz, points, axis=axis))
+
+
+def keras_stack_grads(dz, tensors, axis):
+    """Unstack a stacked gradient along the stacking axis."""
+    dz = keras_seed(dz, tensors[0])
+    return tuple(kops.unstack(dz, axis=axis))
+
+
+non_differentiable.register_non_differentiable_functions(
+    keras_concat_grads, keras_stack_grads)
+
+
+@adjoint(keras_concat_seq)
+def adjoint_keras_concat_seq(z, axis, *tensors):
+    """Adjoint for keras_concat_seq: split the gradient back per input."""
+    d[tensors] = tangent.keras_concat_grads(d[z], tensors, axis)
+
+
+@adjoint(keras_stack_seq)
+def adjoint_keras_stack_seq(z, axis, *tensors):
+    """Adjoint for keras_stack_seq: unstack the gradient."""
+    d[tensors] = tangent.keras_stack_grads(d[z], tensors, axis)
+
+
+# The list-argument forms are only reachable when the desugar pass could not
+# rewrite the call (e.g. the list is built dynamically). Raise a clear error
+# rather than generating broken code.
+@adjoint(kops.concatenate)
+def adjoint_concatenate(dz, xs, axis=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate keras.ops.concatenate/stack when the '
+        'list of tensors is a literal. Bind the list to a variable assigned '
+        'once from a literal, or pass a list literal directly.')
+
+
+@adjoint(kops.stack)
+def adjoint_stack(dz, x, axis=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate keras.ops.concatenate/stack when the '
+        'list of tensors is a literal. Bind the list to a variable assigned '
+        'once from a literal, or pass a list literal directly.')
+
+
 #
 # Forward mode (tangent) definitions
 #
@@ -534,6 +621,30 @@ def tangent_relu(y, x):
 def tangent_sigmoid(y, x):
     """Forward mode for keras.ops.sigmoid."""
     d[y] = d[x] * y * (1.0 - y)
+
+
+@tangent_(kops.softmax)
+def tangent_softmax(y, x, axis=-1):
+    """Forward mode for keras.ops.softmax."""
+    d[y] = y * (d[x] - kops.sum(d[x] * y, axis=axis, keepdims=True))
+
+
+@tangent_(kops.log_softmax)
+def tangent_log_softmax(y, x, axis=-1):
+    """Forward mode for keras.ops.log_softmax: dy = dx - sum(softmax(x) * dx)."""
+    d[y] = d[x] - kops.sum(kops.exp(y) * d[x], axis=axis, keepdims=True)
+
+
+@tangent_(keras_concat_seq)
+def tangent_keras_concat_seq(z, axis, *tensors):
+    """Forward mode for keras_concat_seq."""
+    d[z] = tangent.keras_concat_seq(axis, *d[tensors])
+
+
+@tangent_(keras_stack_seq)
+def tangent_keras_stack_seq(z, axis, *tensors):
+    """Forward mode for keras_stack_seq."""
+    d[z] = tangent.keras_stack_seq(axis, *d[tensors])
 
 
 import logging as _logging

@@ -31,6 +31,7 @@ import tangent
 # ---------------------------------------------------------------------------
 
 try:
+    import jax
     import jax.numpy as jnp
     HAS_JAX = True
 except ImportError:
@@ -59,6 +60,24 @@ try:
     HAS_TINYGRAD = True
 except ImportError:
     HAS_TINYGRAD = False
+
+
+# Tangent resolves every call in a differentiated function's source, including
+# dead branches. The shared backend_sum/backend_mean helpers below mention
+# `tf`/`kops` in branches that are never taken when those backends are not
+# installed; give the names differentiable stand-ins so the helpers still
+# transform in partial environments (e.g. torch installed but not TF).
+if not HAS_TF:
+    class _TFStub:
+        reduce_sum = staticmethod(np.sum)
+        reduce_mean = staticmethod(np.mean)
+    tf = _TFStub()
+
+if not HAS_KERAS:
+    class _KopsStub:
+        sum = staticmethod(np.sum)
+        mean = staticmethod(np.mean)
+    kops = _KopsStub()
 
 
 BACKENDS = []
@@ -92,9 +111,9 @@ def to_backend(mod, arr):
     arr = np.asarray(arr, dtype='float32')
     if HAS_TINYGRAD and mod is TGTensor:
         return TGTensor(arr)
-    if mod is jnp:
+    if HAS_JAX and mod is jnp:
         return jnp.asarray(arr)
-    if mod is tf:
+    if HAS_TF and mod is tf:
         return tf.constant(arr)
     if HAS_TORCH and mod is torch:
         return torch.as_tensor(arr)
@@ -107,9 +126,9 @@ def from_backend(mod, t):
         return t
     if HAS_TINYGRAD and isinstance(t, TGTensor):
         return t.numpy()
-    if mod is jnp:
+    if HAS_JAX and mod is jnp:
         return np.asarray(t)
-    if mod is tf:
+    if HAS_TF and mod is tf:
         return t.numpy()
     if HAS_TORCH and mod is torch:
         return t.detach().cpu().numpy()
@@ -691,8 +710,6 @@ def test_where_gradient(backend):
 
 @pytest.mark.parametrize('backend', BACKEND_IDS)
 def test_matmul_operator_gradient(backend):
-    if backend in ('torch', 'keras'):
-        pytest.skip('torch/keras have no `@` matmul-gradient registration')
     mod = dict(BACKENDS)[backend]
     x_np = np.array([[1.0, 2.0], [3.0, 4.0]], dtype='float32')
     w_np = np.array([[0.5, -0.5], [1.0, 0.0]], dtype='float32')
@@ -713,6 +730,142 @@ def test_matmul_operator_gradient(backend):
     got = from_backend(mod, grad_call(backend, dfw,
                                       to_backend(mod, x_np), to_backend(mod, w_np)))
     assert allclose(got, x_np.T @ np.ones((2, 2)))
+
+
+# ---------------------------------------------------------------------------
+# Softmax family (validated against a NumPy finite-difference oracle)
+# ---------------------------------------------------------------------------
+
+X_SM = np.array([[0.5, -1.0, 2.0], [1.5, 0.0, -0.5]], dtype='float32')
+
+
+def _np_softmax(v, axis=-1):
+    ex = np.exp(v - np.max(v, axis=axis, keepdims=True))
+    return ex / np.sum(ex, axis=axis, keepdims=True)
+
+
+def _fd_grad(loss, x, h=1e-3):
+    """Central finite-difference gradient of a scalar loss, in float64."""
+    x = np.asarray(x, dtype='float64')
+    g = np.zeros_like(x)
+    for i in range(x.size):
+        e = np.zeros_like(x)
+        e.flat[i] = h
+        g.flat[i] = (loss(x + e) - loss(x - e)) / (2.0 * h)
+    return g
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_softmax_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.sum(jax.nn.softmax(x, axis=-1) ** 2)
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_sum(tf.nn.softmax(x, axis=-1) ** 2)
+    elif backend == 'torch':
+        def f(x):
+            return torch.sum(torch.softmax(x, dim=-1) ** 2)
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.softmax(x, axis=-1) ** 2)
+    else:
+        def f(x):
+            return kops.sum(kops.softmax(x, axis=-1) ** 2)
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f),
+                                      to_backend(mod, X_SM)))
+    expected = _fd_grad(lambda v: float(np.sum(_np_softmax(v) ** 2)), X_SM)
+    assert np.allclose(got, expected, atol=1e-2, rtol=1e-2), (got, expected)
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_log_softmax_gradient(backend):
+    mod = dict(BACKENDS)[backend]
+
+    if backend == 'jax':
+        def f(x):
+            return jnp.sum(jax.nn.log_softmax(x, axis=-1) ** 2)
+    elif backend == 'tf':
+        def f(x):
+            return tf.reduce_sum(tf.nn.log_softmax(x, axis=-1) ** 2)
+    elif backend == 'torch':
+        def f(x):
+            return torch.sum(torch.log_softmax(x, dim=-1) ** 2)
+    elif backend == 'tinygrad':
+        def f(x):
+            return TGTensor.sum(TGTensor.log_softmax(x, axis=-1) ** 2)
+    else:
+        def f(x):
+            return kops.sum(kops.log_softmax(x, axis=-1) ** 2)
+
+    got = from_backend(mod, grad_call(backend, tangent.grad(f),
+                                      to_backend(mod, X_SM)))
+    expected = _fd_grad(
+        lambda v: float(np.sum(np.log(_np_softmax(v)) ** 2)), X_SM)
+    assert np.allclose(got, expected, atol=1e-2, rtol=1e-2), (got, expected)
+
+
+# ---------------------------------------------------------------------------
+# Concatenation and stacking (list-literal calls, desugared to varargs)
+# ---------------------------------------------------------------------------
+
+A_CAT = np.array([[1.0, 2.0], [3.0, 4.0]], dtype='float32')
+B_CAT = np.array([[5.0, 6.0], [7.0, 8.0]], dtype='float32')
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_concat_gradient(backend):
+    if backend == 'tinygrad':
+        pytest.skip('tinygrad has no cat/stack adjoint registration')
+    mod = dict(BACKENDS)[backend]
+
+    # d/da sum(concat([a*a, b])) = 2a; d/db = ones. The squared first input
+    # catches gradients routed to the wrong operand or mis-split.
+    if backend == 'jax':
+        def f(a, b):
+            return jnp.sum(jnp.concatenate([a * a, b], axis=1))
+    elif backend == 'tf':
+        def f(a, b):
+            return tf.reduce_sum(tf.concat([a * a, b], axis=1))
+    elif backend == 'torch':
+        def f(a, b):
+            return torch.sum(torch.cat([a * a, b], dim=1))
+    else:
+        def f(a, b):
+            return kops.sum(kops.concatenate([a * a, b], axis=1))
+
+    df = tangent.grad(f, wrt=(0, 1))
+    ga, gb = df(to_backend(mod, A_CAT), to_backend(mod, B_CAT))
+    assert allclose(from_backend(mod, ga), 2.0 * A_CAT)
+    assert allclose(from_backend(mod, gb), np.ones_like(B_CAT))
+
+
+@pytest.mark.parametrize('backend', BACKEND_IDS)
+def test_stack_gradient(backend):
+    if backend == 'tinygrad':
+        pytest.skip('tinygrad has no cat/stack adjoint registration')
+    mod = dict(BACKENDS)[backend]
+
+    if backend == 'jax':
+        def f(a, b):
+            return jnp.sum(jnp.stack([a * a, b], axis=0))
+    elif backend == 'tf':
+        def f(a, b):
+            return tf.reduce_sum(tf.stack([a * a, b], axis=0))
+    elif backend == 'torch':
+        def f(a, b):
+            return torch.sum(torch.stack([a * a, b], dim=0))
+    else:
+        def f(a, b):
+            return kops.sum(kops.stack([a * a, b], axis=0))
+
+    df = tangent.grad(f, wrt=(0, 1))
+    ga, gb = df(to_backend(mod, A_CAT), to_backend(mod, B_CAT))
+    assert allclose(from_backend(mod, ga), 2.0 * A_CAT)
+    assert allclose(from_backend(mod, gb), np.ones_like(B_CAT))
 
 
 if __name__ == '__main__':

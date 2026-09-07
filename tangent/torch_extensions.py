@@ -194,6 +194,34 @@ except (AttributeError, KeyError):
     pass
 
 
+# `@` (matmul) operator gradients for torch tensors. Keras needs no separate
+# registration: keras.ops tensors are the active backend's tensors at runtime
+# (torch.Tensor here, tf/jax tensors under those backends), so operator
+# dispatch on the runtime type reaches the right backend's rule.
+def torch_matmul_grad_x(dz, x, y):
+    """d[x] for z = x @ y, covering the vector/matrix rank promotions."""
+    dz = torch_seed(dz, x)
+    if x.ndim == 1 and y.ndim == 1:
+        return dz * y
+    if x.ndim == 2 and y.ndim == 1:
+        return torch.outer(dz, y)
+    return torch.matmul(dz, torch.transpose(y, -2, -1))
+
+
+def torch_matmul_grad_y(dz, x, y):
+    """d[y] for z = x @ y, covering the vector/matrix rank promotions."""
+    dz = torch_seed(dz, y)
+    if x.ndim == 1 and y.ndim == 1:
+        return dz * x
+    if x.ndim == 1 and y.ndim == 2:
+        return torch.outer(x, dz)
+    return torch.matmul(torch.transpose(x, -2, -1), dz)
+
+
+_utils.register_matmul_grad(
+    TensorType, torch_matmul_grad_x, torch_matmul_grad_y)
+
+
 # ============================================================================
 # Reverse-mode (adjoint) gradient definitions
 # ============================================================================
@@ -588,6 +616,94 @@ def adjoint_where(z, condition, x, y):
     d[y] = torch.where(condition, torch.zeros_like(dz), dz)
 
 
+# Softmax family
+@adjoint(torch.softmax)
+def adjoint_softmax(y, x, dim=-1):
+    """Adjoint for torch.softmax: d[x] = y * (dz - sum(dz * y, dim))."""
+    s = tangent.torch_seed(d[y], x)
+    d[x] = y * (s - torch.sum(s * y, dim=dim, keepdim=True))
+
+
+@adjoint(torch.log_softmax)
+def adjoint_log_softmax(y, x, dim=-1):
+    """Adjoint for torch.log_softmax: d[x] = dz - exp(y) * sum(dz, dim)."""
+    s = tangent.torch_seed(d[y], x)
+    d[x] = s - torch.exp(y) * torch.sum(s, dim=dim, keepdim=True)
+
+
+# The torch.nn.functional spellings are distinct function objects; register
+# the same templates for them.
+adjoint(torch.nn.functional.softmax)(adjoint_softmax)
+adjoint(torch.nn.functional.log_softmax)(adjoint_log_softmax)
+
+
+# Concatenation and stacking.
+#
+# torch.cat / torch.stack take a *list* of tensors, which Tangent cannot
+# distribute gradients into. concat_desugar rewrites list-literal calls into
+# the varargs helpers below (mirroring the JAX concat_seq/stack_seq
+# machinery), whose varargs adjoints split the gradient back per input.
+
+def torch_cat_seq(axis, *tensors):
+    """Runtime helper: concatenate a varargs sequence of tensors."""
+    return torch.cat(list(tensors), dim=axis)
+
+
+def torch_stack_seq(axis, *tensors):
+    """Runtime helper: stack a varargs sequence of tensors."""
+    return torch.stack(list(tensors), dim=axis)
+
+
+def torch_cat_grads(dz, tensors, axis):
+    """Split a concatenated gradient back into per-input gradients."""
+    dz = torch_seed(dz, tensors[0])
+    sizes = [int(t.shape[axis]) for t in tensors]
+    return tuple(torch.split(dz, sizes, dim=axis))
+
+
+def torch_stack_grads(dz, tensors, axis):
+    """Unstack a stacked gradient along the stacking axis."""
+    dz = torch_seed(dz, tensors[0])
+    return tuple(torch.unbind(dz, dim=axis))
+
+
+non_differentiable.register_non_differentiable_functions(
+    torch_cat_grads, torch_stack_grads)
+
+
+@adjoint(torch_cat_seq)
+def adjoint_torch_cat_seq(z, axis, *tensors):
+    """Adjoint for torch_cat_seq: split the gradient back per input."""
+    d[tensors] = tangent.torch_cat_grads(d[z], tensors, axis)
+
+
+@adjoint(torch_stack_seq)
+def adjoint_torch_stack_seq(z, axis, *tensors):
+    """Adjoint for torch_stack_seq: unstack the gradient."""
+    d[tensors] = tangent.torch_stack_grads(d[z], tensors, axis)
+
+
+# The list-argument forms are only reachable when the desugar pass could not
+# rewrite the call (e.g. the list is built dynamically). Raise a clear error
+# rather than generating broken code.
+@adjoint(torch.cat)
+def adjoint_cat(dz, tensors, dim=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate torch.cat/torch.stack when the list '
+        'of tensors is a literal. Bind the list to a variable assigned once '
+        'from a literal, or pass a list literal directly.')
+
+
+@adjoint(torch.stack)
+def adjoint_stack(dz, tensors, dim=0):
+    """Not differentiable: pass a list literal so it can be desugared."""
+    raise NotImplementedError(
+        'tangent can only differentiate torch.cat/torch.stack when the list '
+        'of tensors is a literal. Bind the list to a variable assigned once '
+        'from a literal, or pass a list literal directly.')
+
+
 #
 # Forward mode (tangent) definitions
 #
@@ -778,6 +894,34 @@ def tangent_relu(y, x):
 def tangent_sigmoid(y, x):
     """Forward mode for torch.sigmoid."""
     d[y] = d[x] * y * (1.0 - y)
+
+
+@tangent_(torch.softmax)
+def tangent_softmax(y, x, dim=-1):
+    """Forward mode for torch.softmax."""
+    d[y] = y * (d[x] - torch.sum(d[x] * y, dim=dim, keepdim=True))
+
+
+@tangent_(torch.log_softmax)
+def tangent_log_softmax(y, x, dim=-1):
+    """Forward mode for torch.log_softmax: dy = dx - sum(softmax(x) * dx)."""
+    d[y] = d[x] - torch.sum(torch.exp(y) * d[x], dim=dim, keepdim=True)
+
+
+tangent_(torch.nn.functional.softmax)(tangent_softmax)
+tangent_(torch.nn.functional.log_softmax)(tangent_log_softmax)
+
+
+@tangent_(torch_cat_seq)
+def tangent_torch_cat_seq(z, axis, *tensors):
+    """Forward mode for torch_cat_seq."""
+    d[z] = tangent.torch_cat_seq(axis, *d[tensors])
+
+
+@tangent_(torch_stack_seq)
+def tangent_torch_stack_seq(z, axis, *tensors):
+    """Forward mode for torch_stack_seq."""
+    d[z] = tangent.torch_stack_seq(axis, *d[tensors])
 
 
 import logging as _logging
