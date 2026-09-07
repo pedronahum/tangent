@@ -223,6 +223,14 @@ class ReverseAD(object):
       raise ValueError('function must have exactly one return statement')
     return_node = ast_.copy_node(return_nodes[0])
 
+    # Record the arity of the function's return value now, while the untouched
+    # ANF body is still available: after ANF a multi-output `return a, b` has
+    # become `t = (a, b); return t`, so the tuple construction is directly
+    # visible. `_create_joint` needs this to build the correct default
+    # gradient seed; inferring it later from the generated code is fragile
+    # (e.g. with check_dims=False there is no shapes_match assert to find).
+    output_arity = _output_arity(node, return_nodes[0])
+
     # Perform AD on the function body
     body, adjoint_body = self.visit_statements(node.body[:-1])
 
@@ -290,6 +298,10 @@ class ReverseAD(object):
     adjoint.args.args.extend([self.stack, dy])
     adjoint.args.args.extend(node.args.args[1:])
     adjoint.name = naming.adjoint_name(func, self.wrt)
+
+    # Attach the return arity to the primal so the motion pass can thread it
+    # through to `_create_joint`; see `_output_arity`.
+    anno.setanno(node, 'output_arity', output_arity, safe=False)
 
     return node, adjoint
 
@@ -1283,6 +1295,44 @@ class ReverseAD(object):
     return node, adjoint
 
 
+def _output_arity(node, return_node):
+  """Determine the number of elements returned by a function.
+
+  Runs on the untransformed (post-ANF, pre-AD) function so the answer is exact
+  rather than reverse-engineered from generated code. ANF reduces the return
+  value to a bare name (a tuple return `return a, b` becomes
+  `t = (a, b); return t`), so a tuple return is found by looking up the
+  reaching top-level assignment of the returned name.
+
+  Args:
+    node: The `FunctionDef` node of the function being differentiated, after
+        ANF but before any AD transformation.
+    return_node: The function's single `Return` node.
+
+  Returns:
+    The number of elements in the returned tuple, or None if the return value
+    is not a tuple constructed in the function body (i.e. a single output).
+  """
+  value = return_node.value
+  if isinstance(value, gast.Tuple):
+    return len(value.elts)
+  if isinstance(value, gast.Name):
+    arity = None
+    # The reaching definition is the last top-level assignment to the returned
+    # name before the trailing return statement (ANF places the tuple
+    # construction there for straight-line returns).
+    for stmt in node.body[:-1]:
+      if (isinstance(stmt, gast.Assign) and len(stmt.targets) == 1 and
+          isinstance(stmt.targets[0], gast.Name) and
+          stmt.targets[0].id == value.id):
+        if isinstance(stmt.value, gast.Tuple):
+          arity = len(stmt.value.elts)
+        else:
+          arity = None
+    return arity
+  return None
+
+
 def reverse_ad(node, wrt, preserve_result, check_dims, checkpoint_config=None):
   """Perform reverse-mode AD on an AST.
 
@@ -1428,7 +1478,12 @@ def joint(node):
   func = gast.Module(body=[gast.FunctionDef(
       name=node.body[0].name, args=node.body[1].args, body=body,
       decorator_list=[], returns=None)])
-  # Clean up
+  # Carry the return arity recorded by `reverse_ad` over to the newly built
+  # joint function, where `_create_joint` reads it.
+  if anno.hasanno(node.body[0], 'output_arity'):
+    anno.setanno(func.body[0], 'output_arity',
+                 anno.getanno(node.body[0], 'output_arity'), safe=False)
+  # Clean up (keeps FIXED_ANNOTATIONS, which includes 'output_arity')
   anno.clearanno(func)
   return func
 

@@ -58,6 +58,7 @@ import gast
 import numpy
 from tangent import anf as anf_
 from tangent import annotate
+from tangent import annotations as anno
 from tangent import ast as ast_
 from tangent import comments
 from tangent import compile as compile_
@@ -746,36 +747,19 @@ def _create_joint(fwdbwd, func, wrt, input_derivative, grad_config=None):
   # Allow the initial gradient to be passed as a keyword argument
   fwdbwd = ast_.append_args(fwdbwd, [grad_name])
   if input_derivative == INPUT_DERIVATIVE.DefaultOne:
-    # Check if the function returns a tuple by looking at the primal code
-    # Find the first assignment to the result variable (the return value)
-    returns_tuple = False
-    tuple_size = 0
-
-    # Look through the function body for the return value assignment
-    for stmt in fwdbwd.body:
-      if isinstance(stmt, gast.Assign):
-        # Check if this assigns to a tuple (e.g., "t = a, b")
-        if (isinstance(stmt.value, gast.Tuple) and
-            len(stmt.targets) == 1 and
-            isinstance(stmt.targets[0], gast.Name)):
-          # This might be the return value - check if it's used in shapes_match
-          var_name = stmt.targets[0].id
-          # Look for assert with shapes_match using this variable
-          for check_stmt in fwdbwd.body:
-            if isinstance(check_stmt, gast.Assert):
-              # Check if this assert uses our variable
-              if (isinstance(check_stmt.test, gast.Call) and
-                  hasattr(check_stmt.test.func, 'attr') and
-                  check_stmt.test.func.attr == 'shapes_match' and
-                  len(check_stmt.test.args) >= 2 and
-                  isinstance(check_stmt.test.args[0], gast.Name) and
-                  check_stmt.test.args[0].id == var_name):
-                # This is the return value and it's a tuple!
-                returns_tuple = True
-                tuple_size = len(stmt.value.elts)
-                break
-          if returns_tuple:
-            break
+    # The output arity is recorded during reverse-mode transformation (see
+    # reverse_ad._output_arity) and threaded through the motion pass. It is
+    # the source of truth for the shape of the default gradient seed.
+    if anno.hasanno(fwdbwd, 'output_arity'):
+      output_arity = anno.getanno(fwdbwd, 'output_arity')
+      returns_tuple = output_arity is not None
+      tuple_size = output_arity if returns_tuple else 0
+    else:
+      # Fallback for ASTs built without the annotation (e.g. handed to this
+      # helper directly): infer the arity from the generated primal. This is
+      # fragile - it relies on the check_dims shapes_match assert being
+      # present - which is why the annotation above is preferred.
+      returns_tuple, tuple_size = _infer_output_arity_from_primal(fwdbwd)
 
     # Set appropriate default based on return type and grad_config
     if returns_tuple and tuple_size > 0:
@@ -832,6 +816,42 @@ def _create_joint(fwdbwd, func, wrt, input_derivative, grad_config=None):
       # Scalar return
       fwdbwd.args.defaults.append(quoting.quote('1.0'))
   return fwdbwd
+
+
+def _infer_output_arity_from_primal(fwdbwd):
+  """Fallback inference of the output arity from generated primal code.
+
+  Looks for an assignment of a tuple whose target is checked by the
+  check_dims shapes_match assert. Only used when the 'output_arity'
+  annotation recorded by reverse-mode AD is missing; it silently fails to
+  detect tuple returns when the assert is absent (check_dims=False) or was
+  optimized away.
+
+  Args:
+    fwdbwd: The joint primal-and-adjoint function definition AST.
+
+  Returns:
+    A (returns_tuple, tuple_size) pair.
+  """
+  for stmt in fwdbwd.body:
+    if isinstance(stmt, gast.Assign):
+      # Check if this assigns a tuple (e.g., "t = a, b")
+      if (isinstance(stmt.value, gast.Tuple) and
+          len(stmt.targets) == 1 and
+          isinstance(stmt.targets[0], gast.Name)):
+        # This might be the return value - check if it's used in shapes_match
+        var_name = stmt.targets[0].id
+        for check_stmt in fwdbwd.body:
+          if isinstance(check_stmt, gast.Assert):
+            if (isinstance(check_stmt.test, gast.Call) and
+                hasattr(check_stmt.test.func, 'attr') and
+                check_stmt.test.func.attr == 'shapes_match' and
+                len(check_stmt.test.args) >= 2 and
+                isinstance(check_stmt.test.args[0], gast.Name) and
+                check_stmt.test.args[0].id == var_name):
+              # This is the return value and it's a tuple
+              return True, len(stmt.value.elts)
+  return False, 0
 
 
 def _create_forward(out_node):

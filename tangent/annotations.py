@@ -22,6 +22,12 @@ FIXED_ANNOTATIONS = set(['pop', 'push', 'add_grad', 'init_grad', 'pri', 'adj',
                          'push_func', 'pop_func', 'adjoint_var',
                          'temp_adjoint_var', 'temp_var', 'pri_call',
                          'adj_call', 'comment', 'pre_anf',
+                         # Number of elements the differentiated function
+                         # returns (None for a non-tuple return). Recorded by
+                         # reverse-mode AD on the primal FunctionDef and
+                         # threaded through the motion pass to `_create_joint`,
+                         # which uses it to build the default gradient seed.
+                         'output_arity',
                          # Statements the DCE must never eliminate (e.g. the
                          # varargs pack/template-body/unpack statements).
                          'tangent_keep'])

@@ -125,6 +125,103 @@ def test_regularized_loss_example():
     assert np.isclose(result, expected)
 
 
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_multi_output_check_dims_false():
+    """Multi-output seed must not depend on the check_dims shapes_match assert.
+
+    Regression test: output arity used to be inferred by scanning the
+    generated primal for the shapes_match assert, so check_dims=False
+    silently produced a scalar seed for tuple outputs (crashing with
+    "'float' object is not subscriptable" or giving wrong gradients).
+    The arity is now recorded as an annotation during reverse-mode AD.
+    """
+
+    def f(x):
+        return x ** 2, x * 3
+
+    df = grad(f, check_dims=False)
+    # Default seed: gradient of the sum of outputs, d/dx(x^2 + 3x) = 2x + 3
+    assert np.isclose(df(2.0), 7.0)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_multi_output_check_dims_false_unoptimized():
+    """Same regression with the optimizer disabled."""
+
+    def f(x):
+        return x ** 2, x * 3
+
+    df = grad(f, check_dims=False, optimized=False)
+    assert np.isclose(df(2.0), 7.0)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_multi_output_optimized():
+    """Multi-output seed must survive optimization (DCE etc.)."""
+
+    def f(x):
+        return x ** 2, x * 3
+
+    df = grad(f, optimized=True)
+    assert np.isclose(df(2.0), 7.0)
+    df = grad(f, check_dims=False, optimized=True)
+    assert np.isclose(df(2.0), 7.0)
+
+
+def test_output_index_check_dims_false():
+    """output_index must build the one-hot seed even with check_dims=False."""
+
+    def f(x):
+        return x ** 2, x * 3
+
+    df0 = grad(f, output_index=0, check_dims=False)
+    df1 = grad(f, output_index=1, check_dims=False)
+    assert np.isclose(df0(2.0), 4.0)
+    assert np.isclose(df1(2.0), 3.0)
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_multi_output_corpus_function_check_dims_false():
+    """A corpus multi-output function under the previously-broken configs."""
+    import functions
+
+    df = grad(functions.fn_multiple_return, check_dims=False, optimized=True)
+    # fn_multiple_return(a) = (2*a, a); d/da(2a + a) = 3
+    assert np.isclose(df(5.0), 3.0)
+    df = grad(functions.fn_multiple_return, check_dims=False, optimized=False)
+    assert np.isclose(df(5.0), 3.0)
+
+
+def test_single_output_check_dims_false_still_scalar_seed():
+    """A single-output function must keep its scalar 1.0 default seed."""
+
+    def f(x):
+        return x ** 2
+
+    df = grad(f, check_dims=False)
+    assert np.isclose(df(3.0), 6.0)
+
+
+def test_output_arity_annotation_recorded():
+    """The joint function carries the output arity annotation from reverse AD."""
+    from tangent import annotations as anno
+    from tangent import grad_util
+
+    def f(x):
+        return x ** 2, x * 3
+
+    def g(x):
+        return x ** 2
+
+    for fn, expected in ((f, 2), (g, None)):
+        node, _ = grad_util.autodiff_ast(
+            fn, wrt=(0,), motion='joint', mode='reverse',
+            preserve_result=False, check_dims=False, verbose=0)
+        fwdbwd = node.body[0]
+        assert anno.hasanno(fwdbwd, 'output_arity')
+        assert anno.getanno(fwdbwd, 'output_arity') == expected
+
+
 def test_error_both_params():
     """Test that providing both output_index and output_weights raises error."""
 
