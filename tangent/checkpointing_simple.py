@@ -1,8 +1,14 @@
 """Minimal implementation of Revolve checkpointing for memory-efficient backpropagation.
 
 This module provides a simple checkpointing strategy that stores only sqrt(n)
-intermediate states instead of all n states, enabling memory-efficient gradient
-computation for long sequences (e.g., RNNs, long loops).
+intermediate states instead of all n states during a *forward* pass over a
+long sequence (e.g., RNNs, long loops).
+
+Scope: these are manual, forward-pass helpers. ``tangent.grad`` cannot
+differentiate through ``checkpointed_loop`` (it is an opaque higher-order
+call), and no integrated checkpoint-based backward pass is implemented here.
+For automatic (but limited) checkpointing inside generated gradients, see
+``tangent.grad(func, checkpoint=True)`` and docs/checkpointing_user_guide.md.
 
 Based on:
 - Algorithm 799: Revolve (Griewank & Walther, 2000)
@@ -81,9 +87,11 @@ def checkpointed_loop(func: Callable[[Any], Any],
     Execute a loop with checkpointing, storing only selected intermediate states.
 
     This performs a forward pass through a sequence, storing checkpoints at
-    strategically chosen positions. During the backward pass, intermediate
-    states can be recomputed from these checkpoints rather than storing all
-    states in memory.
+    strategically chosen positions. A backward pass can then recompute
+    intermediate states from these checkpoints rather than storing all
+    states in memory - but note that Tangent does not provide that backward
+    pass for you: ``tangent.grad`` cannot differentiate through this helper,
+    so consuming the returned checkpoints is up to the caller.
 
     Args:
         func: Function to apply at each step (state -> new_state)
@@ -128,74 +136,6 @@ def checkpointed_loop(func: Callable[[Any], Any],
         state = func(state)
 
     return state, checkpoints
-
-
-def checkpointed_backward(func: Callable[[Any], Any],
-                         grad_output: Any,
-                         checkpoints: Dict[int, Any],
-                         seq_length: int,
-                         grad_func: Optional[Callable[[Any, Any], Any]] = None) -> Any:
-    """
-    Backward pass using checkpoints to recompute intermediate states.
-
-    This recomputes the forward pass from the nearest checkpoint for each
-    position during backpropagation, enabling gradient computation with
-    reduced memory usage.
-
-    Args:
-        func: Forward function (state -> new_state)
-        grad_output: Gradient with respect to the final output
-        checkpoints: Dictionary of saved checkpoints from forward pass
-        seq_length: Total sequence length
-        grad_func: Optional gradient function (if None, uses numerical approximation)
-
-    Returns:
-        Gradient with respect to initial state
-
-    Note:
-        This is a simplified implementation. For integration with Tangent,
-        this will be replaced with AST-based automatic differentiation.
-
-    Examples:
-        >>> def step(x):
-        ...     return np.tanh(x * 1.1 + 0.1)
-        >>> initial = np.ones(10)
-        >>> final, checkpoints = checkpointed_loop(step, initial, 100, 5)
-        >>> grad_output = np.ones_like(final)
-        >>> grad_input = checkpointed_backward(step, grad_output, checkpoints, 100)
-    """
-    if not checkpoints:
-        # No checkpoints - cannot compute gradient efficiently
-        raise ValueError("No checkpoints provided. Cannot compute backward pass.")
-
-    checkpoint_positions = sorted(checkpoints.keys())
-    grad = grad_output
-
-    # Process in reverse order
-    for segment_end in reversed(range(seq_length)):
-        # Find nearest checkpoint before or at this position
-        checkpoint_idx = -1
-        for idx in checkpoint_positions:
-            if idx <= segment_end:
-                checkpoint_idx = idx
-            else:
-                break
-
-        if checkpoint_idx >= 0:
-            # Recompute forward from checkpoint to this position
-            state = _copy_state(checkpoints[checkpoint_idx])
-            for i in range(checkpoint_idx, segment_end):
-                state = func(state)
-
-            # Compute gradient for this step
-            if grad_func is not None:
-                grad = grad_func(state, grad)
-            else:
-                # Simplified gradient computation (placeholder)
-                # In actual implementation, this uses Tangent's AD
-                grad = grad * 1.0  # Identity for now
-
-    return grad
 
 
 def _copy_state(state: Any) -> Any:

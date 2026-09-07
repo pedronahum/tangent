@@ -74,10 +74,8 @@ Located in `features/` directory:
 
 ## 📖 Guides
 
-- [Checkpointing User Guide](checkpointing_user_guide.md)
+- [Checkpointing User Guide](checkpointing_user_guide.md) — what works and what doesn't
 - [Control Flow Guide](../CONTROL_FLOW_GUIDE.md)
-- [Checkpointing (detailed)](../Checkpointing.md)
-- [Checkpointing Quickstart](../Checkpointing_quickstart.md)
 - [Python Feature Support](../PYTHON_FEATURE_SUPPORT.md)
 
 ---

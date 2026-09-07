@@ -463,7 +463,14 @@ class ReverseAD(object):
     Returns:
       int or None: Estimated loop length, or None if unknown
     """
-    # Handle range(n) calls
+    # Handle range(n) calls. Only the single-argument, zero-based form is
+    # eligible: the checkpointed adjoint template reconstructs the loop
+    # target for non-checkpointed iterations as the 0-based iteration index
+    # (see grads.dfor_checkpointed), which is only correct when the target
+    # actually equals that index. For range(start, stop) with start != 0 the
+    # reconstruction would silently produce wrong gradients whenever the
+    # adjoint needs the target value, so such loops fall back to the
+    # standard (non-checkpointed) templates.
     if isinstance(iter_node, gast.Call):
       if isinstance(iter_node.func, gast.Name) and iter_node.func.id == 'range':
         if len(iter_node.args) == 1:
@@ -471,25 +478,8 @@ class ReverseAD(object):
           arg = iter_node.args[0]
           if isinstance(arg, gast.Constant):
             return arg.value
-        elif len(iter_node.args) == 2:
-          # range(start, stop)
-          stop_val = None
-          start_val = 0
 
-          # Get stop value
-          stop_arg = iter_node.args[1]
-          if isinstance(stop_arg, gast.Constant):
-            stop_val = stop_arg.value
-
-          # Get start value
-          start_arg = iter_node.args[0]
-          if isinstance(start_arg, gast.Constant):
-            start_val = start_arg.value
-
-          if stop_val is not None:
-            return stop_val - start_val
-
-    # Unknown length
+    # Unknown length (or a range form the adjoint cannot reconstruct)
     return None
 
   def visit_While(self, node):

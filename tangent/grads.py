@@ -179,9 +179,10 @@ def dfor_checkpointed(adjoint_body, i, pop, pop_target, target, _stack,
       # This was a checkpoint - pop from stack
       target = pop_target(_stack, op_id_target)
     else:
-      # Not a checkpoint - reconstruct target value
-      # Phase 4a: For range() loops, target == iteration index
-      # This is a simplification that works for the common case
+      # Not a checkpoint - reconstruct target value as the 0-based iteration
+      # index. This is only valid because reverse_ad._estimate_loop_length
+      # restricts checkpointing to `for target in range(n)` loops (constant,
+      # zero-based), where target == iteration index by construction.
       target = _iteration
 
     adjoint_body

@@ -250,7 +250,10 @@ All gradients have been verified:
 
 ### Checkpointing
 
-Lambda functions work seamlessly with checkpointing:
+Lambda functions work with the (limited) automatic loop checkpointing in
+`tangent.grad` (see `docs/checkpointing_user_guide.md`; note
+`grad_with_checkpointing` raises `NotImplementedError` for functions with
+loops):
 
 ```python
 def checkpointed_function(x):
@@ -260,8 +263,7 @@ def checkpointed_function(x):
         result = result + g(x + i)
     return result
 
-# Checkpointing + lambdas work together!
-df = tangent.grad_with_checkpointing(checkpointed_function)
+df = tangent.grad(checkpointed_function, checkpoint=True)
 ```
 
 ### NumPy/JAX/TensorFlow Extensions

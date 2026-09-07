@@ -25,7 +25,7 @@ skipped gracefully otherwise; NumPy always runs.
 | `test_tf2_basic.py` | TensorFlow 2.x integration (eager mode) |
 | `class_examples.py` | User-defined classes, method inlining, attributes |
 | `lambda_examples.py` | Lambdas, closures, and higher-order functions |
-| `checkpoint_demo.py` | Gradient checkpointing (memory-efficient reverse mode) |
+| `checkpoint_demo.py` | Manual forward-pass checkpointing helpers (O(√n) state storage; not an integrated reverse mode) |
 | `demo_error_messages.py` | Enhanced, actionable error messages |
 | `demo_visualization.py` | Generates the computation-graph / gradient-flow plots |
 

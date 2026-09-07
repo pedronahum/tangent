@@ -617,7 +617,12 @@ def _grad_uncached(func,
         output to stdout at various stages of the process for debugging
         purposes. If > 1, all intermediate code generation steps will print.
     checkpoint: Enable automatic checkpointing for loops (default: False).
-        This reduces memory usage for long sequences at the cost of recomputation.
+        Limited: applies only to `for i in range(n)` loops with a constant,
+        zero-based range of at least 'min_length' iterations, and only the
+        loop target variable is stored selectively (at ~sqrt(n) checkpoint
+        positions) - other loop-body intermediates are still taped every
+        iteration, so the measured overall memory reduction is small (~3%).
+        See docs/checkpointing_user_guide.md.
     checkpoint_config: Dictionary with checkpointing configuration:
         - 'enabled': Enable checkpointing (default: value of checkpoint param)
         - 'min_length': Minimum loop length to checkpoint (default: 100)

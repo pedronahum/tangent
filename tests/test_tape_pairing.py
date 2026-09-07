@@ -211,5 +211,27 @@ def test_checkpointing_with_optimization():
   assert np.allclose(df(x), fd, rtol=1e-4)
 
 
+def nonzero_based_loop(x):
+  y = x
+  for i in range(2, 152):
+    y = y * i * 0.01
+  return y
+
+
+def test_checkpointing_skips_nonzero_based_range():
+  """range(start, stop) loops must not be checkpointed.
+
+  The checkpointed adjoint reconstructs the loop target as the 0-based
+  iteration index, which is wrong for a non-zero-based range whenever the
+  adjoint needs the target value. Such loops fall back to the standard
+  templates, so checkpoint=True must match the standard gradient exactly.
+  """
+  x = 0.5
+  d_checkpoint = tangent.grad(nonzero_based_loop, checkpoint=True)(x)
+  d_standard = tangent.grad(nonzero_based_loop)(x)
+  assert d_standard != 0.0
+  assert np.allclose(d_checkpoint, d_standard, rtol=1e-12, atol=0.0)
+
+
 if __name__ == '__main__':
   assert not pytest.main([__file__])

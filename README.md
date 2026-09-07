@@ -408,6 +408,14 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
 - **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
   a variable assigned exactly once to a literal and never mutated; dynamically
   built lists raise `NotImplementedError`.
+- **Gradient checkpointing is limited**: `tangent.grad(f, checkpoint=True)`
+  applies only to `for i in range(n)` loops with a constant, zero-based range
+  of ≥ 100 iterations, and only stores the loop target selectively — the rest
+  of the tape is unchanged (~3% overall memory reduction measured).
+  `tangent.grad_with_checkpointing` raises `NotImplementedError` for any
+  function containing a loop, and `tangent.checkpointed_loop` is a manual
+  forward-pass helper that `tangent.grad` cannot differentiate through. See
+  the [Checkpointing User Guide](docs/checkpointing_user_guide.md).
 
 ---
 
@@ -515,8 +523,7 @@ tangent/
 │   ├── visualization.py          # Visualization tools
 │   ├── function_cache.py         # Gradient-function caching
 │   ├── optimizations/            # DCE, CSE, strength reduction, algebraic
-│   ├── analysis/                 # Activity analysis, checkpoint analysis
-│   └── checkpointing/            # Gradient checkpointing
+│   └── checkpointing_simple.py   # Manual forward-pass checkpointing helpers
 ├── tests/                        # 77 test modules (76k+ cases)
 │   ├── test_backend_coverage.py  # Cross-backend op catalog
 │   ├── test_torch.py             # PyTorch tests
@@ -538,7 +545,7 @@ tangent/
 - **[Python Feature Support](docs/features/PYTHON_FEATURE_SUPPORT.md)** — the definitive feature reference
 - **[Framework Comparison](docs/benchmarks/FRAMEWORK_COMPARISON.md)** — Tangent vs TensorFlow vs PyTorch benchmarks
 - **[Optimizations](docs/optimizations/)** — CSE, strength reduction, performance analysis
-- **[Checkpointing User Guide](docs/checkpointing_user_guide.md)** — gradient checkpointing
+- **[Checkpointing User Guide](docs/checkpointing_user_guide.md)** — gradient checkpointing: what works today and what doesn't
 
 ---
 

@@ -1,21 +1,25 @@
-"""Integration of checkpointing with Tangent's gradient computation.
+"""Checkpointing-related wrappers around tangent.grad().
 
-This module provides a wrapper around tangent.grad() that automatically applies
-checkpointing to loops in the function being differentiated.
+What actually works today:
 
-Usage:
-    import tangent
-    from tangent.grad_checkpoint import grad_with_checkpointing
+1. ``tangent.grad(func, checkpoint=True)`` — automatic checkpointing of
+   ``for i in range(n)`` loops (constant ``n``, zero-based, at least
+   ``min_length`` iterations, default 100). Only the loop *target* variable
+   is stored selectively (at ~sqrt(n) checkpoint positions); every other
+   intermediate value in the loop body is still pushed to the tape each
+   iteration. Measured overall memory reduction on the reference benchmark
+   is ~3% (97% reduction of target storage alone). Composes with
+   ``optimized=True``. See docs/checkpointing_user_guide.md.
 
-    def rnn_forward(x, W, b, seq_length=100):
-        state = x
-        for i in range(seq_length):
-            state = np.tanh(state @ W + b)
-        return state
+2. ``tangent.checkpointed_loop`` (tangent/checkpointing_simple.py) — a
+   manual forward-pass helper that stores only O(sqrt(n)) state snapshots.
+   ``tangent.grad`` cannot differentiate through it; it is a memory-saving
+   utility for the forward pass only.
 
-    # Use checkpointing-aware gradient
-    df = grad_with_checkpointing(rnn_forward, num_checkpoints=10)
-    grad_x = df(x, W, b)
+``grad_with_checkpointing`` in this module was intended to rewrite arbitrary
+loops via AST transformation. That transformation was never implemented, so
+this function raises ``NotImplementedError`` for any function containing a
+loop and simply delegates to ``tangent.grad`` otherwise.
 """
 
 import ast
@@ -26,10 +30,7 @@ from typing import Callable, Optional, Tuple
 from tangent.grad_util import grad as tangent_grad
 
 # Import checkpointing utilities
-from tangent.checkpointing_simple import (
-    checkpointed_loop,
-    get_memory_savings
-)
+from tangent.checkpointing_simple import get_memory_savings
 
 
 def grad_with_checkpointing(func: Callable,
@@ -37,32 +38,38 @@ def grad_with_checkpointing(func: Callable,
                             num_checkpoints: Optional[int] = None,
                             **grad_kwargs) -> Callable:
     """
-    Compute gradient of a function with automatic checkpointing for loops.
+    Intended: gradient of `func` with checkpointing applied to its loops.
 
-    This is a drop-in replacement for tangent.grad() that automatically
-    detects loops and applies checkpointing to reduce memory usage.
+    NOT IMPLEMENTED for functions that contain loops: the AST transformation
+    that would rewrite arbitrary loops into checkpointed form was never built,
+    and this function raises ``NotImplementedError`` in that case (at call
+    time, so the failure is immediate rather than deferred to the first
+    gradient evaluation).
+
+    For a function without loops this simply delegates to ``tangent.grad``
+    (checkpointing would be a no-op anyway).
+
+    Working alternatives:
+
+    * ``tangent.grad(func, checkpoint=True)`` — automatic, but limited to
+      ``for i in range(n)`` loops with a constant, zero-based range of at
+      least ``min_length`` (default 100) iterations, and only reduces
+      storage of the loop target variable (~3% overall in the reference
+      benchmark).
+    * ``tangent.checkpointed_loop`` — manual O(sqrt(n))-memory forward pass;
+      gradients do not flow through it.
 
     Args:
         func: Function to differentiate
         wrt: Tuple of argument indices to differentiate with respect to
-        num_checkpoints: Number of checkpoints to use (default: sqrt(seq_length))
+        num_checkpoints: Unused (kept for API compatibility)
         **grad_kwargs: Additional arguments passed to tangent.grad()
 
     Returns:
-        Gradient function with checkpointing applied
+        Gradient function (only when `func` contains no loops)
 
-    Example:
-        >>> def rnn(x, W, b):
-        ...     state = x
-        ...     for i in range(1000):
-        ...         state = np.tanh(state @ W + b)
-        ...     return state
-        >>> df = grad_with_checkpointing(rnn, num_checkpoints=31)
-        >>> grad_x = df(x, W, b)
-
-    Note:
-        This is Phase 1 implementation. Full AST transformation integration
-        will be added in Phase 2.
+    Raises:
+        NotImplementedError: if `func` contains a for/while loop.
     """
     # Analyze function to detect loops
     loop_info = _detect_loops(func)
@@ -71,37 +78,35 @@ def grad_with_checkpointing(func: Callable,
         # No loops found - use standard gradient
         return tangent_grad(func, wrt=wrt, **grad_kwargs)
 
-    # For Phase 1, we use a manual checkpointing wrapper
-    # Phase 2 will implement full AST transformation
-
-    # Create a wrapper that explains the limitation
-    def gradient_wrapper(*args, **kwargs):
-        raise NotImplementedError(
-            "Automatic checkpointing via AST transformation is not yet implemented.\n"
-            "\n"
-            "Current workaround: Manually apply checkpointing to your loops.\n"
-            "\n"
-            "Example:\n"
-            "  from tangent.checkpointing_simple import checkpointed_loop\n"
-            "\n"
-            "  def rnn_step(state):\n"
-            "      return np.tanh(state @ W + b)\n"
-            "\n"
-            "  # Instead of:\n"
-            "  # for i in range(seq_length):\n"
-            "  #     state = rnn_step(state)\n"
-            "\n"
-            "  # Use:\n"
-            "  final_state, checkpoints = checkpointed_loop(\n"
-            "      rnn_step, initial_state, seq_length, num_checkpoints=31\n"
-            "  )\n"
-            "\n"
-            f"Detected {len(loop_info)} loop(s) in function '{func.__name__}':\n"
-            + "\n".join(f"  - Line {info['line']}: {info['type']}" for info in loop_info)
-            + "\n\nFor full integration, see: tangent/checkpointing_simple.py"
-        )
-
-    return gradient_wrapper
+    raise NotImplementedError(
+        "grad_with_checkpointing: automatic checkpointing via AST "
+        "transformation is not implemented, and the function "
+        f"'{func.__name__}' contains {len(loop_info)} loop(s):\n"
+        + "\n".join(f"  - Line {info['line']}: {info['type']}"
+                    for info in loop_info)
+        + "\n"
+        "\n"
+        "Working alternatives:\n"
+        "\n"
+        "1. tangent.grad(func, checkpoint=True)\n"
+        "   Automatic, but limited: applies only to 'for i in range(n)' "
+        "loops\n"
+        "   with a constant, zero-based range of >= 100 iterations "
+        "(configurable\n"
+        "   via checkpoint_config={'min_length': ...}), and only the loop "
+        "target\n"
+        "   variable is stored selectively - other intermediates are still "
+        "taped\n"
+        "   every iteration (~3% overall memory reduction measured).\n"
+        "\n"
+        "2. tangent.checkpointed_loop(step_fn, initial_state, seq_length, "
+        "num_checkpoints)\n"
+        "   Manual forward-pass helper storing O(sqrt(n)) snapshots. Note "
+        "that\n"
+        "   tangent.grad cannot differentiate through it.\n"
+        "\n"
+        "See docs/checkpointing_user_guide.md for details."
+    )
 
 
 def _detect_loops(func: Callable) -> list:
@@ -120,6 +125,10 @@ def _detect_loops(func: Callable) -> list:
         tree = ast.parse(source)
     except (OSError, TypeError):
         # Cannot get source (e.g., built-in function)
+        return []
+    except SyntaxError:
+        # Indented source (e.g., a method); tangent.grad will produce its own
+        # clearer error if the function is genuinely unparseable.
         return []
 
     class LoopFinder(ast.NodeVisitor):
@@ -155,7 +164,11 @@ def estimate_checkpoint_savings(seq_length: int,
     """
     Estimate memory savings from checkpointing.
 
-    This is a convenience wrapper around get_memory_savings().
+    This is a convenience wrapper around get_memory_savings(). Note that the
+    estimate counts stored *states*: it applies to the manual
+    ``checkpointed_loop`` helper, not to the overall tape memory of
+    ``tangent.grad(func, checkpoint=True)`` (which only stores the loop
+    target selectively).
 
     Args:
         seq_length: Length of the sequence/loop
@@ -172,66 +185,12 @@ def estimate_checkpoint_savings(seq_length: int,
     return get_memory_savings(seq_length, num_checkpoints)
 
 
-def checkpointed_grad(loop_func: Callable,
-                     seq_length: int,
-                     num_checkpoints: Optional[int] = None) -> Callable:
-    """
-    Create a gradient function for a loop body with checkpointing.
-
-    This is a helper function for manually applying checkpointing to loops
-    until full AST transformation is implemented.
-
-    Args:
-        loop_func: Function representing one iteration of the loop (state -> new_state)
-        seq_length: Number of loop iterations
-        num_checkpoints: Number of checkpoints to use
-
-    Returns:
-        Gradient function that uses checkpointing
-
-    Example:
-        >>> def rnn_step(state):
-        ...     return np.tanh(state * 1.1 + 0.1)
-        >>> df = checkpointed_grad(rnn_step, seq_length=1000, num_checkpoints=31)
-        >>> # Use df in your gradient computation...
-
-    Note:
-        This is a simplified API. For complex use cases, use checkpointed_loop
-        and tangent.grad() directly.
-    """
-    # Get gradient of single step
-    step_grad = tangent_grad(loop_func)
-
-    def gradient_with_checkpointing(initial_state):
-        """
-        Compute gradient through the loop using checkpointing.
-        """
-        # Forward pass with checkpointing
-        final_state, checkpoints = checkpointed_loop(
-            loop_func, initial_state, seq_length, num_checkpoints
-        )
-
-        # Backward pass - simplified version
-        # Full implementation requires proper gradient accumulation
-        # For now, we compute the gradient at the final state
-        grad_final = step_grad(final_state)
-
-        # TODO: Implement full backward pass with recomputation from checkpoints
-        # This requires:
-        # 1. Iterate backward through checkpoints
-        # 2. Recompute forward from each checkpoint
-        # 3. Accumulate gradients properly
-        # 4. Handle multiple inputs/outputs
-
-        return grad_final
-
-    return gradient_with_checkpointing
-
-
 # Convenience function for checking if checkpointing would be beneficial
 def should_checkpoint(seq_length: int, threshold: float = 0.5) -> bool:
     """
     Determine if checkpointing would provide significant memory savings.
+
+    The estimate counts stored states (see ``estimate_checkpoint_savings``).
 
     Args:
         seq_length: Length of the sequence/loop
@@ -253,7 +212,6 @@ def should_checkpoint(seq_length: int, threshold: float = 0.5) -> bool:
 # Export main functions
 __all__ = [
     'grad_with_checkpointing',
-    'checkpointed_grad',
     'estimate_checkpoint_savings',
     'should_checkpoint',
 ]

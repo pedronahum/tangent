@@ -2,10 +2,16 @@
 
 ## Executive Summary
 
-**Current Status**: Phase 4a complete and working ✅
-**Memory Reduction**: 2.8% overall (97% reduction in target storage)
-**Gradients**: 100% correct ✅
-**Production Ready**: Yes, for Phase 4a
+**Current Status**: Phase 4a complete and working ✅ (limited to
+`for i in range(n)` loops with a constant, zero-based range; other loops fall
+back to the standard full-tape path)
+**Memory Reduction**: 2.8% overall (97% reduction in target storage only)
+**Gradients**: 100% correct for eligible loops ✅ (`range(start, stop)` loops
+are excluded from checkpointing because the adjoint reconstructs the target
+as a zero-based index)
+**Optimization**: `checkpoint=True` composes with `optimized=True` (the old
+force-disable in `grad_util` was lifted once DCE paired tape pushes with
+their pops)
 
 **For 99% memory reduction**: Phase 4b requires additional 40-115 hours of effort with architectural changes to tangent's reverse AD system.
 
@@ -15,15 +21,20 @@
 
 ### Phase 4a: Selective Target Storage (COMPLETE) ✅
 
-**Implementation**: 5-stage pipeline (~1,400 lines of production code)
+**Implementation**: what ships is Stage 3 (the checkpointed templates in
+`grads.py`, dispatched from `reverse_ad.visit_For`) plus the runtime helpers
+in `checkpoint_helpers.py`/`checkpointing_simple.py`. Stages 1, 2, 4 and 5
+below described an experimental pipeline that was never wired into the
+public API and has since been **removed from the tree** (see "Files and Code
+Locations"); the descriptions are kept for historical context.
 
-1. **Stage 1**: CheckpointAnalyzer (274 lines)
+1. **Stage 1**: CheckpointAnalyzer (274 lines) — removed
    - Analyzes loops for checkpointing opportunities
    - Computes optimal √n checkpoint positions
    - Tracks modified variables
    - Estimates memory savings
 
-2. **Stage 2**: CheckpointPreprocessor (508 lines)
+2. **Stage 2**: CheckpointPreprocessor (508 lines) — removed
    - Transforms loops with checkpoint infrastructure
    - Extracts loop bodies as module-level functions
    - Creates checkpoint position dicts
@@ -34,12 +45,13 @@
    - `@adjoint_checkpointed(gast.For)` - pops from checkpoints, reconstructs others
    - Integrated with tangent's template system
 
-4. **Stage 4**: Integration Layer (380 lines)
+4. **Stage 4**: Integration Layer (380 lines) — removed
    - High-level API: `enhanced_grad()` and `grad_with_checkpointing()`
    - Analysis and preprocessing pipeline
    - Fallback to standard gradient when needed
 
-5. **Stage 5**: Runtime Support (243 lines)
+5. **Stage 5**: Runtime Support (243 lines) — removed (equivalents live in
+   `checkpoint_helpers.py` / `checkpointing_simple.py`)
    - `CheckpointManager` class for checkpoint storage/restoration
    - Helper functions: `compute_checkpoint_positions()`, `find_nearest_checkpoint()`
    - Memory tracking and reporting
@@ -398,35 +410,35 @@ Is 99% reduction needed?
 
 ```
 tangent/
-├── analysis/
-│   └── checkpoint_analyzer.py          # Stage 1: Loop analysis (274 lines)
-├── preprocessing/
-│   └── checkpoint_preprocessor.py      # Stage 2: AST transformation (508 lines)
-├── checkpointing/
-│   ├── runtime.py                      # Stage 5: Runtime support (243 lines)
-│   ├── integration.py                  # Stage 4: Integration layer (380 lines)
-│   └── adjoint_transformer.py          # Stage 3: Adjoint framework (178 lines)
-└── grads.py                             # Checkpointed templates (lines 131-194)
+├── grads.py                    # Checkpointed for-loop templates
+│                               # (primals_checkpointed / adjoints_checkpointed)
+├── reverse_ad.py               # visit_For checkpoint dispatch,
+│                               # _should_checkpoint_loop, _estimate_loop_length
+├── checkpointing_simple.py     # Manual forward-pass helpers
+│                               # (checkpointed_loop, positions, savings stats)
+├── checkpoint_helpers.py       # Runtime helpers used by generated code
+│                               # (compute_optimal_checkpoints, ...)
+└── grad_checkpoint.py          # grad_with_checkpointing (raises
+                                # NotImplementedError for functions with loops)
 ```
+
+Note (2026-09): an earlier experimental pipeline for full automatic
+checkpointing was removed because it was unreachable from the public API,
+untested, and unfinished: `tangent/analysis/checkpoint_analyzer.py`,
+`tangent/preprocessing/checkpoint_preprocessor.py`, and
+`tangent/checkpointing/{integration,runtime,adjoint_transformer}.py`. Recover
+it from git history if Phase 4b work resumes.
 
 ### Test Files
 
 ```
-/tmp/
-├── test_checkpointing_e2e.py           # End-to-end tests (6/6 passing)
-├── test_memory_reduction.py            # Memory measurement tests
-├── test_loop_extraction.py             # Loop body extraction tests
-├── test_actual_gradient.py             # Gradient correctness tests
-└── test_preprocessing_integration.py   # Integration tests
-```
-
-### Documentation
-
-```
-/tmp/
-├── PHASE4B_FINDINGS_AND_RECOMMENDATION.md  # Technical analysis
-├── STEP1_COMPLETE_NEXT_STEPS.md            # Step 1 details
-└── CURRENT_STATUS_PHASE4B.md                # Previous status doc
+tests/
+├── test_checkpointing_basic.py         # Manual helper unit tests
+└── test_tape_pairing.py                # grad(checkpoint=True, optimized=True)
+                                        # correctness (checkpointing now
+                                        # composes with optimization; the old
+                                        # force-disable in grad_util was lifted
+                                        # by the tape push/pop pairing fix)
 ```
 
 ---
