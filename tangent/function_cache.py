@@ -37,6 +37,7 @@ import functools
 import hashlib
 import inspect
 import threading
+import weakref
 from collections import OrderedDict
 
 
@@ -46,9 +47,68 @@ _cache_lock = threading.Lock()
 _cache = OrderedDict()
 _cache_stats = {'hits': 0, 'misses': 0, 'evictions': 0}
 
+# Memoized source hashes, keyed by the function object itself. Function
+# objects are safe keys here: a "redefinition" at the same name creates a new
+# function object, so a stale entry can never be served for new code. The
+# WeakKeyDictionary ensures we don't keep dead functions alive.
+_source_hash_memo = weakref.WeakKeyDictionary()
+
+
+def _get_source_hash(func):
+    """Return a short hash of `func`'s source code, memoized per function.
+
+    `inspect.getsource` reads and tokenizes the whole source file on every
+    call, which dominates cache-hit time for functions defined in large
+    modules. The hash is therefore computed once per function object and
+    remembered in a weak-keyed memo. Callables that cannot be weak-referenced
+    fall back to the slow path.
+    """
+    try:
+        return _source_hash_memo[func]
+    except (KeyError, TypeError):
+        pass
+
+    try:
+        # Get function source code and hash it
+        source = inspect.getsource(func)
+        source_hash = hashlib.sha256(source.encode('utf-8')).hexdigest()[:16]
+    except (OSError, TypeError):
+        # If we can't get source (e.g., built-in function), use empty hash
+        source_hash = ''
+
+    try:
+        _source_hash_memo[func] = source_hash
+    except TypeError:
+        # Not weak-referenceable; recompute next time.
+        pass
+    return source_hash
+
+
+def _canonicalize_config(config):
+    """Canonicalize a configuration argument into a hashable value.
+
+    Handles the shapes accepted by grad/autodiff configuration parameters:
+    None, dicts (order-insensitively, recursively), lists/tuples, and
+    arbitrary values (falling back to `repr` when unhashable).
+    """
+    if config is None:
+        return None
+    if isinstance(config, dict):
+        return ('dict', tuple(
+            sorted((str(k), _canonicalize_config(v))
+                   for k, v in config.items())))
+    if isinstance(config, (list, tuple)):
+        return ('seq', tuple(_canonicalize_config(v) for v in config))
+    try:
+        hash(config)
+        return config
+    except TypeError:
+        return repr(config)
+
 
 def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
-                        check_dims, input_derivative):
+                        check_dims, input_derivative, optimizations=None,
+                        checkpoint_config=None, grad_config=None):
     """Generate a unique cache key for a function transformation.
 
     The cache key is based on:
@@ -66,17 +126,15 @@ def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
         preserve_result: Whether to preserve the original function result
         check_dims: Whether to check dimensions
         input_derivative: Input derivative mode
+        optimizations: Optional dict of optimization flags (affects the
+            compiled gradient, so it must participate in the key)
+        checkpoint_config: Optional dict with checkpointing configuration
+        grad_config: Optional dict with multi-output configuration
 
     Returns:
         A hashable tuple representing the cache key
     """
-    try:
-        # Get function source code and hash it
-        source = inspect.getsource(func)
-        source_hash = hashlib.sha256(source.encode('utf-8')).hexdigest()[:16]
-    except (OSError, TypeError):
-        # If we can't get source (e.g., built-in function), use empty hash
-        source_hash = ''
+    source_hash = _get_source_hash(func)
 
     # Get bytecode hash to distinguish functions with same source but different behavior
     # (e.g., closures with different captured variables)
@@ -126,7 +184,10 @@ def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
         optimized,
         preserve_result,
         check_dims,
-        input_derivative_str
+        input_derivative_str,
+        _canonicalize_config(optimizations),
+        _canonicalize_config(checkpoint_config),
+        _canonicalize_config(grad_config)
     )
 
     return cache_key
@@ -266,7 +327,8 @@ def cached_autodiff(original_autodiff):
     @functools.wraps(original_autodiff)
     def wrapper(func, wrt=(0,), optimized=True, motion='joint', mode='reverse',
                 preserve_result=False, check_dims=True,
-                input_derivative=None, verbose=0):
+                input_derivative=None, verbose=0,
+                checkpoint_config=None, optimizations=None, grad_config=None):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
@@ -275,10 +337,12 @@ def cached_autodiff(original_autodiff):
         if input_derivative is None:
             input_derivative = INPUT_DERIVATIVE.Required
 
-        # Generate cache key
+        # Generate cache key. checkpoint_config, optimizations and grad_config
+        # all change the compiled gradient, so they participate in the key.
         cache_key = _generate_cache_key(
             func, wrt, motion, mode, optimized, preserve_result,
-            check_dims, input_derivative
+            check_dims, input_derivative, optimizations=optimizations,
+            checkpoint_config=checkpoint_config, grad_config=grad_config
         )
 
         # Try to get from cache
@@ -295,7 +359,9 @@ def cached_autodiff(original_autodiff):
         result = original_autodiff(
             func, wrt=wrt, optimized=optimized, motion=motion, mode=mode,
             preserve_result=preserve_result, check_dims=check_dims,
-            input_derivative=input_derivative, verbose=verbose
+            input_derivative=input_derivative, verbose=verbose,
+            checkpoint_config=checkpoint_config, optimizations=optimizations,
+            grad_config=grad_config
         )
 
         # Add to cache
@@ -358,21 +424,12 @@ def cached_grad(original_grad):
                                output_index, output_weights)
             return wrap_with_error_handler(result)
 
-        # The cache key does not encode the `optimizations` dict, so a
-        # coarsened gradient (optimizations={'coarsening': True}) must not
-        # collide with the standard one. Bypass the cache when it is on.
-        if optimizations and optimizations.get('coarsening', False):
-            if verbose >= 1:
-                print("[Cache] Bypassing cache (coarsening enabled)")
-            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
-                               verbose, checkpoint, checkpoint_config, optimizations,
-                               output_index, output_weights)
-            return wrap_with_error_handler(result)
-
-        # Generate cache key (grad uses specific default parameters)
+        # Generate cache key (grad uses specific default parameters). The
+        # `optimizations` dict changes the compiled gradient (e.g. cse,
+        # algebraic, coarsening), so it participates in the key.
         cache_key = _generate_cache_key(
             func, wrt, 'joint', 'reverse', optimized, preserve_result,
-            check_dims, INPUT_DERIVATIVE.DefaultOne
+            check_dims, INPUT_DERIVATIVE.DefaultOne, optimizations=optimizations
         )
 
         # Try to get from cache

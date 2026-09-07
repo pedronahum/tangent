@@ -313,5 +313,143 @@ def test_cache_correctness():
         assert abs(df(1.0) - 8.0) < 0.001   # 6*1 + 2 = 8
 
 
+def test_cache_distinct_optimizations():
+    """Distinct optimizations dicts must get distinct cache entries."""
+    tangent.clear_cache()
+    tangent.reset_cache_stats()
+
+    def f(x):
+        return x * x * x + 2.0 * x
+
+    df_plain = tangent.grad(f)
+    df_opt = tangent.grad(f, optimizations={'cse': True, 'algebraic': True})
+
+    # Different optimizations must not return the same cached object
+    assert df_plain is not df_opt
+    stats = tangent.get_cache_stats()
+    assert stats['misses'] == 2
+    assert stats['hits'] == 0
+
+    # Both must still compute the correct gradient: 3x^2 + 2
+    assert abs(df_plain(2.0) - 14.0) < 1e-9
+    assert abs(df_opt(2.0) - 14.0) < 1e-9
+
+    # Repeating each call should hit its own cache entry
+    assert tangent.grad(f) is df_plain
+    assert tangent.grad(f, optimizations={'cse': True, 'algebraic': True}) is df_opt
+    stats = tangent.get_cache_stats()
+    assert stats['misses'] == 2
+    assert stats['hits'] == 2
+
+
+def test_cache_optimizations_key_order_insensitive():
+    """Equal optimizations dicts hit the cache regardless of key order."""
+    tangent.clear_cache()
+    tangent.reset_cache_stats()
+
+    def f(x):
+        return x * x
+
+    df1 = tangent.grad(f, optimizations={'cse': True, 'dce': True})
+    df2 = tangent.grad(f, optimizations={'dce': True, 'cse': True})
+
+    assert df1 is df2
+    stats = tangent.get_cache_stats()
+    assert stats['misses'] == 1
+    assert stats['hits'] == 1
+
+
+def test_cache_coarsening_separate_entry():
+    """Coarsened gradients are cached separately from standard ones."""
+    pytest.importorskip('sympy')
+    tangent.clear_cache()
+    tangent.reset_cache_stats()
+
+    def f(x):
+        return x * x * x
+
+    df_plain = tangent.grad(f)
+    df_coarse = tangent.grad(f, optimizations={'coarsening': True})
+    assert df_plain is not df_coarse
+
+    # Both correct: 3x^2
+    assert abs(df_plain(2.0) - 12.0) < 1e-9
+    assert abs(df_coarse(2.0) - 12.0) < 1e-9
+
+    # The coarsened gradient is now cached rather than bypassed
+    df_coarse2 = tangent.grad(f, optimizations={'coarsening': True})
+    assert df_coarse2 is df_coarse
+    stats = tangent.get_cache_stats()
+    assert stats['misses'] == 2
+    assert stats['hits'] == 1
+
+
+def test_autodiff_accepts_full_signature():
+    """autodiff must accept optimizations/checkpoint_config/grad_config."""
+    tangent.clear_cache()
+    tangent.reset_cache_stats()
+
+    def f(x):
+        return x * x
+
+    # These kwargs used to raise TypeError because the caching wrapper
+    # narrowed the signature of _autodiff_uncached.
+    df1 = tangent.autodiff(f, mode='reverse', optimizations={'dce': True})
+    df2 = tangent.autodiff(f, mode='reverse', checkpoint_config=None)
+    df3 = tangent.autodiff(f, mode='reverse', grad_config=None)
+
+    assert df1(3.0, 1.0) == 6.0
+    assert df2(3.0, 1.0) == 6.0
+    assert df3(3.0, 1.0) == 6.0
+
+    # optimizations participates in the autodiff cache key too
+    df_a = tangent.autodiff(f, mode='reverse', optimizations={'cse': True})
+    df_b = tangent.autodiff(f, mode='reverse')
+    assert df_a is not df_b
+
+
+def test_autodiff_optimizations_cache_hit():
+    """Repeated autodiff calls with equal optimizations hit the cache."""
+    tangent.clear_cache()
+    tangent.reset_cache_stats()
+
+    def f(x):
+        return x * x
+
+    df1 = tangent.autodiff(f, mode='reverse', optimizations={'cse': True})
+    df2 = tangent.autodiff(f, mode='reverse', optimizations={'cse': True})
+
+    assert df1 is df2
+    stats = tangent.get_cache_stats()
+    assert stats['misses'] == 1
+    assert stats['hits'] == 1
+    assert abs(stats['hit_rate'] - 0.5) < 0.01
+
+
+def test_source_hash_memo_fallback():
+    """Un-weakref-able callables fall back to the slow path without error."""
+    from tangent.function_cache import _get_source_hash
+
+    class Slotted(object):
+        __slots__ = ()
+
+        def __call__(self, x):
+            return x
+
+    obj = Slotted()
+    # Cannot be weak-referenced (no __weakref__ slot); must not raise and
+    # must return consistent results across calls.
+    h1 = _get_source_hash(obj)
+    h2 = _get_source_hash(obj)
+    assert h1 == h2
+
+    # Plain functions get memoized and stay consistent.
+    def f(x):
+        return x * x
+
+    assert _get_source_hash(f) == _get_source_hash(f)
+    assert _get_source_hash(f) != ''
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
