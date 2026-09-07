@@ -126,7 +126,6 @@ All tests work with:
 2. **Array subscripting** - Immutable tensor updates (JAX, TensorFlow)
 3. **Type casting** - JAX ReLU gradient with scalars
 
-See `BACKEND_FIXES_COMPLETE.md` in the root directory for details.
 
 ## Continuous Integration
 

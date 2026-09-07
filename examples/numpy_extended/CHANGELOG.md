@@ -48,4 +48,3 @@
 - `/tangent/numpy_extended.py` (338 lines)
 - `/tangent/__init__.py` (7 lines added)
 - `/examples/numpy_extended/` (5 files)
-- `/NUMPY_EXTENSIONS_COMPLETE.md` (technical deep dive)

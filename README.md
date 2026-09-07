@@ -2,7 +2,7 @@
 
 [![Python 3.9–3.13](https://img.shields.io/badge/python-3.9%20--%203.13-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/pedronahum/tangent/actions/workflows/ci.yml/badge.svg)](https://github.com/pedronahum/tangent/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-77%2C000%2B%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-75%2C000%2B%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb)
 
@@ -161,9 +161,9 @@ Backend notes worth knowing:
   `ceil_mode`, no `return_indices`, 3-D/4-D inputs, and symmetric padding;
   `avg_pool2d` gradients require the defaults (`count_include_pad`, no
   `ceil_mode`). Unsupported configurations raise `NotImplementedError`.
-- **The `@` operator** — `x @ y` differentiates for NumPy, tinygrad, JAX and
-  TensorFlow (backend-dispatched via `tangent.utils.register_matmul_grad`);
-  torch has no registration and raises a clear `NotImplementedError`.
+- **The `@` operator** — `x @ y` differentiates for NumPy, JAX, TensorFlow,
+  PyTorch and tinygrad (backend-dispatched via
+  `tangent.utils.register_matmul_grad`).
 
 A shared cross-backend test suite (`tests/test_backend_coverage.py`) runs one
 op catalog — arithmetic, exp/log, trig, activations, reductions, matmul,
@@ -238,7 +238,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Statements**: `assert`, `pass`, early `return`
 - **Higher-order**: `grad(grad(f))` second derivatives, third derivatives for NumPy functions, Hessian-vector products
 
-**📖 Complete reference with examples**: [Python Feature Support Guide](docs/features/PYTHON_FEATURE_SUPPORT.md) — plus 16 focused feature docs under [`docs/features/`](docs/features/).
+**📖 Complete reference with examples**: [Python Feature Support Guide](docs/features/PYTHON_FEATURE_SUPPORT.md) — plus focused feature docs under [`docs/features/`](docs/features/).
 
 Not supported: `break`/`continue`, `@property`/`@classmethod`/`@staticmethod`, generators, and in-place array mutation through augmented subscript assignment. See the feature guide for the full list.
 
@@ -495,9 +495,11 @@ pytest tests/test_keras.py           # Keras tests (any backend)
 pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
-Current status: **77,000+ parameterized test cases pass** (0 failures). The
-remaining expected failures (`xfail`) are documented limitations. CI runs the suite
-on Python 3.9–3.13 and exercises the cross-backend catalog against every
+Current status: **75,000+ parameterized test cases pass, with zero failures
+and zero expected-failure (`xfail`) markers** (last local measurement: 75,952
+passed, 562 skipped, with NumPy, JAX, PyTorch-CPU, tinygrad, Keras 3 and
+SymPy installed; TensorFlow-dependent cases run in CI). CI runs the suite on
+Python 3.9–3.13 and exercises the cross-backend catalog against every
 installed backend.
 
 ---
@@ -510,9 +512,9 @@ tangent/
 │   ├── grad_util.py              # Main autodiff engine (grad/autodiff/vjp/jvp)
 │   ├── reverse_ad.py             # Reverse-mode transformation
 │   ├── forward_ad.py             # Forward-mode transformation
-│   ├── grads.py                  # Core NumPy adjoints (57)
-│   ├── tangents.py               # Core forward-mode tangents (53)
-│   ├── numpy_extended.py         # Extended NumPy adjoints (26)
+│   ├── grads.py                  # Core NumPy adjoints
+│   ├── tangents.py               # Core forward-mode tangents
+│   ├── numpy_extended.py         # Extended NumPy adjoints
 │   ├── jax_extensions.py         # JAX adjoints + tangents
 │   ├── tf_extensions.py          # TensorFlow adjoints + tangents
 │   ├── tf_extended.py            # Extended TensorFlow adjoints
@@ -524,7 +526,7 @@ tangent/
 │   ├── function_cache.py         # Gradient-function caching
 │   ├── optimizations/            # DCE, CSE, strength reduction, algebraic
 │   └── checkpointing_simple.py   # Manual forward-pass checkpointing helpers
-├── tests/                        # 77 test modules (76k+ cases)
+├── tests/                        # 83 test modules (75k+ cases)
 │   ├── test_backend_coverage.py  # Cross-backend op catalog
 │   ├── test_torch.py             # PyTorch tests
 │   ├── test_keras.py             # Keras tests

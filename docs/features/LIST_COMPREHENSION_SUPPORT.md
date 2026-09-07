@@ -12,7 +12,7 @@ Tangent now supports Python list comprehensions syntactically. List comprehensio
 
 ## What Was Implemented
 
-### 1. List Comprehension Desugaring ([listcomp_desugar.py](tangent/listcomp_desugar.py))
+### 1. List Comprehension Desugaring ([listcomp_desugar.py](../../tangent/listcomp_desugar.py))
 New module that transforms list comprehensions into explicit for loops:
 
 **Transformation**:
@@ -35,12 +35,12 @@ for i in range(3):
 - ✅ Nested list comprehensions: `[[x*y for y in range(2)] for x in range(2)]`
 - ✅ Complex expressions in comprehensions
 
-### 2. Integration into Gradient Pipeline ([grad_util.py](tangent/grad_util.py:124))
+### 2. Integration into Gradient Pipeline ([grad_util.py](../../tangent/grad_util.py))
 - Added import for `listcomp_desugar`
 - Applied desugaring before ANF transformation (line 124)
 - Runs after lambda desugaring, before call resolution
 
-### 3. Annotation Handling ([annotate.py](tangent/annotate.py:72-91))
+### 3. Annotation Handling ([annotate.py](../../tangent/annotate.py))
 - Modified `ResolveCalls.visit_Call` to handle unresolvable calls
 - Catches AttributeError for methods on local variables (like `list.append`)
 - Annotates unresolvable calls with `func=None`
@@ -141,16 +141,16 @@ The desugarer properly handles statement expansion:
 
 ## Files Modified
 
-1. **[tangent/listcomp_desugar.py](tangent/listcomp_desugar.py)** (NEW - 275 lines)
+1. **[tangent/listcomp_desugar.py](../../tangent/listcomp_desugar.py)** (NEW - 275 lines)
    - Complete desugaring implementation
    - Handles all list comprehension forms
    - Generates proper AST nodes
 
-2. **[tangent/grad_util.py](tangent/grad_util.py)** (3 lines added)
+2. **[tangent/grad_util.py](../../tangent/grad_util.py)** (3 lines added)
    - Line 69: Import listcomp_desugar
    - Line 124: Apply desugaring transformation
 
-3. **[tangent/annotate.py](tangent/annotate.py)** (5 lines modified)
+3. **[tangent/annotate.py](../../tangent/annotate.py)** (5 lines modified)
    - Lines 72-91: Wrap resolve in try-except
    - Handle unresolvable calls gracefully
 

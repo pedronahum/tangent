@@ -228,7 +228,7 @@ To add more NumPy operations:
 3. Create tests in this examples folder
 4. Verify all existing tests still pass
 
-See `/NUMPY_EXTENSIONS_COMPLETE.md` for detailed implementation guidelines.
+See `tangent/numpy_extended.py` for the implementation and the main README's Backend Support section for current coverage.
 
 ---
 

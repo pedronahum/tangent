@@ -191,7 +191,7 @@ All frameworks produce **mathematically equivalent results**:
 - Concrete thermal mass
 - Hot water circulation
 
-**Results file**: [`benchmarks/benchmark_results.txt`](benchmarks/benchmark_results.txt)
+**Results file**: [`benchmarks/benchmark_results.txt`](../../benchmarks/benchmark_results.txt)
 
 ---
 

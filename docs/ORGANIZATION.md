@@ -1,158 +1,54 @@
-# Documentation Organization - Cleanup Summary
+# Documentation Organization
 
-## What Was Done
+How the documentation tree is laid out, and where a new document belongs.
 
-The repository had **26 markdown files** scattered in the root directory. This made the repository cluttered and hard to navigate.
+## Layout
 
-### Before Cleanup
 ```
 /tangent
-├── README.md
-├── CONTRIBUTING.md
-├── ASSERT_PASS_SUPPORT.md
-├── AUGMENTED_ASSIGNMENT_SUPPORT.md
-├── BOOLEAN_OPERATOR_SUPPORT.md
-├── CHECKPOINTING_TODO.md
-├── CLASS_SUPPORT_COMPLETE.md
-├── CLASS_SUPPORT_PLAN.md
-├── CLOSURE_SUPPORT_COMPLETE.md
-├── CONDITIONAL_EXPRESSION_SUPPORT.md
-├── CONTROL_FLOW_GUIDE.md (deleted)
-├── Checkpointing.md (deleted)
-├── Checkpointing_quickstart.md (deleted)
-├── FOR_LOOP_SUPPORT.md
-├── INHERITANCE_PLAN.md
-├── INHERITANCE_SUPPORT_COMPLETE.md
-├── LAMBDA_SUPPORT_COMPLETE.md
-├── LIST_COMPREHENSION_SUPPORT.md
-├── NUMPY_EXTENSIONS_COMPLETE.md
-├── PYTHON_FEATURE_SUPPORT.md
-├── ROADMAP_TO_GREATNESS.md
-├── TF_EXTENSIONS_COMPLETE.md
-├── TUPLE_LIMITATIONS.md (deleted)
-├── WHILE_LOOP_SUPPORT.md
-├── integration.md (deleted)
-└── python_extensions.md (deleted)
-```
-
-### After Cleanup
-```
-/tangent
-├── README.md                    # Main documentation
+├── README.md                    # Main documentation (features, backends, limitations)
 ├── CONTRIBUTING.md              # Contribution guidelines
 └── docs/
-    ├── README.md                # Documentation index
-    ├── features/                # User-facing feature docs (14 files)
-    │   ├── PYTHON_FEATURE_SUPPORT.md
-    │   ├── LAMBDA_SUPPORT_COMPLETE.md
-    │   ├── CLASS_SUPPORT_COMPLETE.md
-    │   ├── INHERITANCE_SUPPORT_COMPLETE.md
-    │   ├── CONDITIONAL_EXPRESSION_SUPPORT.md
-    │   ├── BOOLEAN_OPERATOR_SUPPORT.md
-    │   ├── AUGMENTED_ASSIGNMENT_SUPPORT.md
-    │   ├── FOR_LOOP_SUPPORT.md
-    │   ├── WHILE_LOOP_SUPPORT.md
-    │   ├── ASSERT_PASS_SUPPORT.md
-    │   ├── LIST_COMPREHENSION_SUPPORT.md
-    │   ├── CLOSURE_SUPPORT_COMPLETE.md
-    │   ├── NUMPY_EXTENSIONS_COMPLETE.md
-    │   └── TF_EXTENSIONS_COMPLETE.md
-    ├── development/             # Developer/planning docs (4 files)
-    │   ├── ROADMAP_TO_GREATNESS.md
-    │   ├── CLASS_SUPPORT_PLAN.md
-    │   ├── INHERITANCE_PLAN.md
-    │   └── CHECKPOINTING_TODO.md
-    └── plans/                   # Pre-existing planning docs
-        └── ... (kept as-is)
+    ├── INDEX.md                 # Full documentation index
+    ├── README.md                # Short docs overview
+    ├── ORGANIZATION.md          # This file
+    ├── checkpointing_user_guide.md
+    ├── features/                # Feature reference docs
+    │   └── PYTHON_FEATURE_SUPPORT.md   # ← canonical feature matrix
+    ├── optimizations/           # Optimization deep dives
+    ├── benchmarks/              # Benchmark documentation and results
+    ├── bugs/                    # Analyses of past bugs
+    ├── development/             # Historical roadmaps and plans
+    └── plans/                   # Historical modernization plans
 ```
 
-## Changes Made
+## Principles
 
-### 1. Created Directory Structure
-```bash
-docs/
-├── features/       # User documentation for each feature
-├── development/    # Planning and development docs
-└── plans/          # Pre-existing planning docs (kept)
-```
+- **The root `README.md` and `docs/features/PYTHON_FEATURE_SUPPORT.md` are the
+  living references.** They describe *current* behavior — what works, what
+  doesn't, and known limitations — and are kept accurate as the code changes.
+  When any other document disagrees with them, they win.
+- **`development/` and `plans/` are historical.** They record intent at the
+  time of writing and are not updated to track the code.
+- **Point-in-time progress reports don't live here.** "Implementation
+  complete" write-ups, test-run snapshots, and launch summaries rot quickly;
+  their durable content belongs in the living references, and the rest lives
+  in git history. (A number of such files were folded into
+  `PYTHON_FEATURE_SUPPORT.md` and deleted — see git history if you need
+  them.)
+- **Benchmarks are dated measurements.** Documents under `benchmarks/` name
+  the environment and date they were measured in.
 
-### 2. Moved Files
+## Where a new doc goes
 
-**To `docs/features/`** (14 files):
-- All feature documentation (LAMBDA, CLASS, INHERITANCE, etc.)
-- Backend extensions (NUMPY, TF)
-- Main feature guide (PYTHON_FEATURE_SUPPORT)
+| Kind of document | Location |
+|---|---|
+| What a language feature does / doesn't support | Fold into `features/PYTHON_FEATURE_SUPPORT.md` (add a focused `features/*.md` only for genuinely deep material) |
+| Backend gradient coverage | Root `README.md` (Backend Support section) |
+| Optimization design and analysis | `optimizations/` |
+| Benchmark methodology and results | `benchmarks/` |
+| Bug post-mortem worth keeping | `bugs/` |
+| Design proposal / roadmap | `development/` or `plans/` |
 
-**To `docs/development/`** (4 files):
-- ROADMAP_TO_GREATNESS.md
-- CLASS_SUPPORT_PLAN.md
-- INHERITANCE_PLAN.md
-- CHECKPOINTING_TODO.md
-
-### 3. Deleted Redundant Files (6 files)
-- `CONTROL_FLOW_GUIDE.md` - Superseded by individual feature docs
-- `Checkpointing.md` - Redundant with checkpointing_user_guide.md
-- `Checkpointing_quickstart.md` - Redundant
-- `TUPLE_LIMITATIONS.md` - Not referenced, development note
-- `integration.md` - Obsolete notes
-- `python_extensions.md` - Obsolete notes
-
-### 4. Updated References
-
-All markdown links in README.md updated:
-```markdown
-# Before
-[See full documentation](LAMBDA_SUPPORT_COMPLETE.md)
-
-# After
-[See full documentation](docs/features/LAMBDA_SUPPORT_COMPLETE.md)
-```
-
-**Total references updated**: 12 links
-
-### 5. Created New Documentation
-- `docs/README.md` - Documentation index and navigation guide
-- `docs/ORGANIZATION.md` - This file
-
-## Benefits
-
-✅ **Cleaner root directory** - Only README.md and CONTRIBUTING.md remain
-✅ **Logical organization** - Features vs development docs separated
-✅ **Better navigation** - docs/README.md provides clear index
-✅ **Easier maintenance** - Clear where new docs should go
-✅ **Professional structure** - Standard open-source layout
-
-## File Count Summary
-
-| Category | Before | After |
-|----------|--------|-------|
-| Root .md files | 26 | 2 |
-| Feature docs | - | 14 |
-| Development docs | - | 4 |
-| Deleted | - | 6 |
-
-## Navigation Guide
-
-### For Users
-1. Start with main [README.md](../README.md)
-2. Browse [features/](features/) for specific feature documentation
-3. Check [docs/README.md](README.md) for full documentation index
-
-### For Contributors
-1. Read [CONTRIBUTING.md](../CONTRIBUTING.md)
-2. Review [development/ROADMAP_TO_GREATNESS.md](development/ROADMAP_TO_GREATNESS.md)
-3. Check [development/](development/) for implementation plans
-
-## Verification
-
-All links verified working:
-- ✅ README.md references point to correct locations
-- ✅ All feature docs accessible
-- ✅ No broken links
-- ✅ Structure follows common open-source conventions
-
----
-
-**Date**: November 3, 2025
-**Status**: ✅ Complete
-**Files Affected**: 26 files moved/deleted, 2 files created, 1 file updated
+After adding or removing a document, update `docs/INDEX.md` (and
+`docs/README.md` if it is user-facing).

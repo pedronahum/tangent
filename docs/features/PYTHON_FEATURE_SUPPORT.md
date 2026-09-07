@@ -24,7 +24,7 @@ This document provides a comprehensive reference of Python language features and
 
 ### Functions
 - **⚠️ Lambda functions** - Supported when assigned to a variable and called (`sq = lambda y: y*y; sq(x)`) — the lambda is inlined. An inline lambda *call* (`(lambda y: y*y)(x)`) is rejected
-- **✅ Closures (external)** - A closure created *outside* the differentiated function (e.g. returned by a factory) is supported; its captured variables are made available to the gradient. See [Closure Support](CLOSURE_SUPPORT_COMPLETE.md)
+- **✅ Closures (external)** - A closure created *outside* the differentiated function (e.g. returned by a factory) is supported; its captured variables are made available to the gradient
 - **❌ Nested function definitions** - A `def` written *inside* the body of the differentiated function is rejected with a clear error (hoist it to module level, or use an assigned lambda)
 - **❌ Recursion** - Rejected with a clear error
 - **✅ Default arguments** - Function parameters with default values
@@ -116,7 +116,9 @@ This document provides a comprehensive reference of Python language features and
 ### Advanced Features
 - **❌ Generators** - Generator functions and expressions not supported
 - **❌ Decorators** - Function decorators not supported (except @tangent.grad)
-- **❌ Classes** - Class definitions not supported
+- **⚠️ Classes** - Module-level classes used inside a differentiated function
+  are supported via method inlining (see [Classes and Inheritance](#classes-and-inheritance)
+  below); a `class` definition *inside* the differentiated function is not
 - **❌ Nested function definitions / recursion** - A `def` inside the differentiated function, and recursion, are rejected with a clear error (external closures are supported; see Functions)
 - **❌ Async/await** - Asynchronous programming not supported
 - **❌ Type hints** - Annotations ignored (don't cause errors)
@@ -286,6 +288,57 @@ assert grad_tuple == grad_sum  # True!
 **See also**:
 - `tests/test_multi_output_grad.py` - Multi-output gradient examples with `output_index` and `output_weights`
 - `tests/test_tuple_return_behavior.py` - Comprehensive tuple return behavior examples
+
+### Classes and Inheritance
+
+**Status**: ✅ Supported for module-level classes, via method inlining
+
+Tangent differentiates functions that instantiate and use user-defined
+classes. It does not add OOP support to the AD core; instead, a desugaring
+pass resolves the class from the function's globals, tracks instance-variable
+assignments, and inlines method bodies at their call sites (substituting
+`self.attr` with the tracked constructor values) before differentiation.
+
+```python
+class Calculator:
+    def __init__(self, scale):
+        self.scale = scale
+
+    def square(self, x):
+        return x * x * self.scale
+
+def f(x):
+    calc = Calculator(2.0)
+    return calc.square(x)
+
+df = tangent.grad(f)
+df(3.0)   # 12.0
+```
+
+**What works:**
+- ✅ Instantiating a module-level class and calling its methods
+- ✅ Constructor arguments and instance attributes (`self.attr` read in methods)
+- ✅ Methods calling other methods of the same instance; chained method calls
+- ✅ Multiple methods, multiple parameters, `wrt=` selection
+- ✅ NumPy operations inside methods
+- ✅ **Inheritance**: inherited methods are resolved through the MRO
+  (including multi-level hierarchies and grandparent methods), method
+  overriding, attribute inheritance through `super().__init__()`, and derived
+  methods calling inherited helpers
+
+**What doesn't work:**
+- ❌ A `class` definition *inside* the differentiated function
+- ❌ `@property`, `@classmethod`, `@staticmethod`
+- ❌ Calling the parent implementation from an overridden method
+  (`super().method(x)` or `Parent.method(self, x)` in a method body;
+  `super().__init__()` in constructors is fine)
+- ❌ Methods that mutate instance state; dynamic attribute access
+  (`getattr(self, name)`)
+- ⚠️ Multiple inheritance (diamond patterns) and abstract base classes are
+  untested
+
+See `tests/test_classes.py` and `tests/test_inheritance.py` for the full set
+of supported patterns.
 
 ### Exception Handling
 
@@ -587,5 +640,5 @@ For maximum compatibility with Tangent:
 - [While Loop Support](WHILE_LOOP_SUPPORT.md)
 - [Augmented Assignment Support](AUGMENTED_ASSIGNMENT_SUPPORT.md)
 - [Assert and Pass Support](ASSERT_PASS_SUPPORT.md)
-- [Lambda Support](LAMBDA_SUPPORT_COMPLETE.md)
-- [Closure Support](CLOSURE_SUPPORT_COMPLETE.md)
+- [Tuple Support](TUPLE_SUPPORT.md)
+- [Error Messages](ERROR_MESSAGES.md)

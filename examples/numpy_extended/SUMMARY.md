@@ -34,7 +34,7 @@ Successfully implemented **27 new NumPy gradient operations** for Tangent, achie
 
 ### Documentation
 - **[README.md](README.md)** - Usage guide and reference
-- **[NUMPY_EXTENSIONS_COMPLETE.md](../../NUMPY_EXTENSIONS_COMPLETE.md)** - Technical deep dive
+- **[tangent/numpy_extended.py](../../tangent/numpy_extended.py)** - Implementation
 
 ---
 
@@ -250,7 +250,7 @@ SUMMARY
    - Usage examples
    - Troubleshooting
 
-2. **[NUMPY_EXTENSIONS_COMPLETE.md](../../NUMPY_EXTENSIONS_COMPLETE.md)** - Technical reference
+2. **[tangent/numpy_extended.py](../../tangent/numpy_extended.py)** - Implementation
    - Implementation details
    - Gradient formulas
    - Challenges and solutions

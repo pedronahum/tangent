@@ -399,5 +399,4 @@ All 10 comprehensive tests pass successfully.
 
 - [Boolean Operator Support](BOOLEAN_OPERATOR_SUPPORT.md)
 - [Conditional Expression Support](CONDITIONAL_EXPRESSION_SUPPORT.md)
-- [Lambda Function Support](LAMBDA_SUPPORT_COMPLETE.md)
-- [Closure Support](CLOSURE_SUPPORT_COMPLETE.md)
+- [Python Feature Support](PYTHON_FEATURE_SUPPORT.md)
