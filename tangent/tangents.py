@@ -275,6 +275,200 @@ def tarray(z, x):
 
 
 #
+# Ufunc spellings of the basic arithmetic operators (mirror the
+# gast.Add/Sub/Div/Pow operator tangents above).
+#
+
+
+@tangent_(numpy.add)
+def tadd_ufunc(z, x, y):
+  d[z] = d[x] + d[y]
+
+
+@tangent_(numpy.subtract)
+def tsubtract(z, x, y):
+  d[z] = d[x] - d[y]
+
+
+# numpy.divide is numpy.true_divide, so this registration covers both
+# spellings.
+@tangent_(numpy.divide)
+def tdivide(z, x, y):
+  d[z] = (d[x] * y - x * d[y]) / (y * y)
+
+
+@tangent_(numpy.negative)
+def tnegative(z, x):
+  d[z] = -d[x]
+
+
+@tangent_(numpy.power)
+def tpower(z, x, y):
+  # The exponent term is guarded so that an inactive exponent (zero seed)
+  # contributes exactly zero even where log(x) is undefined (x <= 0); an
+  # active exponent at x <= 0 has no defined derivative and yields nan.
+  d[z] = (y * x ** (y - 1.0) * d[x] +
+          numpy.where(numpy.equal(d[y], 0.0), 0.0,
+                      numpy.log(x) * x ** y) * d[y])
+
+
+@tangent_(numpy.float_power)
+def tfloat_power(z, x, y):
+  # See the numpy.power tangent for the exponent-term guard.
+  d[z] = (y * x ** (y - 1.0) * d[x] +
+          numpy.where(numpy.equal(d[y], 0.0), 0.0,
+                      numpy.log(x) * x ** y) * d[y])
+
+
+#
+# Additional elementwise math functions
+#
+
+
+@tangent_(numpy.arctan2)
+def tarctan2(z, x, y):
+  d[z] = (d[x] * y - x * d[y]) / (x * x + y * y)
+
+
+@tangent_(numpy.hypot)
+def thypot(z, x, y):
+  d[z] = (x * d[x] + y * d[y]) / z
+
+
+@tangent_(numpy.logaddexp)
+def tlogaddexp(z, x, y):
+  d[z] = d[x] * numpy.exp(x - z) + d[y] * numpy.exp(y - z)
+
+
+@tangent_(numpy.arcsinh)
+def tarcsinh(z, x):
+  d[z] = d[x] / numpy.sqrt(x * x + 1.0)
+
+
+@tangent_(numpy.arccosh)
+def tarccosh(z, x):
+  d[z] = d[x] / numpy.sqrt(x * x - 1.0)
+
+
+@tangent_(numpy.arctanh)
+def tarctanh(z, x):
+  d[z] = d[x] / (1.0 - x * x)
+
+
+@tangent_(numpy.exp2)
+def texp2(z, x):
+  d[z] = d[x] * z * numpy.log(2.0)
+
+
+@tangent_(numpy.cbrt)
+def tcbrt(z, x):
+  d[z] = d[x] / (3.0 * z * z)
+
+
+@tangent_(numpy.square)
+def tsquare(z, x):
+  d[z] = 2.0 * x * d[x]
+
+
+@tangent_(numpy.maximum)
+def tmaximum(z, x, y):
+  d[z] = numpy.where(x == z, d[x], d[y])
+
+
+@tangent_(numpy.minimum)
+def tminimum(z, x, y):
+  d[z] = numpy.where(x == z, d[x], d[y])
+
+
+@tangent_(numpy.fmax)
+def tfmax(z, x, y):
+  d[z] = numpy.where(x == z, d[x], d[y])
+
+
+@tangent_(numpy.fmin)
+def tfmin(z, x, y):
+  d[z] = numpy.where(x == z, d[x], d[y])
+
+
+#
+# Shape and reduction operations (linear ops: the tangent is the same op
+# applied to the input's tangent). The input tangent is broadcast to the
+# input's shape first, because forward-mode seeds arrive as scalars and
+# these operations, unlike elementwise ones, need a full-shape operand.
+#
+
+
+@tangent_(numpy.cumsum)
+def tcumsum(z, x, axis=None):
+  d[z] = numpy.cumsum(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+
+
+@tangent_(numpy.flip)
+def tflip(z, x, axis=None):
+  d[z] = numpy.flip(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+
+
+@tangent_(numpy.ravel)
+def travel(z, x):
+  d[z] = numpy.ravel(numpy.broadcast_to(d[x], numpy.shape(x)))
+
+
+@tangent_(numpy.reshape)
+def treshape(z, x, shape):
+  d[z] = numpy.reshape(numpy.broadcast_to(d[x], numpy.shape(x)), shape)
+
+
+@tangent_(numpy.swapaxes)
+def tswapaxes(z, x, axis1, axis2):
+  d[z] = numpy.swapaxes(
+      numpy.broadcast_to(d[x], numpy.shape(x)), axis1, axis2)
+
+
+@tangent_(numpy.moveaxis)
+def tmoveaxis(z, x, source, destination):
+  d[z] = numpy.moveaxis(
+      numpy.broadcast_to(d[x], numpy.shape(x)), source, destination)
+
+
+@tangent_(numpy.tile)
+def ttile(z, x, reps):
+  d[z] = numpy.tile(numpy.broadcast_to(d[x], numpy.shape(x)), reps)
+
+
+@tangent_(numpy.repeat)
+def trepeat(z, x, repeats, axis=None):
+  d[z] = numpy.repeat(
+      numpy.broadcast_to(d[x], numpy.shape(x)), repeats, axis)
+
+
+@tangent_(numpy.roll)
+def troll(z, x, shift, axis=None):
+  d[z] = numpy.roll(numpy.broadcast_to(d[x], numpy.shape(x)), shift, axis)
+
+
+#
+# Linear algebra
+#
+
+
+@tangent_(numpy.linalg.solve)
+def tsolve(z, a, b):
+  # a @ z = b  =>  da @ z + a @ dz = db  =>  dz = solve(a, db - da @ z).
+  # The tangents are broadcast to the primal shapes because forward-mode
+  # seeds arrive as scalars.
+  d[z] = numpy.linalg.solve(
+      a, numpy.broadcast_to(d[b], numpy.shape(b)) -
+      numpy.matmul(numpy.broadcast_to(d[a], numpy.shape(a)), z))
+
+
+@tangent_(numpy.linalg.norm)
+def tnorm(z, x, axis=None, keepdims=False):
+  # Default (2-norm / Frobenius) case only; `ord` is deliberately
+  # unsupported, matching the adjoint.
+  d[z] = numpy.sum(x * d[x], axis=axis, keepdims=keepdims) / z
+
+
+#
 # Neural Network Activation Functions (Forward Mode)
 #
 

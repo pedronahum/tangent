@@ -265,6 +265,73 @@ def unreduce_array(array, shape, axis, keepdims):
   return numpy.broadcast_to(array, shape)
 
 
+def untile(array, like, reps):
+  """Sum the gradient of `numpy.tile` back onto the original array.
+
+  `numpy.tile(x, reps)` lays out copies of `x` in a block pattern; its
+  adjoint sums the incoming gradient over all copies. Viewing the tiled
+  array with shape `(r_0, s_0, r_1, s_1, ...)` (repetitions interleaved
+  with the original dimensions) turns that sum into a single reduction
+  over the repetition axes.
+
+  Args:
+    array: The gradient with respect to the tiled output.
+    like: The original (untiled) input array.
+    reps: The `reps` argument that was passed to `numpy.tile`.
+
+  Returns:
+    The gradient with respect to the untiled input, with `like`'s shape.
+  """
+  like_shape = numpy.shape(like)
+  try:
+    reps = tuple(reps)
+  except TypeError:  # a scalar reps
+    reps = (reps,)
+  reps = tuple(int(r) for r in reps)
+  ndim = max(len(reps), len(like_shape))
+  # numpy.tile promotes both the input and reps to a common rank by
+  # prepending singleton entries.
+  padded_shape = (1,) * (ndim - len(like_shape)) + tuple(like_shape)
+  padded_reps = (1,) * (ndim - len(reps)) + reps
+  interleaved = []
+  for rep, dim in zip(padded_reps, padded_shape):
+    interleaved.extend((rep, dim))
+  array = numpy.reshape(array, interleaved)
+  array = numpy.sum(array, axis=tuple(range(0, 2 * ndim, 2)))
+  return numpy.reshape(array, like_shape)
+
+
+def unrepeat(array, like, repeats, axis=None):
+  """Sum the gradient of `numpy.repeat` back onto the original array.
+
+  Each element of the input appears `repeats` times in the output, so the
+  adjoint sums the gradient over each element's group of copies. Supports
+  scalar and per-element `repeats`, with or without an `axis`.
+
+  Args:
+    array: The gradient with respect to the repeated output.
+    like: The original (unrepeated) input array.
+    repeats: The `repeats` argument that was passed to `numpy.repeat`.
+    axis: The `axis` argument that was passed to `numpy.repeat`.
+
+  Returns:
+    The gradient with respect to the unrepeated input, with `like`'s shape.
+  """
+  like_shape = numpy.shape(like)
+  if axis is None:
+    n = int(numpy.size(like))
+    index = numpy.repeat(numpy.arange(n), repeats)
+    out = numpy.zeros(n, dtype=numpy.asarray(array).dtype)
+    numpy.add.at(out, index, numpy.ravel(array))
+    return numpy.reshape(out, like_shape)
+  array = numpy.moveaxis(numpy.asarray(array), axis, 0)
+  n = like_shape[axis]
+  index = numpy.repeat(numpy.arange(n), repeats)
+  out = numpy.zeros((n,) + array.shape[1:], dtype=array.dtype)
+  numpy.add.at(out, index, array)
+  return numpy.moveaxis(out, 0, axis)
+
+
 # The values are unary functions.
 shape_functions = {
     numpy.ndarray: numpy.shape,

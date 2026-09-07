@@ -390,8 +390,8 @@ def sqrt(y, x):
 
 @adjoint(numpy.multiply)
 def multiply(z, x, y):
-  d[x] = y * d[z]
-  d[y] = x * d[z]
+  d[x] = tangent.unbroadcast(y * d[z], x)
+  d[y] = tangent.unbroadcast(x * d[z], y)
 
 
 @adjoint(numpy.dot)
@@ -448,8 +448,195 @@ def mean(y, x, axis=None, dtype=None, keepdims=False):
 
 @adjoint(numpy.maximum)
 def maximum(ans, x, y):
-  d[x] = d[ans] * tangent.balanced_eq(x, ans, y)
-  d[y] = d[ans] * tangent.balanced_eq(y, ans, x)
+  d[x] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(x, ans, y), x)
+  d[y] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(y, ans, x), y)
+
+
+#
+# Ufunc spellings of the basic arithmetic operators. These mirror the
+# gast.Add/Sub/Mult/Div/Pow operator adjoints above, including the
+# unbroadcast handling for binary ops.
+#
+
+
+@adjoint(numpy.add)
+def aadd_ufunc(z, x, y):
+  d[x] = tangent.unbroadcast(d[z], x)
+  d[y] = tangent.unbroadcast(d[z], y)
+
+
+@adjoint(numpy.subtract)
+def asubtract(z, x, y):
+  d[x] = tangent.unbroadcast(d[z], x)
+  d[y] = -tangent.unbroadcast(d[z], y)
+
+
+# numpy.divide is numpy.true_divide, so this registration covers both
+# spellings.
+@adjoint(numpy.divide)
+def adivide(z, x, y):
+  d[x] = tangent.unbroadcast(d[z] / y, x)
+  d[y] = tangent.unbroadcast(-d[z] * x / (y * y), y)
+
+
+@adjoint(numpy.negative)
+def anegative(y, x):
+  d[x] = -d[y]
+
+
+@adjoint(numpy.power)
+def apower(z, x, y):
+  d[x] = tangent.unbroadcast(y * x ** (y - 1) * d[z], x)
+  d[y] = tangent.unbroadcast(numpy.log(x) * x ** y * d[z], y)
+
+
+@adjoint(numpy.float_power)
+def afloat_power(z, x, y):
+  d[x] = tangent.unbroadcast(y * x ** (y - 1) * d[z], x)
+  d[y] = tangent.unbroadcast(numpy.log(x) * x ** y * d[z], y)
+
+
+#
+# Additional elementwise math functions
+#
+
+
+@adjoint(numpy.arctan2)
+def aarctan2(z, x, y):
+  d[x] = tangent.unbroadcast(d[z] * y / (x * x + y * y), x)
+  d[y] = tangent.unbroadcast(-d[z] * x / (x * x + y * y), y)
+
+
+@adjoint(numpy.hypot)
+def ahypot(z, x, y):
+  d[x] = tangent.unbroadcast(d[z] * x / z, x)
+  d[y] = tangent.unbroadcast(d[z] * y / z, y)
+
+
+@adjoint(numpy.logaddexp)
+def alogaddexp(z, x, y):
+  d[x] = tangent.unbroadcast(d[z] * numpy.exp(x - z), x)
+  d[y] = tangent.unbroadcast(d[z] * numpy.exp(y - z), y)
+
+
+@adjoint(numpy.arcsinh)
+def aarcsinh(y, x):
+  d[x] = d[y] / numpy.sqrt(x * x + 1.0)
+
+
+@adjoint(numpy.arccosh)
+def aarccosh(y, x):
+  d[x] = d[y] / numpy.sqrt(x * x - 1.0)
+
+
+@adjoint(numpy.arctanh)
+def aarctanh(y, x):
+  d[x] = d[y] / (1.0 - x * x)
+
+
+@adjoint(numpy.exp2)
+def aexp2(y, x):
+  d[x] = d[y] * y * numpy.log(2.0)
+
+
+@adjoint(numpy.cbrt)
+def acbrt(y, x):
+  d[x] = d[y] / (3.0 * y * y)
+
+
+@adjoint(numpy.fmax)
+def afmax(ans, x, y):
+  d[x] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(x, ans, y), x)
+  d[y] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(y, ans, x), y)
+
+
+@adjoint(numpy.fmin)
+def afmin(ans, x, y):
+  d[x] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(x, ans, y), x)
+  d[y] = tangent.unbroadcast(d[ans] * tangent.balanced_eq(y, ans, x), y)
+
+
+#
+# Shape and reduction operations
+#
+
+
+@adjoint(numpy.cumsum)
+def acumsum(y, x, axis=None):
+  # `axis == None` (rather than `is`) because the template substitutes the
+  # call site's literal axis value, and `1 is None` is a SyntaxWarning.
+  if axis == None:  # pylint: disable=singleton-comparison
+    d[x] = numpy.reshape(
+        numpy.flip(numpy.cumsum(numpy.flip(d[y], 0), 0), 0), numpy.shape(x))
+  else:
+    d[x] = numpy.flip(numpy.cumsum(numpy.flip(d[y], axis), axis), axis)
+
+
+@adjoint(numpy.flip)
+def aflip(y, x, axis=None):
+  d[x] = numpy.flip(d[y], axis)
+
+
+@adjoint(numpy.ravel)
+def aravel(y, x):
+  d[x] = numpy.reshape(d[y], numpy.shape(x))
+
+
+@adjoint(numpy.swapaxes)
+def aswapaxes(y, x, axis1, axis2):
+  d[x] = numpy.swapaxes(d[y], axis1, axis2)
+
+
+@adjoint(numpy.moveaxis)
+def amoveaxis(y, x, source, destination):
+  d[x] = numpy.moveaxis(d[y], destination, source)
+
+
+@adjoint(numpy.tile)
+def atile(y, x, reps):
+  d[x] = tangent.untile(d[y], x, reps)
+
+
+@adjoint(numpy.repeat)
+def arepeat(y, x, repeats, axis=None):
+  d[x] = tangent.unrepeat(d[y], x, repeats, axis)
+
+
+@adjoint(numpy.roll)
+def aroll(y, x, shift, axis=None):
+  d[x] = numpy.roll(d[y], numpy.negative(shift), axis)
+
+
+#
+# Linear algebra
+#
+
+
+@adjoint(numpy.linalg.solve)
+def asolve(z, a, b):
+  """Adjoint for z = numpy.linalg.solve(a, b), i.e. a @ z = b.
+
+  d[b] = solve(a^T, d[z]); d[a] = -d[b] (x) z^T (an outer product when b is
+  a vector, a matmul against z^T when b is a matrix).
+  """
+  _dsolve_b = numpy.linalg.solve(numpy.swapaxes(a, -1, -2), d[z])
+  if numpy.ndim(b) == numpy.ndim(a) - 1:
+    d[a] = -numpy.einsum('...i,...j->...ij', _dsolve_b, z)
+  else:
+    d[a] = -numpy.matmul(_dsolve_b, numpy.swapaxes(z, -1, -2))
+  d[b] = _dsolve_b
+
+
+@adjoint(numpy.linalg.norm)
+def anorm(y, x, axis=None, keepdims=False):
+  """Adjoint for the default (2-norm / Frobenius) numpy.linalg.norm.
+
+  The `ord` argument is deliberately unsupported: for any other norm this
+  gradient would be wrong, so calls passing `ord` fail loudly at
+  differentiation time instead.
+  """
+  d[x] = (tangent.unreduce(d[y], numpy.shape(x), axis, keepdims) * x /
+          tangent.unreduce(y, numpy.shape(x), axis, keepdims))
 
 
 #
