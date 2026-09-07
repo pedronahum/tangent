@@ -61,7 +61,7 @@ def test_logistic_regression(motion, optimized):
       wrt=(2, 3),
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dw, db = df(input_, label, w, b)
 
@@ -83,7 +83,7 @@ def test_rnn(motion, optimized):
       wrt=(0, 1),
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dinputs, dw = df(inputs, w)
 
@@ -109,7 +109,7 @@ def test_bilinear(optimized):
       wrt=(0,),
       motion='joint',
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dx = df(x, h, U, w, b)
 
@@ -166,7 +166,7 @@ def test_inlining_contextmanager(motion, optimized, a):
       func,
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dx = df(a)
 
@@ -185,7 +185,7 @@ def test_dict_saxpy(motion, optimized, a, b, c):
       func,
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dx = df(dict(a=a, b=b, c=c))
 
@@ -205,7 +205,7 @@ def test_unpacking_args_saxpy(motion, optimized, a, b, c):
       func,
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dx = df((a, b, c))
 
@@ -221,7 +221,7 @@ def test_nested_dict(motion, optimized):
       func,
       motion=motion,
       optimized=optimized,
-      verbose=True,
+      verbose=utils.TEST_VERBOSE,
       input_derivative=INPUT_DERIVATIVE.DefaultOne)
   dx = df(p)
 

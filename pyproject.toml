@@ -56,7 +56,7 @@ Upstream = "https://github.com/google/tangent"
 # autograd is the reference oracle for the gradient test suite (and a niche
 # runtime interop); it is not required to use tangent itself. pytest-cov powers
 # the line-coverage report (see [tool.coverage] below).
-test = ["pytest>=6.0", "autograd>=1.2", "pytest-cov>=4.0"]
+test = ["pytest>=6.0", "autograd>=1.2", "pytest-cov>=4.0", "hypothesis>=6.0"]
 tf = ["tensorflow>=2.16"]
 jax = ["jax>=0.4.30"]
 torch = ["torch>=2.0"]
@@ -69,6 +69,7 @@ symbolic = ["sympy>=1.12"]
 viz = ["matplotlib>=3.7", "networkx>=3.0"]
 all = [
     "autograd>=1.2",
+    "hypothesis>=6.0",
     "jax>=0.4.30",
     "keras>=3.0",
     "matplotlib>=3.7",
@@ -102,6 +103,26 @@ filterwarnings = [
     # deprecated ast aliases (ast.Num, ast.Str, ...) at import time. This is
     # upstream noise that cannot be fixed from here.
     "ignore:ast\\..* is deprecated:DeprecationWarning",
+    # The gradient harness deliberately evaluates functions and their
+    # derivatives at singular/out-of-domain inputs (sqrt/log/arcsin of
+    # negatives, division by zero); correctness of those cases is asserted
+    # through nan_to_num comparisons, so these NumPy numeric warnings are
+    # expected probing noise, not defects. Scoped by message, not a blanket
+    # RuntimeWarning ignore.
+    "ignore:divide by zero encountered:RuntimeWarning",
+    "ignore:invalid value encountered:RuntimeWarning",
+    "ignore:overflow encountered:RuntimeWarning",
+    # Template substitution can produce `if 0.0 is not None:` in generated
+    # derivative code: semantically fine (a literal is never None), but
+    # CPython flags the literal `is` comparison with a SyntaxWarning when the
+    # generated module is compiled.
+    "ignore:\"is\" with '(int|float)' literal:SyntaxWarning",
+    "ignore:\"is not\" with '(int|float)' literal:SyntaxWarning",
+    # Autograd is the reference oracle; its tracer warns whenever a reference
+    # (second) derivative is identically zero, which the grad-of-grad matrix
+    # hits ~10k times. Scoped to autograd's module so tangent's own warnings
+    # stay visible.
+    "ignore:Output seems independent of input.:UserWarning:autograd",
 ]
 
 # Lint configuration (`ruff check`). Successor to the old flake8 CI step,

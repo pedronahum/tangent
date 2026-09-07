@@ -12,10 +12,19 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Automatically test gradients with multiple inputs, modes and motions."""
+import os
+
 import numpy as np
 
 import functions
 import tfe_utils
+
+# Random test inputs (vectors, matrices, TF tensors) are drawn at collection
+# time. Seed them so every run exercises the same inputs and failures
+# reproduce; export TANGENT_TEST_SEED to fuzz with different draws, e.g.
+#   TANGENT_TEST_SEED=$RANDOM pytest tests/
+TEST_SEED = int(os.environ.get('TANGENT_TEST_SEED', '20260908'))
+np.random.seed(TEST_SEED)
 
 
 # Functions excluded from the parametrized gradient harness. Each entry carries
@@ -26,9 +35,10 @@ import tfe_utils
 blacklisted = [
     # insert_grad_of / context-manager inlining path is not harness-compatible.
     'inlining_contextmanager',
-    # List comprehension over a *dynamic* iterable is lowered to an .append()
-    # loop and crashes naming (AttributeError). Constant-range listcomps are
-    # unrolled and supported (see tests/test_comprehensions.py).
+    # List comprehension over a *dynamic* iterable is rejected up front with a
+    # TangentParseError (pinned in tests/test_comprehensions.py), so it cannot
+    # produce gradients for this harness. Constant-range listcomps are unrolled
+    # and supported (see tests/test_comprehensions.py).
     'listcomp',
     # Returns (r, theta) via np.arctan(b, a); raises TypeError during adjoint
     # naming. Multi-output polar transform not yet supported.

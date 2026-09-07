@@ -48,7 +48,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Dict comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a dict literal)
 - **✅ Set comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a set literal)
 - **❌ Generator expressions** - Not supported
-- **Note**: Set/dict comprehensions with `if` filters are rejected with a clear error; comprehensions with dynamic iterables are not unrolled (list comprehensions fall back to an explicit loop)
+- **Note**: Set/dict comprehensions with `if` filters are rejected with a clear error; comprehensions over dynamic iterables cannot be unrolled and are rejected with a `TangentParseError` (an `.append()`-loop fallback would silently drop gradients)
 
 ### Statements
 - **✅ Assert statements** - Input validation and runtime checks

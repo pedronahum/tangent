@@ -16,9 +16,11 @@ time once the loop variable is substituted:
     [x * i for i in range(4) if i > 1] ->   [x * 2, x * 3]
 
 Set/dict comprehensions do not support filters, and any comprehension that
-cannot be unrolled (dynamic iterable, undecidable filter, etc.) either falls
-through to the language fence and is rejected with a clear error, or is lowered
-to an explicit loop - never silently mis-differentiated on the supported paths.
+cannot be unrolled (dynamic iterable, undecidable filter, etc.) falls through
+to the language fence and is rejected with a clear TangentParseError - never
+silently mis-differentiated. (List comprehensions over dynamic iterables used
+to be lowered to an `.append()` loop, which crashed naming in return position
+and silently produced zero gradients in assignment position.)
 """
 import numpy as np
 import pytest
@@ -158,6 +160,41 @@ class TestUnsupportedComprehensions:
             return y
 
         with pytest.raises(TangentParseError):
+            tangent.grad(f)
+
+    def test_dynamic_iterable_listcomp_assign_rejected(self):
+        """A listcomp over a runtime iterable is rejected, not miscomputed.
+
+        This form was previously lowered to an `.append()` loop whose
+        per-iteration binding is not differentiated, silently returning zero
+        gradients.
+        """
+        def f(x):
+            vals = [v * 3.0 for v in x]
+            return np.sum(vals)
+
+        with pytest.raises(TangentParseError, match='dynamic iterables'):
+            tangent.grad(f)
+
+    def test_dynamic_iterable_listcomp_return_rejected(self):
+        """Same rejection when the comprehension sits in a return expression.
+
+        This form (the `listcomp` corpus entry) previously crashed naming with
+        an opaque AttributeError.
+        """
+        def f(x):
+            return np.sum([v * 3.0 for v in x])
+
+        with pytest.raises(TangentParseError, match='dynamic iterables'):
+            tangent.grad(f)
+
+    def test_dynamic_range_listcomp_rejected(self):
+        """range() over a runtime bound cannot be unrolled either."""
+        def f(x, n=3):
+            vals = [x * i for i in range(n)]
+            return np.sum(vals)
+
+        with pytest.raises(TangentParseError, match='dynamic iterables'):
             tangent.grad(f)
 
 

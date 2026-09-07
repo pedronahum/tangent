@@ -51,7 +51,6 @@ from tangent import enumerate_desugar
 from tangent import fence
 from tangent import ifexp_desugar
 from tangent import lambda_desugar
-from tangent import listcomp_desugar
 from tangent import return_desugar
 from tangent import sentinel_rename
 from tangent import zip_desugar
@@ -123,11 +122,6 @@ def _comprehension_desugar(node, ctx):
   return comprehension_desugar.desugar_comprehensions(node)
 
 
-def _listcomp_desugar(node, ctx):
-  """Lower list comprehensions into explicit loops."""
-  return listcomp_desugar.desugar_listcomps(node)
-
-
 def _dict_method_desugar(node, ctx):
   """Lower dict method calls (e.g. d.get(k, default)) into supported forms."""
   return dict_method_desugar.desugar_dict_methods(node)
@@ -191,7 +185,12 @@ _REGISTRY = [
     Pass('enumerate_desugar', _enumerate_desugar),
     Pass('zip_desugar', _zip_desugar),
     Pass('comprehension_desugar', _comprehension_desugar),
-    Pass('listcomp_desugar', _listcomp_desugar),
+    # Note: there is deliberately no pass lowering the remaining (dynamic-
+    # iterable) list comprehensions to `.append()` loops: the loop body's
+    # per-iteration binding is not differentiated, so that lowering silently
+    # produced zero gradients (or crashed naming when the comprehension sat in
+    # a return expression). Any ListComp the unroller above leaves in place now
+    # falls through to the fence, which rejects it with a clear error.
     Pass('dict_method_desugar', _dict_method_desugar),
     Pass('concat_desugar', _concat_desugar),
     Pass('ifexp_desugar', _ifexp_desugar, modes=frozenset(('forward',))),

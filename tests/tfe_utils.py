@@ -225,7 +225,7 @@ def test_forward_tensor(func, wrt, *args):
   """Test gradients of functions with TFE signatures."""
 
   def tangent_func():
-    df = jvp(func, wrt=wrt, optimized=True, verbose=True)
+    df = jvp(func, wrt=wrt, optimized=True, verbose=utils.TEST_VERBOSE)
     args_ = args + tuple(tf.ones_like(args[i]) for i in wrt)  # seed gradient
     return tensors_to_numpy(df(*args_))
 
@@ -247,8 +247,8 @@ def test_gradgrad_tensor(func, optimized, *args):
   """Test gradients of functions with TFE signatures."""
 
   def tangent_func():
-    df = tangent.autodiff(func, motion='joint', optimized=optimized, verbose=True)
-    ddf = tangent.autodiff(df, motion='joint', optimized=optimized, verbose=True)
+    df = tangent.autodiff(func, motion='joint', optimized=optimized, verbose=utils.TEST_VERBOSE)
+    ddf = tangent.autodiff(df, motion='joint', optimized=optimized, verbose=utils.TEST_VERBOSE)
     dxx = ddf(*args)
     return tuple(t.numpy() for t in dxx)
 
@@ -284,7 +284,7 @@ def test_rev_tensor(func, motion, optimized, preserve_result, wrt, *args):
         optimized=optimized,
         preserve_result=preserve_result,
         wrt=wrt,
-        verbose=True)
+        verbose=utils.TEST_VERBOSE)
     if motion == 'joint':
       # TODO: This won't work if func has default args unspecified.
       dx = df(*args + (init_grad,))

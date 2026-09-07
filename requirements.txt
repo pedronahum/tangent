@@ -11,3 +11,6 @@ numpy
 # is not required to use tangent itself (see the [test] extra).
 autograd>=1.2
 pytest>=6.0
+# Test-suite only: drives the property-based gradient tests
+# (tests/test_property_based.py) against the finite-difference oracle.
+hypothesis>=6.0

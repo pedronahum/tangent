@@ -54,6 +54,22 @@ Workaround:
 Note: If you need set operations for control flow, consider restructuring your code.
 ''',
 
+    'List comprehensions over dynamic iterables': '''List comprehensions are
+only supported over a compile-time-constant iterable (a constant `range(...)`
+or a list/tuple literal), where they are unrolled into a list literal.
+A comprehension over a runtime value cannot be unrolled, and lowering it to an
+`.append()` loop would silently drop gradients.
+
+Workarounds:
+  ❌ ys = [v * 3 for v in xs]          # xs is a runtime value
+  ✅ ys = xs * 3                        # use vectorized NumPy operations
+  ✅ total = 0.0                        # or accumulate in an explicit loop
+     for v in xs:
+         total = total + v * 3
+
+📖 See: docs/features/PYTHON_FEATURE_SUPPORT.md#comprehensions
+''',
+
     'Set Comprehensions': '''Set comprehensions are not supported.
 
 Workaround:

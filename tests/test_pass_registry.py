@@ -29,8 +29,10 @@ EXPECTED_REVERSE = [
     'chained_assign_desugar',
     'enumerate_desugar',
     'zip_desugar',
+    # Dynamic-iterable list comprehensions are no longer lowered to .append()
+    # loops (that lowering silently dropped gradients); constant ones are
+    # unrolled by comprehension_desugar and the rest are rejected by the fence.
     'comprehension_desugar',
-    'listcomp_desugar',
     'dict_method_desugar',
     'concat_desugar',
     'resolve_calls',
@@ -42,7 +44,7 @@ EXPECTED_REVERSE = [
 # Forward mode additionally lowers ternaries, after all other desugarings
 # and before call resolution.
 EXPECTED_FORWARD = (
-    EXPECTED_REVERSE[:11] + ['ifexp_desugar'] + EXPECTED_REVERSE[11:])
+    EXPECTED_REVERSE[:10] + ['ifexp_desugar'] + EXPECTED_REVERSE[10:])
 
 
 def test_reverse_pass_order():

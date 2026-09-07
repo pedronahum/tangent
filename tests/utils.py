@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Common testing utilities."""
+import os
 from copy import deepcopy
 
 from autograd import grad as ag_grad
@@ -24,6 +25,12 @@ import tangent
 # Autograd's NumPy implementation may be missing the definition for _NoValue.
 if not hasattr(ag_np, '_NoValue'):
   ag_np._NoValue = np._NoValue  # pylint: disable=protected-access
+
+# Passing verbose=True to tangent.autodiff prints the generated derivative
+# source on every compile-cache miss. Across ~76k parameterized tests that
+# buries real failures in megabytes of output, so it is off by default; set
+# TANGENT_TEST_VERBOSE=1 to turn it back on when debugging a transform.
+TEST_VERBOSE = bool(int(os.environ.get('TANGENT_TEST_VERBOSE', '0') or '0'))
 
 
 def assert_forward_not_implemented(func, wrt):
@@ -119,7 +126,7 @@ def test_reverse_array(func, motion, optimized, preserve_result, *args):
         motion=motion,
         optimized=optimized,
         preserve_result=preserve_result,
-        verbose=1)
+        verbose=TEST_VERBOSE)
     if motion == 'joint':
       return df(*deepcopy(args) + (init_grad,))
     return df(*deepcopy(args), init_grad=init_grad)
@@ -157,7 +164,7 @@ def test_forward_array(func, wrt, preserve_result, *args):
         preserve_result=preserve_result,
         wrt=wrt,
         optimized=True,
-        verbose=1)
+        verbose=TEST_VERBOSE)
     args_ = args + (1.0,)  # seed gradient
     return df(*deepcopy(args_))
 
