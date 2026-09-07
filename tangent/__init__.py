@@ -91,75 +91,125 @@ from tangent.errors import *
 from tangent.function_cache import (clear_cache, get_cache_stats,
                                      reset_cache_stats, set_cache_size,
                                      get_cache_size)
+
+# Optional backend extensions. A missing optional dependency is a normal,
+# silent condition (logged at DEBUG level on the 'tangent' logger); a backend
+# that is installed but fails to load is broken and warrants a real warning.
+import importlib.util as _importlib_util
+import logging as _logging
+import warnings as _warnings
+
+_logger = _logging.getLogger('tangent')
+
+# Maps backend name -> 'available', 'not installed', or 'broken: <error>'.
+_backend_status = {'numpy': 'available'}
+
+
+def backend_status():
+  """Return the load status of Tangent's optional backend extensions.
+
+  Returns:
+    A dict mapping backend names (e.g. 'jax', 'torch') to one of
+    'available', 'not installed', or 'broken: <error message>'.
+
+  Missing optional backends are logged at DEBUG level at import time; to see
+  those messages, enable debug logging before importing tangent:
+
+      logging.getLogger('tangent').setLevel(logging.DEBUG)
+  """
+  return dict(_backend_status)
+
+
+def _optional_backend_failed(backend, error, requires, install_hint):
+  """Record and report a failed optional-extension import.
+
+  Silently logs at DEBUG level when the underlying dependency is simply not
+  installed; emits a real warning when the dependency is present but the
+  extension failed to load (broken/incompatible installation).
+  """
+  missing = []
+  for dep in requires:
+    try:
+      if _importlib_util.find_spec(dep) is None:
+        missing.append(dep)
+    except (ImportError, ValueError):
+      missing.append(dep)
+  if missing:
+    _backend_status[backend] = 'not installed'
+    _logger.debug(
+        '%s extensions not loaded (%s not installed). '
+        'Install with: pip install %s', backend, ', '.join(missing),
+        install_hint)
+  else:
+    _backend_status[backend] = f'broken: {error}'
+    _warnings.warn(
+        f'{backend} is installed but its Tangent extensions failed to load: '
+        f'{error}. Core autodiff functionality still works.')
+
+
 try:
   from tangent.tf_extensions import *
+  _backend_status['tensorflow'] = 'available'
 except (ImportError, AttributeError) as e:
-  # TensorFlow extensions are optional and may not work with TensorFlow 2.x
-  # Tangent was designed for TensorFlow 1.x
-  import warnings
-  warnings.warn(f"TensorFlow extensions not available: {e}. Core autodiff functionality still works.")
-  pass
+  _optional_backend_failed('tensorflow', e, ['tensorflow'], 'tensorflow')
 
 # JAX extensions (optional)
 try:
   from tangent.jax_extensions import *
+  _backend_status['jax'] = 'available'
 except (ImportError, AttributeError) as e:
-  # JAX is optional
-  import warnings
-  warnings.warn(f"JAX extensions not available: {e}. Install JAX with: pip install jax jaxlib")
-  pass
+  _optional_backend_failed('jax', e, ['jax'], 'jax jaxlib')
 
 # PyTorch extensions (optional)
 try:
   from tangent.torch_extensions import *
+  _backend_status['torch'] = 'available'
 except (ImportError, AttributeError) as e:
-  # PyTorch is optional
-  import warnings
-  warnings.warn(f"PyTorch extensions not available: {e}. Install PyTorch with: pip install torch")
-  pass
+  _optional_backend_failed('torch', e, ['torch'], 'torch')
 
 # Keras extensions (optional; work with any Keras 3 backend)
 try:
   from tangent.keras_extensions import *
+  _backend_status['keras'] = 'available'
 except (ImportError, AttributeError) as e:
-  # Keras is optional
-  import warnings
-  warnings.warn(f"Keras extensions not available: {e}. Install Keras with: pip install keras")
-  pass
+  _optional_backend_failed('keras', e, ['keras'], 'keras')
 
 # tinygrad extensions (optional; tinygrad's method-based tensor API)
 try:
   from tangent.tinygrad_extensions import *
+  _backend_status['tinygrad'] = 'available'
 except (ImportError, AttributeError) as e:
-  # tinygrad is optional
-  import warnings
-  warnings.warn(f"tinygrad extensions not available: {e}. Install with: pip install tinygrad")
-  pass
+  _optional_backend_failed('tinygrad', e, ['tinygrad'], 'tinygrad')
 
-# Extended NumPy gradients
+# Extended NumPy gradients (only requires numpy, so a failure here is a bug)
 try:
   from tangent import numpy_extended
 except (ImportError, AttributeError) as e:
-  import warnings
-  warnings.warn(f"Extended NumPy gradients not available: {e}")
-  pass
+  _warnings.warn(f'Extended NumPy gradients not available: {e}')
 
 # Extended TensorFlow gradients
 try:
   from tangent import tf_extended
 except (ImportError, AttributeError) as e:
-  import warnings
-  warnings.warn(f"Extended TensorFlow gradients not available: {e}")
-  pass
+  if _backend_status.get('tensorflow') == 'available':
+    _warnings.warn(f'Extended TensorFlow gradients not available: {e}')
+  else:
+    _logger.debug('Extended TensorFlow gradients not loaded: %s', e)
 
-# Visualization tools (optional)
+# Visualization tools (optional; require matplotlib and networkx)
 try:
+  from tangent import visualization as _visualization
   from tangent.visualization import visualize, compare_gradients, show_gradient_code
-except ImportError as e:
-  # Visualization requires matplotlib and networkx
-  import warnings
-  warnings.warn(f"Visualization tools not available: {e}. Install with: pip install matplotlib networkx")
-  pass
+  if (_visualization.MATPLOTLIB_AVAILABLE and
+      _visualization.NETWORKX_AVAILABLE):
+    _backend_status['visualization'] = 'available'
+  else:
+    _backend_status['visualization'] = 'not installed'
+    _logger.debug('Visualization tools not fully available. '
+                  'Install with: pip install matplotlib networkx')
+except (ImportError, AttributeError) as e:
+  _optional_backend_failed('visualization', e, ['matplotlib', 'networkx'],
+                           'matplotlib networkx')
 
 
 class RemoveWith(gast.NodeTransformer):

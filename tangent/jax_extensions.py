@@ -34,14 +34,13 @@ Example:
 """
 from __future__ import absolute_import
 
-import warnings
 from numbers import Number
 
 try:
     import jax
     import jax.numpy as jnp
-except ImportError as e:
-    warnings.warn(f"JAX not available: {e}. Install with: pip install jax jaxlib")
+except ImportError:
+    # Optional dependency; tangent/__init__.py reports the failure.
     raise
 
 import numpy as np
@@ -1101,5 +1100,7 @@ def tangent_jax_gelu(y, x, approximate=True):
     d[y] = jvp_result
 
 
-print(f"✓ JAX extensions loaded successfully (JAX {jax.__version__})")
-print(f"✓ Registered {len([f for f in dir() if f.startswith('adjoint_')])} gradient definitions")
+import logging as _logging
+_logging.getLogger('tangent').debug(
+    'JAX extensions loaded successfully (JAX %s, %d gradient definitions)',
+    jax.__version__, len([f for f in dir() if f.startswith('adjoint_')]))

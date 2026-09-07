@@ -36,13 +36,12 @@ Example:
 """
 from __future__ import absolute_import
 
-import warnings
 
 try:
     import keras
     import keras.ops as kops
-except ImportError as e:
-    warnings.warn(f"Keras not available: {e}. Install with: pip install keras")
+except ImportError:
+    # Optional dependency; tangent/__init__.py reports the failure.
     raise
 
 import numpy as np
@@ -537,5 +536,7 @@ def tangent_sigmoid(y, x):
     d[y] = d[x] * y * (1.0 - y)
 
 
-print(f"✓ Keras extensions loaded successfully (keras {keras.__version__}, "
-      f"backend: {keras.backend.backend()})")
+import logging as _logging
+_logging.getLogger('tangent').debug(
+    'Keras extensions loaded successfully (keras %s, backend: %s)',
+    keras.__version__, keras.backend.backend())

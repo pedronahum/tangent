@@ -29,13 +29,12 @@ Example:
 """
 from __future__ import absolute_import
 
-import warnings
 from numbers import Number
 
 try:
     import torch
-except ImportError as e:
-    warnings.warn(f"PyTorch not available: {e}. Install with: pip install torch")
+except ImportError:
+    # Optional dependency; tangent/__init__.py reports the failure.
     raise
 
 import numpy as np
@@ -781,4 +780,6 @@ def tangent_sigmoid(y, x):
     d[y] = d[x] * y * (1.0 - y)
 
 
-print(f"✓ PyTorch extensions loaded successfully (torch {torch.__version__})")
+import logging as _logging
+_logging.getLogger('tangent').debug(
+    'PyTorch extensions loaded successfully (torch %s)', torch.__version__)

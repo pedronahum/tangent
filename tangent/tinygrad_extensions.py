@@ -41,12 +41,11 @@ Example:
 """
 from __future__ import absolute_import
 
-import warnings
 
 try:
     from tinygrad import Tensor
-except ImportError as e:
-    warnings.warn(f"tinygrad not available: {e}. Install with: pip install tinygrad")
+except ImportError:
+    # Optional dependency; tangent/__init__.py reports the failure.
     raise
 
 import gast
@@ -1095,4 +1094,5 @@ def tangent_transpose(y, x, dim0=1, dim1=0):
     d[y] = d[x].transpose(dim0, dim1)
 
 
-print("✓ tinygrad extensions loaded successfully")
+import logging as _logging
+_logging.getLogger('tangent').debug('tinygrad extensions loaded successfully')

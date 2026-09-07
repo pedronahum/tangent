@@ -14,7 +14,6 @@ The additions focus on:
 """
 from __future__ import absolute_import
 
-import warnings
 
 try:
     import tensorflow as tf
@@ -23,8 +22,8 @@ try:
     # Side-effect import: registers the base TF adjoints/tangents that this
     # module extends.
     from tangent import tf_extensions  # noqa: F401
-except ImportError as e:
-    warnings.warn(f"TensorFlow extensions not available: {e}")
+except ImportError:
+    # Optional dependency; tangent/__init__.py reports the failure.
     raise
 
 # ============================================================================
@@ -375,5 +374,7 @@ try:
 except (ImportError, AttributeError):
     pass  # UNIMPLEMENTED_ADJOINTS doesn't exist or isn't relevant for TF
 
-print("✓ Extended TensorFlow gradients loaded successfully")
-print(f"✓ Registered {len(_our_functions)} new gradient definitions")
+import logging as _logging
+_logging.getLogger('tangent').debug(
+    'Extended TensorFlow gradients loaded successfully (%d new gradient '
+    'definitions)', len(_our_functions))

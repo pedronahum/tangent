@@ -16,7 +16,6 @@ from __future__ import absolute_import
 
 # TensorFlow extensions are optional and may not work with TensorFlow 2.x
 # This file was written for TensorFlow 1.x and uses deprecated APIs
-import warnings
 
 try:
     from numbers import Number
@@ -32,8 +31,8 @@ try:
     from tangent.utils import register_all_shape_checker
     from tangent.utils import register_init_grad
     from tangent.utils import register_shape_function
-except ImportError as e:
-    warnings.warn(f"Could not import tangent utilities for TensorFlow extensions: {e}")
+except ImportError:
+    # tangent/__init__.py reports the failure.
     raise
 from tangent.utils import register_unbroadcast
 from tangent.utils import register_unreduce
@@ -57,8 +56,10 @@ try:
         TensorType = tf.Tensor
     VariableType = resource_variable_ops.ResourceVariable
 except (ImportError, AttributeError) as e:
-    # Fallback for TF 2.x
-    warnings.warn(f"Using fallback tensor types for TF 2.x: {e}")
+    # Fallback for TF 2.x; a working compatibility path, so no warning.
+    import logging
+    logging.getLogger('tangent').debug(
+        'Using fallback tensor types for TF 2.x: %s', e)
     TensorType = tf.Tensor
     try:
         VariableType = tf.Variable

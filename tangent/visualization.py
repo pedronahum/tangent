@@ -9,9 +9,11 @@ This module provides tools to visualize:
 
 import gast
 import inspect
+import logging
 import textwrap
 from typing import Callable, Optional, Tuple, Union
-import warnings
+
+_logger = logging.getLogger('tangent')
 
 # Optional dependencies for visualization
 try:
@@ -21,14 +23,14 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    warnings.warn("matplotlib not available. Install with: pip install matplotlib")
+    _logger.debug('matplotlib not available. Install with: pip install matplotlib')
 
 try:
     import networkx as nx
     NETWORKX_AVAILABLE = True
 except ImportError:
     NETWORKX_AVAILABLE = False
-    warnings.warn("networkx not available. Install with: pip install networkx")
+    _logger.debug('networkx not available. Install with: pip install networkx')
 
 
 

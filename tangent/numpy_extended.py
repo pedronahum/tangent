@@ -333,5 +333,7 @@ _our_functions = [
 for func in _our_functions:
     _grads_module.UNIMPLEMENTED_ADJOINTS.discard(func)
 
-print("✓ Extended NumPy gradients loaded successfully")
-print(f"✓ Registered {len(_our_functions)} new gradient definitions")
+import logging as _logging
+_logging.getLogger('tangent').debug(
+    'Extended NumPy gradients loaded successfully (%d new gradient '
+    'definitions)', len(_our_functions))
