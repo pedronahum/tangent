@@ -387,9 +387,8 @@ machinery (see below) and the optimized path can return incorrect values.
 
 Functions that call Tangent's internal tape API directly — `tangent.push`,
 `tangent.pop`, `tangent.push_stack`, `tangent.pop_stack`, `tangent.Stack` —
-differentiate correctly at first order, and their second derivatives are
-correct in **unoptimized** mode. With `optimized=True` the optimization
-passes eliminate tape push/pop pairs and corrupt the second derivative:
+differentiate correctly at first and second order, in both optimized and
+unoptimized modes:
 
 ```python
 def uses_tape(a):
@@ -399,28 +398,33 @@ def uses_tape(a):
     b = tangent.pop(_stack, 'id')
     return b            # b == a**2; d²/da² should be 2
 
-tangent.grad(tangent.grad(uses_tape), optimized=False)(3.0)  # 2.0 (correct)
-tangent.grad(tangent.grad(uses_tape), optimized=True)(3.0)   # wrong
+tangent.grad(tangent.grad(uses_tape), optimized=False)(3.0)  # 2.0
+tangent.grad(tangent.grad(uses_tape), optimized=True)(3.0)   # 2.0
 ```
 
-These primitives are bookkeeping that ordinary code never calls — Tangent
-inserts them into generated gradient code itself, and that generated code
-differentiates correctly at second order with `optimized=True` (that is how
-second derivatives of ordinary functions work). The limitation only affects
-hand-written use of the tape API inside a function you intend to
-differentiate twice with optimizations enabled. **Workaround:** pass
-`optimized=False` to the outer `grad`, or express the computation with
-ordinary Python/NumPy operations and let Tangent manage the tape.
+This used to be wrong with `optimized=True` (a documented limitation), and
+the mechanism is worth recording because it constrains the optimizer. Tape
+pushes and pops are paired by an `op_id` argument, unique per generated pair.
+Differentiating gradient code **again** duplicates op ids: the new primal
+re-executes an old push and pop, and the new adjoint mirrors them (the
+adjoint of a push is a pop and vice versa), so one op id then names several
+distinct runtime pairs. Dead-code elimination used to look pairings up in
+annotations that kept only the *last-seen* push/pop per op id, so it removed
+a dead pop together with the **wrong** push — the tape stayed balanced in
+count but crossed in dataflow, and a second-order gradient accumulator read a
+primal value (or a pop hit a mismatched op id).
 
-**Root cause (for the curious):** the corruption is *not* caused by optimizing
-the first derivative — that is safe. It appears only when the **second**
-derivative is itself optimized. The standard `optimize()` passes (constant
-folding, dead-code elimination and assignment propagation) remove or reorder
-the `push`/`pop`/`push_stack`/`pop_stack` operations that the second-order
-tape relies on, so a second-order gradient accumulator ends up reading a
-primal value (or a `pop` hits a mismatched op id). A future fix needs to make
-those passes treat tape operations as barriers when optimizing higher-order
-derivatives.
+The fix (`tangent.optimization._tape_pairings`) makes dead-code elimination
+tape-aware: it pairs pushes with the pops that consume them (unique op ids
+pair directly; duplicated op ids within one function pair like parentheses in
+program order; anything ambiguous becomes a barrier that is never removed)
+and only ever removes a push and pop **together**. Balanced removal keeps the
+stack consistent, so genuinely dead tape traffic — including the loop-counter
+and condition pushes of control-flow gradients — is still eliminated, while
+tape entries that a higher-order derivative needs survive. The same analysis
+lets checkpointed loops (`tangent.grad(f, checkpoint=True)`) run with
+optimizations enabled: the checkpoint bookkeeping either survives as a pair
+or is removed as a pair, instead of leaving pops without pushes.
 
 ## Best Practices
 

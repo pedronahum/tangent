@@ -20,6 +20,7 @@ from tangent import annotate
 from tangent import annotations as anno
 from tangent import cfg
 from tangent import transformers
+from tangent import utils
 
 
 def fixed_point(f):
@@ -228,6 +229,172 @@ def optimize_with_symbolic(node, requested_grads=None, enable_cse=True,
   return node
 
 
+# Names of the tape primitives. A `push`-kind call records a value on the
+# tape; a `pop`-kind call consumes it. `push_stack`/`pop_stack` do the same
+# for sub-stacks (function calls); their pairing rules are identical.
+_TAPE_PUSH_NAMES = frozenset(('push', 'push_stack'))
+_TAPE_POP_NAMES = frozenset(('pop', 'pop_stack'))
+
+
+def _tape_call_kind(call):
+  """Classify a Call node as a tape operation.
+
+  Recognizes both the textual form Tangent generates (``tangent.push(...)``
+  etc.) and calls whose resolved `func` annotation is one of the tape
+  primitives (the same information `annotate.find_stacks` uses).
+
+  Args:
+    call: A `gast.Call` node.
+
+  Returns:
+    'push', 'pop', or None if the call is not a tape operation.
+  """
+  name = None
+  func = call.func
+  if (isinstance(func, gast.Attribute) and
+      isinstance(func.value, gast.Name) and func.value.id == 'tangent'):
+    name = func.attr
+  fn_handle = anno.getanno(call, 'func', False)
+  if fn_handle:
+    for candidate in ('push', 'pop', 'push_stack', 'pop_stack'):
+      if fn_handle is getattr(utils, candidate):
+        name = candidate
+  if name in _TAPE_PUSH_NAMES:
+    return 'push'
+  if name in _TAPE_POP_NAMES:
+    return 'pop'
+  return None
+
+
+def _tape_op_id(call):
+  """Return the string op id of a tape call, or None if it is not static."""
+  if not call.args:
+    return None
+  op_id_node = call.args[-1]
+  # gast.Constant replaced gast.Str; keep the `.s` fallback for old gast.
+  if isinstance(op_id_node, gast.Constant):
+    value = op_id_node.value
+  else:
+    value = getattr(op_id_node, 's', None)
+  return value if isinstance(value, str) else None
+
+
+class _TapeOpCollector(gast.NodeVisitor):
+  """Collect tape operations as (kind, op_id, statement, function) in
+  program order. Program order of the statement list is execution order for
+  the straight-line joint-motion code the pairing below relies on."""
+
+  def __init__(self):
+    self.ops = []
+    self._stmts = []
+    self._func = None
+    self._func_counter = 0
+
+  def visit(self, node):
+    is_function = isinstance(node, gast.FunctionDef)
+    is_stmt = isinstance(node, gast.stmt)
+    if is_function:
+      self._func_counter += 1
+      enclosing_func = self._func
+      self._func = self._func_counter
+    if is_stmt:
+      self._stmts.append(node)
+    if isinstance(node, gast.Call):
+      kind = _tape_call_kind(node)
+      if kind:
+        stmt = self._stmts[-1] if self._stmts else None
+        self.ops.append((kind, _tape_op_id(node), stmt, self._func))
+    self.generic_visit(node)
+    if is_stmt:
+      self._stmts.pop()
+    if is_function:
+      self._func = enclosing_func
+
+
+def _tape_pairings(node):
+  """Pair tape pushes with the pops that consume them.
+
+  Pushes and pops are paired by their `op_id` argument. In first-order
+  generated code every op id is unique, so an id appearing once as a push and
+  once as a pop identifies a pair unambiguously. Differentiating gradient
+  code AGAIN (higher-order derivatives) duplicates op ids: the primal of the
+  new gradient re-executes the old push and pop, and the adjoint mirrors them
+  (the adjoint of a push is a pop and vice versa), so one op id then names
+  several distinct runtime pairs. `annotate.find_stacks` keeps only the
+  last-seen push/pop per op id, so relying on its annotations makes dead code
+  elimination remove a pop together with the WRONG push, crossing the tape's
+  dataflow and corrupting second derivatives.
+
+  Pairing rules, per op id:
+    - exactly one push and one pop anywhere in the AST: pair them (ordinary
+      first-order code, including split motion, where the push lives in the
+      primal function and the pop in the adjoint function);
+    - several pushes/pops, all inside one function: pair them like
+      parentheses in program order (LIFO). This matches runtime order for
+      joint-motion higher-order code, where the primal section pushes and
+      pops an id before the adjoint section does so again;
+    - anything else (dynamic op ids, unmatched pops, duplicated ids across
+      functions): the operations become barriers that must not be removed,
+      because balanced removal cannot be established.
+
+  Args:
+    node: The AST to analyze.
+
+  Returns:
+    A tuple `(pop_to_push, barriers)` where `pop_to_push` maps a pop
+    statement to the push statement whose value it consumes, and `barriers`
+    is a set of tape statements that must not be removed.
+  """
+  collector = _TapeOpCollector()
+  collector.visit(node)
+  pop_to_push = {}
+  barriers = set()
+  by_id = defaultdict(list)
+  for kind, op_id, stmt, func in collector.ops:
+    if stmt is None:
+      continue
+    if op_id is None:
+      barriers.add(stmt)
+      continue
+    by_id[op_id].append((kind, stmt, func))
+  for op_id, entries in by_id.items():
+    stmts = [entry[1] for entry in entries]
+    if len(set(stmts)) != len(stmts):
+      # One statement holds several tape calls for this op id; don't touch.
+      barriers.update(stmts)
+      continue
+    pushes = [entry for entry in entries if entry[0] == 'push']
+    pops = [entry for entry in entries if entry[0] == 'pop']
+    if len(pushes) == 1 and len(pops) == 1:
+      pop_to_push[pops[0][1]] = pushes[0][1]
+      continue
+    if len(set(entry[2] for entry in entries)) != 1:
+      # Duplicated op ids spanning several functions: program order across
+      # function boundaries need not match execution order, so no confident
+      # pairing exists.
+      barriers.update(stmts)
+      continue
+    # LIFO (balanced-parentheses) pairing in program order.
+    unmatched_pushes = []
+    local_pairs = {}
+    consistent = True
+    for kind, stmt, _ in entries:
+      if kind == 'push':
+        unmatched_pushes.append(stmt)
+      elif unmatched_pushes:
+        local_pairs[stmt] = unmatched_pushes.pop()
+      else:
+        consistent = False
+        break
+    if consistent:
+      pop_to_push.update(local_pairs)
+      # Trailing pushes without a visible pop stay put.
+      barriers.update(unmatched_pushes)
+    else:
+      barriers.update(stmts)
+  return pop_to_push, barriers
+
+
 @fixed_point
 def dead_code_elimination(node):
   """Perform a simple form of dead code elimination on a Python AST.
@@ -236,10 +403,12 @@ def dead_code_elimination(node):
   definitions. It then looks for the definition of variables that are not used
   elsewhere and removes those definitions.
 
-  This function takes into consideration push and pop statements; if a pop
-  statement is removed, it will also try to remove the accompanying push
-  statement. Note that this *requires dead code elimination to be performed on
-  the primal and adjoint simultaneously*.
+  This function takes into consideration push and pop statements: tape state
+  stays consistent only under BALANCED removal, so a pop statement is removed
+  together with the push statement it consumes (established by
+  `_tape_pairings`), and a tape operation whose counterpart cannot be
+  established is never removed. Note that this *requires dead code
+  elimination to be performed on the primal and adjoint simultaneously*.
 
   Args:
     node: The AST to optimize.
@@ -257,14 +426,36 @@ def dead_code_elimination(node):
           if isinstance(stmt, gast.stmt):
             statements_in_handlers.add(stmt)
 
+  # Pair tape pushes with the pops that consume them. Only balanced pairs may
+  # be removed; `tape_barriers` holds tape operations with no established
+  # counterpart, which must stay.
+  pop_to_push, tape_barriers = _tape_pairings(node)
+  tape_stmts = (set(pop_to_push) | set(pop_to_push.values()) | tape_barriers)
+
   to_remove = set(def_[1] for def_ in annotate.unused(node)
                   if not isinstance(def_[1], (gast.arguments, gast.For))
                   and def_[1] not in statements_in_handlers
+                  and def_[1] not in tape_barriers
                   and not anno.getanno(def_[1], 'tangent_keep', False))
   for n in list(to_remove):
-    for succ in gast.walk(n):
-      if anno.getanno(succ, 'push', False):
-        to_remove.add(anno.getanno(succ, 'push'))
+    if n in pop_to_push:
+      push = pop_to_push[n]
+      if (push in statements_in_handlers or
+          anno.getanno(push, 'tangent_keep', False)):
+        # The push must stay, so its pop must stay too: removing only one
+        # half of a pair would unbalance the tape.
+        to_remove.discard(n)
+      else:
+        to_remove.add(push)
+    elif n not in tape_stmts:
+      # Fallback for tape calls the structural analysis did not recognize:
+      # chase the pairing annotations left by `annotate.find_stacks`. (For
+      # recognized tape statements those annotations may be stale - op ids
+      # duplicated by higher-order differentiation make find_stacks keep only
+      # the last-seen counterpart - so they are only trusted here.)
+      for succ in gast.walk(n):
+        if anno.getanno(succ, 'push', False):
+          to_remove.add(anno.getanno(succ, 'push'))
   # Never remove statements marked keep-alive (e.g. varargs pack/unpack),
   # even if they were pulled in via a push annotation.
   to_remove = set(n for n in to_remove

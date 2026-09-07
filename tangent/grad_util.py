@@ -676,14 +676,10 @@ def _grad_uncached(func,
   if checkpoint is True:
     checkpoint_config.setdefault('enabled', True)
 
-  # Phase 3++: Disable optimization when checkpointing to preserve checkpoint dict
-  # The optimizer's dead code elimination removes checkpoint dict push statements
-  # while keeping pop statements, causing stack mismatches.
-  # TODO: Future enhancement - add persistent metadata to avoid disabling all optimizations
-  if checkpoint or checkpoint_config.get('enabled', False):
-    if optimized and verbose >= 1:
-      print("[Checkpointing] Disabling optimization to preserve checkpoint data structures")
-    optimized = False
+  # Checkpointing and optimization now coexist: dead code elimination pairs
+  # tape pushes with the pops that consume them (see
+  # optimization._tape_pairings), so the checkpoint dict push/pop statements
+  # are either kept or removed together and the stack stays balanced.
 
   return _autodiff_uncached(
       func,

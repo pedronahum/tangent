@@ -375,10 +375,11 @@ print(dddf(2.0))  # 6.0   (d³/dx³ x³ = 6)
 ```
 
 Second derivatives work in both optimized and unoptimized modes, including
-through loops and across backends. Third derivatives (differentiating the
-second-order adjoint code again) work for ordinary NumPy functions in both
-modes. Fourth order and above is not yet reliable. See
-[Known Limitations](#-known-limitations) for the tape-API caveat.
+through loops, across backends, and through hand-written use of the
+low-level tape API (`tangent.push`/`pop`/`Stack`) — dead-code elimination is
+tape-aware and only removes push/pop pairs together. Third derivatives
+(differentiating the second-order adjoint code again) work for ordinary
+NumPy functions in both modes. Fourth order and above is not yet reliable.
 
 ### Automatic caching
 
@@ -392,11 +393,6 @@ first compilation. Inspect with `tangent.get_cache_stats()`.
 
 Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATURE_SUPPORT.md) for details:
 
-- **Optimized second derivatives through the low-level tape API**: functions
-  that call `tangent.push`/`pop`/`Stack` directly differentiate correctly at
-  first order and in *unoptimized* second order; with `optimized=True` the
-  optimization passes can corrupt the result. Ordinary code never calls these
-  primitives directly.
 - **Fourth-order and higher derivatives**: second and third derivatives are
   supported, but the fourth and beyond are not yet reliable — the optimized
   path can return incorrect values and the unoptimized path reaches the tape
@@ -490,11 +486,11 @@ pytest tests/test_keras.py           # Keras tests (any backend)
 pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
-Current status: **77,000+ parameterized test cases pass** (0 failures). The 21
-expected failures (`xfail`) are documented limitations: the low-level tape API
-under optimized higher-order differentiation, and higher-order differentiation
-through container arguments. CI runs the suite on Python 3.9–3.13 and exercises
-the cross-backend catalog against every installed backend.
+Current status: **77,000+ parameterized test cases pass** (0 failures). The
+remaining expected failures (`xfail`) are documented limitations, chiefly
+higher-order differentiation through container arguments. CI runs the suite
+on Python 3.9–3.13 and exercises the cross-backend catalog against every
+installed backend.
 
 ---
 

@@ -810,28 +810,24 @@ def gradgrad_chain_of_multcalls(a):
 
 
 # NOTE: useless_stack_ops and redefining_var_as_list call the low-level tape
-# API (tangent.push/pop/Stack) directly. Their first derivatives are correct,
-# and their second derivatives are correct in UNOPTIMIZED mode; with
-# optimized=True the standard optimization passes eliminate tape pairs and
-# corrupt the second derivative, so those reverse-over-reverse cases are
-# xfailed (see docs/features/PYTHON_FEATURE_SUPPORT.md,
-# "Higher-Order Differentiation").
+# API (tangent.push/pop/Stack) directly, and their SECOND derivatives with
+# optimized=True are regression tests for tape-aware dead code elimination
+# (tests/test_reverse_over_reverse.py and tests/test_tape_pairing.py).
 #
-# Root cause (localized): optimizing the FIRST derivative is safe -- the
-# corruption only appears when the SECOND derivative itself is optimized. The
-# standard optimize() passes (constant folding / dead code elimination /
-# assignment propagation) remove or reorder the push/pop/push_stack/pop_stack
-# operations that the second-order tape relies on, so a second-order gradient
-# accumulator ends up reading a primal value (e.g. ddf returns 16 instead of 0
-# for useless_stack_ops at a=2) or a pop hits a mismatched op id. The specific
-# culprit is the standard dead_code_elimination pass.
-#
-# A blanket fix ("treat every tape op as a DCE barrier") was evaluated and
-# REJECTED: the DCE's tape-pair elimination is required for control-flow
-# (if / for / while / ternary) gradients, so making tape ops unconditionally
-# non-removable desynchronizes their push/pop pairing and breaks those tests.
-# A correct fix must distinguish genuinely-dead tape from tape that a
-# higher-order derivative still needs.
+# History: these cases used to be xfailed. Differentiating gradient code again
+# duplicates tape op ids (the new primal re-executes an old push/pop and the
+# new adjoint mirrors it, so one op id names several runtime pairs), and
+# `annotate.find_stacks` keeps only the last-seen push/pop per op id. The
+# standard dead_code_elimination pass chased those stale annotations and
+# removed a dead pop together with the WRONG push, crossing the tape's
+# dataflow so a second-order gradient accumulator read a primal value (e.g.
+# ddf returned 16 instead of 0 for useless_stack_ops at a=2) or a pop hit a
+# mismatched op id. A blanket fix ("treat every tape op as a DCE barrier") was
+# evaluated and REJECTED: tape-pair elimination is required for control-flow
+# (if / for / while / ternary) gradients. The fix that landed makes DCE pair
+# pushes with pops itself (`optimization._tape_pairings`) - unique op ids pair
+# directly, duplicated op ids within one function pair LIFO in program order,
+# and anything ambiguous becomes a barrier - so removal is always balanced.
 def useless_stack_ops(a):
   _stack = tangent.Stack()
   b = a * a

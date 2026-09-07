@@ -29,26 +29,8 @@ import tangent
 import utils
 
 
-# Documented limitations of second-order (reverse-over-reverse) AD.
-
-# Differentiating low-level tape operations (tangent.push/pop/Stack) twice
-# produces correct UNOPTIMIZED second derivatives, but the optimization
-# passes' tape-pair elimination still corrupts them. See the
-# "Higher-Order Differentiation" section of
-# docs/features/PYTHON_FEATURE_SUPPORT.md and the comments on these
-# functions in tests/functions.py.
-_TAPE_GRADGRAD_LIMITED = frozenset((
-    'useless_stack_ops',
-    'redefining_var_as_list',
-))
-
-
 def _test_gradgrad_array(func, optimized, *args):
   """Test gradients of functions with NumPy-compatible signatures."""
-  if func.__name__ in _TAPE_GRADGRAD_LIMITED and optimized:
-    pytest.xfail(
-        'Optimized second derivatives through the low-level tape API are '
-        'known to be wrong (documented limitation).')
 
   def tangent_func():
     func.__globals__['np'] = np
