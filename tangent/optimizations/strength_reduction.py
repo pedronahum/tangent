@@ -13,8 +13,6 @@ Examples:
 
 import ast
 import gast
-import math
-from typing import Optional
 
 
 class StrengthReducer(gast.NodeTransformer):

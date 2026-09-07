@@ -45,7 +45,6 @@ import copy
 import gast
 import inspect
 import textwrap
-import types
 
 
 class ClassMethodInliner(gast.NodeTransformer):

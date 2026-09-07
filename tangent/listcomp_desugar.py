@@ -31,8 +31,6 @@ from __future__ import absolute_import
 
 import gast
 
-from tangent import quoting
-from tangent import template
 
 
 class ListCompDesugarer(gast.NodeTransformer):

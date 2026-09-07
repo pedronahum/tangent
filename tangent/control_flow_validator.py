@@ -20,7 +20,6 @@ helpful error messages with workarounds.
 from __future__ import absolute_import
 
 import gast
-from tangent import quoting
 
 
 class ControlFlowError(ValueError):

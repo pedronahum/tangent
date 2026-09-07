@@ -27,7 +27,6 @@ try:
     from tangent import utils
     from tangent.grads import adjoint
     from tangent.tangents import tangent_
-    from tangent.utils import array_shapes_match
     from tangent.utils import register_add_grad
     from tangent.utils import register_all_add_grad
     from tangent.utils import register_all_shape_checker

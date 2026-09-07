@@ -4,7 +4,6 @@
 This script creates all the example images and code outputs used in the README.
 """
 
-import sys
 import os
 import numpy as np
 import tangent

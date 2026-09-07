@@ -280,8 +280,7 @@ def tarray(z, x):
 
 # Import activation functions from grads module
 from tangent.grads import (
-    numpy_relu, numpy_sigmoid, numpy_tanh,
-    numpy_leaky_relu, numpy_elu, numpy_softplus
+    numpy_relu, numpy_sigmoid, numpy_leaky_relu, numpy_elu, numpy_softplus
 )
 
 

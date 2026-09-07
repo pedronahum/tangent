@@ -24,7 +24,6 @@ TODO: Remove this requirement.
 from __future__ import absolute_import
 
 import numpy
-import tangent
 
 
 NON_DIFFERENTIABLE = set([

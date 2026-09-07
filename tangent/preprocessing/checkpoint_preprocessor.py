@@ -7,7 +7,7 @@ processed by reverse_ad.py.
 
 import gast
 import copy
-from typing import Dict, Optional, List, Set
+from typing import Dict, Optional, List
 from tangent.analysis.checkpoint_analyzer import CheckpointingPlan, LoopInfo
 
 

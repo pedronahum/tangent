@@ -21,11 +21,7 @@ This module provides rich error messages that include:
 """
 from __future__ import absolute_import
 
-import ast
 import inspect
-import sys
-import textwrap
-from typing import Optional, List, Tuple
 
 
 class TangentError(Exception):

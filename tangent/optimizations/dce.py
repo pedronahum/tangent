@@ -7,7 +7,7 @@ unnecessary computations from gradient functions.
 
 import ast
 import gast
-from typing import Set, Dict, List, Tuple
+from typing import Set, List
 
 
 class VariableCollector(ast.NodeVisitor):

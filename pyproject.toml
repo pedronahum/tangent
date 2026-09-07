@@ -104,6 +104,37 @@ filterwarnings = [
     "ignore:ast\\..* is deprecated:DeprecationWarning",
 ]
 
+# Lint configuration (`ruff check`). Successor to the old flake8 CI step,
+# which only caught syntax errors and undefined names (E901/E999/F821-F823);
+# ruff additionally enforces the full pyflakes set (unused imports, etc.) and
+# pycodestyle's deprecation warnings (W6).
+[tool.ruff]
+# tests/ are exercised by pytest rather than linted (parity with the old
+# flake8 exclude list); notebooks/ contains tutorial .ipynb files with
+# deliberately illustrative, non-lint-clean code.
+extend-exclude = ["tests", "notebooks", ".venv-*"]
+# Generated-gradient template code references the `d[...]` gradient sentinel
+# and the tangent/numpy modules at parse time.
+builtins = ["d", "tangent", "numpy"]
+
+[tool.ruff.lint]
+select = ["E9", "F", "W6"]
+# F841 (unused local variable) is a false positive throughout the adjoint /
+# tangent template DSL (tangent/grads.py, tangent/tangents.py, ...), where
+# "unused" assignments are load-bearing AST templates that the source
+# transformation rewrites.
+ignore = ["F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ modules re-export the public API.
+"**/__init__.py" = ["F401", "F403"]
+# Compatibility shim that re-exports the error types.
+"tangent/errors.py" = ["F401"]
+# Demo/benchmark scripts keep illustrative imports and f-strings; only the
+# serious rules (syntax errors, undefined names, ...) apply there.
+"examples/**" = ["F401", "F541", "F811"]
+"benchmarks/**" = ["F401", "F541", "F811"]
+
 # Line-coverage reporting. Run with:
 #   pytest --cov --cov-report=term-missing tests/
 # (requires the `test` extra, which provides pytest-cov). This measures the

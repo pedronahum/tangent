@@ -108,7 +108,7 @@ def grad_with_checkpointing(func: Callable,
     except Exception as e:
         # If preprocessing fails, fall back to standard gradient
         print(f"[Checkpointing] Preprocessing failed: {e}")
-        print(f"[Checkpointing] Falling back to standard gradient")
+        print("[Checkpointing] Falling back to standard gradient")
         return tangent_grad(func, wrt=wrt, **kwargs)
 
 

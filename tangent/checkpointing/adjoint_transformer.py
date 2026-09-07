@@ -6,8 +6,8 @@ to use checkpoints and recomputation instead of storing all intermediate values.
 
 import gast
 import copy
-from typing import Dict, Optional, List, Set
-from tangent.analysis.checkpoint_analyzer import CheckpointingPlan, LoopInfo
+from typing import Dict, Optional, List
+from tangent.analysis.checkpoint_analyzer import CheckpointingPlan
 
 
 class AdjointCheckpointTransformer(gast.NodeTransformer):

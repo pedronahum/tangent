@@ -19,7 +19,6 @@ import gast
 from tangent import annotate
 from tangent import annotations as anno
 from tangent import cfg
-from tangent import quoting
 from tangent import transformers
 
 

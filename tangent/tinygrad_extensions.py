@@ -1095,4 +1095,4 @@ def tangent_transpose(y, x, dim0=1, dim1=0):
     d[y] = d[x].transpose(dim0, dim1)
 
 
-print(f"✓ tinygrad extensions loaded successfully")
+print("✓ tinygrad extensions loaded successfully")

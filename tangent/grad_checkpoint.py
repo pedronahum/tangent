@@ -20,16 +20,13 @@ Usage:
 
 import ast
 import inspect
-import functools
-import numpy as np
-from typing import Callable, Optional, Tuple, Any
+from typing import Callable, Optional, Tuple
 
 # Import Tangent's grad function
 from tangent.grad_util import grad as tangent_grad
 
 # Import checkpointing utilities
 from tangent.checkpointing_simple import (
-    compute_checkpoint_positions,
     checkpointed_loop,
     get_memory_savings
 )

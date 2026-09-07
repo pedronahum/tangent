@@ -408,7 +408,7 @@ def cached_grad(original_grad):
         # These create different gradient functions for same source function
         if output_index is not None or output_weights is not None:
             if verbose >= 1:
-                print(f"[Cache] Bypassing cache (multi-output configuration)")
+                print("[Cache] Bypassing cache (multi-output configuration)")
             result = original_grad(func, wrt, optimized, preserve_result, check_dims,
                                verbose, checkpoint, checkpoint_config, optimizations,
                                output_index, output_weights)
@@ -418,7 +418,7 @@ def cached_grad(original_grad):
         # Phase 3 will add proper cache key generation for checkpoint configs
         if checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)):
             if verbose >= 1:
-                print(f"[Cache] Bypassing cache (checkpointing enabled)")
+                print("[Cache] Bypassing cache (checkpointing enabled)")
             result = original_grad(func, wrt, optimized, preserve_result, check_dims,
                                verbose, checkpoint, checkpoint_config, optimizations,
                                output_index, output_weights)

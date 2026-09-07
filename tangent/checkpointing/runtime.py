@@ -5,7 +5,7 @@ These functions are called during the execution of checkpointed gradient code.
 
 import numpy as np
 import copy
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 
 def find_nearest_checkpoint(iteration: int,

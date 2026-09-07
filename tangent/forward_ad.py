@@ -32,9 +32,7 @@ from tangent import cfg
 from tangent import comments
 from tangent import create
 from tangent import errors
-from tangent import grads
 from tangent import naming
-from tangent import non_differentiable
 from tangent import quoting
 from tangent import tangents
 from tangent import template

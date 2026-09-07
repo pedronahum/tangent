@@ -10,7 +10,7 @@ This module provides tools to visualize:
 import gast
 import inspect
 import textwrap
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 import warnings
 
 # Optional dependencies for visualization
@@ -30,9 +30,6 @@ except ImportError:
     NETWORKX_AVAILABLE = False
     warnings.warn("networkx not available. Install with: pip install networkx")
 
-from tangent import quoting
-from tangent import naming
-from tangent import grad_util
 
 
 class ComputationGraphVisualizer:

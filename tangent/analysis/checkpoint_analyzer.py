@@ -4,7 +4,6 @@ This module provides the first stage of the checkpointing pipeline:
 analyzing AST to determine which loops can and should be checkpointed.
 """
 
-import ast
 import gast
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Optional, Tuple

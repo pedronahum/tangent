@@ -37,7 +37,6 @@ Example:
 from __future__ import absolute_import
 
 import warnings
-from numbers import Number
 
 try:
     import keras
@@ -48,11 +47,9 @@ except ImportError as e:
 
 import numpy as np
 from tangent import non_differentiable
-from tangent import utils
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 
-from tangent import utils as _utils
 
 
 def size(x, axis):

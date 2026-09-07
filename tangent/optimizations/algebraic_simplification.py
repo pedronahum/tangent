@@ -11,9 +11,7 @@ Examples:
 
 import ast
 import gast
-from typing import Dict, Set, Any, Optional
 import sympy as sp
-from sympy.parsing.sympy_parser import parse_expr
 
 
 class ASTToSymPyConverter:

@@ -20,7 +20,9 @@ try:
     import tensorflow as tf
     import tangent
     from tangent.grads import adjoint
-    from tangent import tf_extensions
+    # Side-effect import: registers the base TF adjoints/tangents that this
+    # module extends.
+    from tangent import tf_extensions  # noqa: F401
 except ImportError as e:
     warnings.warn(f"TensorFlow extensions not available: {e}")
     raise

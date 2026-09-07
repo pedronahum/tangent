@@ -6,8 +6,7 @@ Identifies and eliminates redundant computations in generated gradient code.
 
 import ast
 import gast
-from typing import Dict, List, Set, Tuple, Any
-from collections import defaultdict
+from typing import Dict
 import hashlib
 
 

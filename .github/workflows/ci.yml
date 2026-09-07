@@ -5,6 +5,12 @@ on:
     branches: [master]
   pull_request:
 
+# Cancel superseded runs when a PR is force-pushed or updated; runs on master
+# keep their own group per-ref so they never cancel each other mid-history.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -13,16 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install flake8
-        run: pip install flake8
-      # Syntax errors and undefined names only (template code legitimately
-      # references the d[...] gradient sentinel and tangent/numpy at parse
-      # time, hence the builtins list).
-      - name: Syntax and undefined-name check
-        run: >-
-          flake8 . --builtins=d,tangent,numpy --count
-          --exclude=tests,.venv,.venv-*,build,dist
-          --select=E901,E999,F821,F822,F823 --show-source --statistics
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      # Rule selection, builtins (the d[...] gradient sentinel referenced by
+      # template code) and per-file ignores live in [tool.ruff] in
+      # pyproject.toml.
+      - name: Ruff check
+        run: ruff check .
 
   test:
     runs-on: ubuntu-latest
@@ -35,32 +39,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Install (core dependencies only)
         run: pip install -r requirements.txt
-      # TensorFlow/JAX stay absent on purpose here: the optional-backend
-      # code paths must degrade to skips, not failures.
+      # TensorFlow/JAX/tinygrad stay absent on purpose here: the
+      # optional-backend code paths must degrade to skips, not failures.
       - name: Run test suite
         run: python -m pytest tests -q
 
   test-full:
-    # Exercises the TensorFlow, JAX, PyTorch, Keras, SymPy and visualization
-    # code paths as well, so the cross-backend coverage suite
-    # (tests/test_backend_coverage.py) runs against all four backends. Pinned
-    # to a single interpreter to keep CI time bounded; the matrix job above
-    # covers interpreter breadth.
+    # Exercises the TensorFlow, JAX, PyTorch, Keras, tinygrad, SymPy and
+    # visualization code paths as well, so the cross-backend coverage suite
+    # (tests/test_backend_coverage.py) runs against all backends. Pinned to a
+    # single interpreter to keep CI time bounded; the matrix job above covers
+    # interpreter breadth.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
       - name: Install with all optional backends
         run: |
-          pip install -r requirements.txt tensorflow jax keras sympy matplotlib networkx
+          pip install -r requirements.txt tensorflow jax keras sympy matplotlib networkx tinygrad pytest-cov
           # CPU-only PyTorch wheel to keep the CI image small.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Run test suite
-        run: python -m pytest tests -q
+      # Line/branch coverage config lives in [tool.coverage] in pyproject.toml.
+      # The floor is deliberately modest: a local --short run without TF/torch
+      # measured 66%, and this job runs the full suite with the TF and torch
+      # extension modules exercised as well, so 60 leaves a safety margin.
+      - name: Run test suite with coverage
+        run: python -m pytest tests -q --cov=tangent --cov-report=term --cov-fail-under=60
 
   package:
     # Validates that the wheel actually builds and installs into a clean
@@ -72,6 +82,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
       - name: Build sdist and wheel
         run: |
           pip install build

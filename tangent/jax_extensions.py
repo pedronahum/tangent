@@ -40,25 +40,17 @@ from numbers import Number
 try:
     import jax
     import jax.numpy as jnp
-    from jax import Array as JAXArray
 except ImportError as e:
     warnings.warn(f"JAX not available: {e}. Install with: pip install jax jaxlib")
     raise
 
 import numpy as np
-from tangent import grads
 from tangent import non_differentiable
-from tangent import tangents
 from tangent import utils
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
-from tangent.utils import array_shapes_match
-from tangent.utils import register_all_add_grad
-from tangent.utils import register_all_shape_checker
 from tangent.utils import register_init_grad
 from tangent.utils import register_shape_function
-from tangent.utils import register_unbroadcast
-from tangent.utils import register_unreduce
 
 
 # JAX array type - detect the actual implementation type
