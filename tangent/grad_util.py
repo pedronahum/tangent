@@ -56,32 +56,18 @@ import enum
 import inspect
 import gast
 import numpy
-from tangent import anf as anf_
-from tangent import annotate
 from tangent import annotations as anno
 from tangent import ast as ast_
 from tangent import comments
 from tangent import compile as compile_
 from tangent import control_flow_validator
-from tangent import desugar
 from tangent import fence
 from tangent import forward_ad
-from tangent import chained_assign_desugar
-from tangent import comprehension_desugar
-from tangent import enumerate_desugar
-from tangent import zip_desugar
-from tangent import ifexp_desugar
-from tangent import dict_method_desugar
-from tangent import return_desugar
-from tangent import sentinel_rename
-from tangent import lambda_desugar
-from tangent import listcomp_desugar
-from tangent import concat_desugar
 from tangent import naming
 from tangent import optimization
+from tangent import passes
 from tangent import quoting
 from tangent import reverse_ad
-from tangent import class_desugar
 
 INPUT_DERIVATIVE = enum.Enum('InputDerivative',
                              ('Required', 'DefaultOne', 'DefaultOnes'))
@@ -135,44 +121,27 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
         of which the primals and adjoints need to be made available in order
         for the returned function to run.
   """
-  # Parse the function and desugar classes, lambdas and list comprehensions first
+  # Parse the function, then lower it through the frontend pass pipeline
+  # (see tangent/passes.py for the pass order and its rationale).
   node = quoting.parse_function(func)
+  # Fetch the source once and reuse it below. `inspect.getsource` raises
+  # OSError when the source is unavailable and TypeError for objects without
+  # code; in practice it cannot fail here since parse_function just fetched
+  # the same source, but the validators degrade gracefully without it.
+  try:
+    source = inspect.getsource(func)
+  except (OSError, TypeError):
+    source = ''
   # Nested defs crash several of the desugaring passes and the reverse transform;
   # reject them up front with a clear error, before any pass sees them.
-  node = fence.validate_no_nested_functions(node, inspect.getsource(func))
-  node = sentinel_rename.rename_sentinel_vars(node)
-  node = class_desugar.inline_class_methods(node, func)  # Pass func for __globals__
-  node = lambda_desugar.desugar_lambdas(node)
-  node = return_desugar.desugar_returns(node)
-  node = chained_assign_desugar.desugar_chained_assignments(node)
-  node = enumerate_desugar.desugar_enumerate(node)
-  node = zip_desugar.desugar_zip(node)
-  node = comprehension_desugar.desugar_comprehensions(node)
-  node = listcomp_desugar.desugar_listcomps(node)
-  node = dict_method_desugar.desugar_dict_methods(node)
-  node = concat_desugar.desugar_concat(node)
-  # Forward mode supports if-statements but not conditional expressions, so
-  # lower ternaries to if-statements. This runs last so it also catches
-  # ternaries introduced by other desugarings (e.g. d.get(k, default)). Reverse
-  # mode differentiates conditional expressions directly.
-  if mode == 'forward':
-    node = ifexp_desugar.desugar_ifexps(node)
+  node = fence.validate_no_nested_functions(node, source)
 
-  # Now resolve calls on the transformed AST
-  annotate.ResolveCalls(func).visit(node)
-
-  node = desugar.explicit_loop_indexes(node)
-  fence.validate(node, inspect.getsource(func))
-  node = anf_.anf(node)
+  node = passes.run_passes(node, func, source, mode)
   if verbose >= 2:
     print('ANF')
     print(quoting.to_source(node))
 
   # Validate control flow patterns after ANF transformation
-  try:
-    source = inspect.getsource(func)
-  except:
-    source = ''
   control_flow_validator.validate_control_flow(node, source, verbose=verbose >= 1)
 
   if mode == 'reverse':
