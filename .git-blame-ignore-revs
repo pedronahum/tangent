@@ -1,0 +1,7 @@
+# Commits to skip in `git blame` archaeology. Use with:
+#   git blame --ignore-revs-file .git-blame-ignore-revs <file>
+# or make it the default for this clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: settle the 2-space/4-space split with ruff format
+7b392e288cea9828e3a147475c095fe61d7d2123
