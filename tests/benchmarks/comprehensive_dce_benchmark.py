@@ -2,6 +2,7 @@
 Comprehensive benchmark comparing DCE phases.
 Measures performance with and without optimizations.
 """
+
 import time
 import tracemalloc
 import tangent
@@ -26,9 +27,9 @@ def time_it(func, *args, iterations=1000, warmup=100):
 
 def benchmark_selective_gradient():
     """Benchmark: Gradient w.r.t. 1 parameter out of many."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK 1: Selective Gradient (1 of 10 parameters)")
-    print("="*80)
+    print("=" * 80)
 
     def model(x, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10):
         result = x
@@ -59,24 +60,24 @@ def benchmark_selective_gradient():
     time_dce = time_it(grad_dce, *args)
 
     print(f"No optimization:    {time_none:.4f} ms")
-    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none/time_basic:.2f}x speedup)")
-    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none/time_dce:.2f}x speedup)")
-    print(f"DCE vs Basic:       {time_basic/time_dce:.2f}x additional speedup")
+    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none / time_basic:.2f}x speedup)")
+    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none / time_dce:.2f}x speedup)")
+    print(f"DCE vs Basic:       {time_basic / time_dce:.2f}x additional speedup")
 
     return {
         'none': time_none,
         'basic': time_basic,
         'dce': time_dce,
         'speedup_total': time_none / time_dce,
-        'speedup_dce': time_basic / time_dce
+        'speedup_dce': time_basic / time_dce,
     }
 
 
 def benchmark_unused_computation():
     """Benchmark: Function with unused variables."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK 2: Unused Computation Elimination")
-    print("="*80)
+    print("=" * 80)
 
     def model(x, y, z):
         # Used computations
@@ -103,24 +104,24 @@ def benchmark_unused_computation():
     time_dce = time_it(grad_dce, *args)
 
     print(f"No optimization:    {time_none:.4f} ms")
-    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none/time_basic:.2f}x speedup)")
-    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none/time_dce:.2f}x speedup)")
-    print(f"DCE vs Basic:       {time_basic/time_dce:.2f}x additional speedup")
+    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none / time_basic:.2f}x speedup)")
+    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none / time_dce:.2f}x speedup)")
+    print(f"DCE vs Basic:       {time_basic / time_dce:.2f}x additional speedup")
 
     return {
         'none': time_none,
         'basic': time_basic,
         'dce': time_dce,
         'speedup_total': time_none / time_dce,
-        'speedup_dce': time_basic / time_dce
+        'speedup_dce': time_basic / time_dce,
     }
 
 
 def benchmark_loop_optimization():
     """Benchmark: Loop with unused variables."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK 3: Loop Optimization")
-    print("="*80)
+    print("=" * 80)
 
     def model(x, y):
         result = 0.0
@@ -149,24 +150,24 @@ def benchmark_loop_optimization():
     time_dce = time_it(grad_dce, *args)
 
     print(f"No optimization:    {time_none:.4f} ms")
-    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none/time_basic:.2f}x speedup)")
-    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none/time_dce:.2f}x speedup)")
-    print(f"DCE vs Basic:       {time_basic/time_dce:.2f}x additional speedup")
+    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none / time_basic:.2f}x speedup)")
+    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none / time_dce:.2f}x speedup)")
+    print(f"DCE vs Basic:       {time_basic / time_dce:.2f}x additional speedup")
 
     return {
         'none': time_none,
         'basic': time_basic,
         'dce': time_dce,
         'speedup_total': time_none / time_dce,
-        'speedup_dce': time_basic / time_dce
+        'speedup_dce': time_basic / time_dce,
     }
 
 
 def benchmark_complex_function():
     """Benchmark: Complex real-world-like function."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK 4: Complex Function (Realistic ML Model)")
-    print("="*80)
+    print("=" * 80)
 
     def ml_model(x, w1, w2, w3, learning_rate, momentum, debug_flag):
         # Constants
@@ -205,30 +206,30 @@ def benchmark_complex_function():
     time_dce = time_it(grad_dce, *args)
 
     print(f"No optimization:    {time_none:.4f} ms")
-    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none/time_basic:.2f}x speedup)")
-    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none/time_dce:.2f}x speedup)")
-    print(f"DCE vs Basic:       {time_basic/time_dce:.2f}x additional speedup")
+    print(f"Basic optimization: {time_basic:.4f} ms  ({time_none / time_basic:.2f}x speedup)")
+    print(f"Full DCE:           {time_dce:.4f} ms  ({time_none / time_dce:.2f}x speedup)")
+    print(f"DCE vs Basic:       {time_basic / time_dce:.2f}x additional speedup")
 
     return {
         'none': time_none,
         'basic': time_basic,
         'dce': time_dce,
         'speedup_total': time_none / time_dce,
-        'speedup_dce': time_basic / time_dce
+        'speedup_dce': time_basic / time_dce,
     }
 
 
 def print_summary(results):
     """Print overall summary."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("OVERALL SUMMARY")
-    print("="*80)
+    print("=" * 80)
 
     benchmarks = [
         "Selective Gradient",
         "Unused Computation",
         "Loop Optimization",
-        "Complex Function"
+        "Complex Function",
     ]
 
     print(f"\n{'Benchmark':<25} {'Total Speedup':<15} {'DCE vs Basic'}")
@@ -246,21 +247,23 @@ def print_summary(results):
     print("-" * 80)
     print(f"{'AVERAGE':<25} {avg_total:.2f}x{'':<12} {avg_dce:.2f}x")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("KEY FINDINGS")
-    print("="*80)
+    print("=" * 80)
     print(f"✓ Full DCE provides {avg_total:.2f}x average speedup over no optimization")
     print(f"✓ DCE adds {avg_dce:.2f}x additional speedup over basic optimization")
-    print(f"✓ Combined optimization pipeline is {((avg_total - 1) * 100):.0f}% faster than baseline")
-    print("="*80)
+    print(
+        f"✓ Combined optimization pipeline is {((avg_total - 1) * 100):.0f}% faster than baseline"
+    )
+    print("=" * 80)
 
 
 def main():
-    print("="*80)
+    print("=" * 80)
     print("COMPREHENSIVE DCE PERFORMANCE BENCHMARK")
-    print("="*80)
+    print("=" * 80)
     print("Comparing: No optimization vs Basic optimization vs Full DCE")
-    print("="*80)
+    print("=" * 80)
 
     results = []
 
@@ -290,6 +293,7 @@ def main():
     # Save results
     import json
     import os
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     results_path = os.path.join(script_dir, 'performance_results.json')
 
@@ -301,9 +305,13 @@ def main():
             {'name': 'Complex Function', 'results': results[3] if len(results) > 3 else {}},
         ],
         'summary': {
-            'avg_total_speedup': sum(r['speedup_total'] for r in results) / len(results) if results else 0,
-            'avg_dce_speedup': sum(r['speedup_dce'] for r in results) / len(results) if results else 0,
-        }
+            'avg_total_speedup': sum(r['speedup_total'] for r in results) / len(results)
+            if results
+            else 0,
+            'avg_dce_speedup': sum(r['speedup_dce'] for r in results) / len(results)
+            if results
+            else 0,
+        },
     }
 
     with open(results_path, 'w') as f:

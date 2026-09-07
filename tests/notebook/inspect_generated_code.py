@@ -1,12 +1,15 @@
 """Inspect actual generated gradient code"""
+
 import tangent
 import jax.numpy as jnp
 import inspect
 import tempfile
 
+
 def simple_sum(x):
     """Simple JAX sum"""
     return jnp.sum(x)
+
 
 print("=" * 80)
 print("Generated Gradient Code for jnp.sum")
@@ -29,4 +32,5 @@ try:
 except Exception as e:
     print(f"Error generating gradient: {e}")
     import traceback
+
     traceback.print_exc()

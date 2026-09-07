@@ -19,50 +19,50 @@ from tangent import quoting
 
 
 def test_resolve():
-  def g(x):
-    return 2 * x
+    def g(x):
+        return 2 * x
 
-  def f(x):
-    return g(x)
+    def f(x):
+        return g(x)
 
-  node = annotate.resolve_calls(f)
-  assert anno.getanno(node.body[0].body[0].value, 'func') == g
+    node = annotate.resolve_calls(f)
+    assert anno.getanno(node.body[0].body[0].value, 'func') == g
 
-  def f(x):
-    return h(x)
+    def f(x):
+        return h(x)
 
-  # Unresolvable calls no longer raise; they are annotated with None to mark
-  # them as non-differentiable (this also covers calls that can only be
-  # resolved at runtime, e.g. methods on local variables).
-  node = annotate.resolve_calls(f)
-  assert anno.getanno(node.body[0].body[0].value, 'func') is None
+    # Unresolvable calls no longer raise; they are annotated with None to mark
+    # them as non-differentiable (this also covers calls that can only be
+    # resolved at runtime, e.g. methods on local variables).
+    node = annotate.resolve_calls(f)
+    assert anno.getanno(node.body[0].body[0].value, 'func') is None
 
 
 def test_unused():
-  def f(x):
-    y = x * 2
-    return x
+    def f(x):
+        y = x * 2
+        return x
 
-  node = quoting.parse_function(f)
-  unused = annotate.unused(node)
-  assert unused == set([('y', node.body[0].body[0])])
+    node = quoting.parse_function(f)
+    unused = annotate.unused(node)
+    assert unused == set([('y', node.body[0].body[0])])
 
-  def f(x):
-    y = x * 2
-    return y
+    def f(x):
+        y = x * 2
+        return y
 
-  unused = annotate.unused(quoting.parse_function(f))
-  assert not unused
+    unused = annotate.unused(quoting.parse_function(f))
+    assert not unused
 
-  def f(x):
-    while True:
-      y = x * 2
-      x = 3
-    return y
+    def f(x):
+        while True:
+            y = x * 2
+            x = 3
+        return y
 
-  unused = annotate.unused(quoting.parse_function(f))
-  assert not unused
+    unused = annotate.unused(quoting.parse_function(f))
+    assert not unused
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

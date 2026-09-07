@@ -66,11 +66,7 @@ class StrengthReducer(gast.NodeTransformer):
         if isinstance(node.func, (gast.Name, ast.Name)) and node.func.id == 'pow':
             if len(node.args) >= 2:
                 # Convert pow(x, n) to x ** n, then apply power reduction
-                power_node = gast.BinOp(
-                    left=node.args[0],
-                    op=gast.Pow(),
-                    right=node.args[1]
-                )
+                power_node = gast.BinOp(left=node.args[0], op=gast.Pow(), right=node.args[1])
                 reduced = self._reduce_power(power_node)
                 if reduced is not None:
                     self.reductions_applied += 1
@@ -98,67 +94,38 @@ class StrengthReducer(gast.NodeTransformer):
 
             # x ** 2 -> x * x
             if exponent_value == 2:
-                return gast.BinOp(
-                    left=base,
-                    op=gast.Mult(),
-                    right=self._copy_node(base)
-                )
+                return gast.BinOp(left=base, op=gast.Mult(), right=self._copy_node(base))
 
             # x ** 3 -> x * x * x
             elif exponent_value == 3:
-                x_times_x = gast.BinOp(
-                    left=base,
-                    op=gast.Mult(),
-                    right=self._copy_node(base)
-                )
-                return gast.BinOp(
-                    left=x_times_x,
-                    op=gast.Mult(),
-                    right=self._copy_node(base)
-                )
+                x_times_x = gast.BinOp(left=base, op=gast.Mult(), right=self._copy_node(base))
+                return gast.BinOp(left=x_times_x, op=gast.Mult(), right=self._copy_node(base))
 
             # x ** 4 -> (x * x) * (x * x)
             # Let CSE handle the common x*x subexpression
             elif exponent_value == 4:
-                x_times_x = gast.BinOp(
-                    left=base,
-                    op=gast.Mult(),
-                    right=self._copy_node(base)
-                )
-                return gast.BinOp(
-                    left=x_times_x,
-                    op=gast.Mult(),
-                    right=self._copy_node(x_times_x)
-                )
+                x_times_x = gast.BinOp(left=base, op=gast.Mult(), right=self._copy_node(base))
+                return gast.BinOp(left=x_times_x, op=gast.Mult(), right=self._copy_node(x_times_x))
 
             # x ** 0.5 -> sqrt(x)
             elif exponent_value == 0.5:
                 return gast.Call(
-                    func=gast.Name(id='sqrt', ctx=gast.Load(),
-                                 annotation=None, type_comment=None),
+                    func=gast.Name(id='sqrt', ctx=gast.Load(), annotation=None, type_comment=None),
                     args=[base],
-                    keywords=[]
+                    keywords=[],
                 )
 
             # x ** -1 -> 1.0 / x
             elif exponent_value == -1:
                 return gast.BinOp(
-                    left=gast.Constant(value=1.0, kind=None),
-                    op=gast.Div(),
-                    right=base
+                    left=gast.Constant(value=1.0, kind=None), op=gast.Div(), right=base
                 )
 
             # x ** -2 -> 1.0 / (x * x)
             elif exponent_value == -2:
-                x_times_x = gast.BinOp(
-                    left=base,
-                    op=gast.Mult(),
-                    right=self._copy_node(base)
-                )
+                x_times_x = gast.BinOp(left=base, op=gast.Mult(), right=self._copy_node(base))
                 return gast.BinOp(
-                    left=gast.Constant(value=1.0, kind=None),
-                    op=gast.Div(),
-                    right=x_times_x
+                    left=gast.Constant(value=1.0, kind=None), op=gast.Div(), right=x_times_x
                 )
 
             # x ** 1 -> x (identity)
@@ -176,7 +143,7 @@ class StrengthReducer(gast.NodeTransformer):
             # Check if it's a small integer exponent first
             if exponent_value in [2, 3, 4]:
                 # 2**2 = 4, etc. - fold the constant
-                result = 2 ** exponent_value
+                result = 2**exponent_value
                 return gast.Constant(value=result, kind=None)
             else:
                 # For non-constant or large exponents, use exp2 if available
@@ -207,9 +174,7 @@ class StrengthReducer(gast.NodeTransformer):
 
             # Create x * reciprocal
             return gast.BinOp(
-                left=node.left,
-                op=gast.Mult(),
-                right=gast.Constant(value=reciprocal, kind=None)
+                left=node.left, op=gast.Mult(), right=gast.Constant(value=reciprocal, kind=None)
             )
 
         # No reduction applied
@@ -246,6 +211,7 @@ class StrengthReducer(gast.NodeTransformer):
         in the AST (e.g., x appears twice in x * x).
         """
         import copy
+
         return copy.deepcopy(node)
 
 
@@ -277,7 +243,7 @@ class StrengthReductionOptimizer:
         """
         reducer = StrengthReducer(
             enable_division_to_multiply=self.enable_division_to_multiply,
-            enable_power_reduction=self.enable_power_reduction
+            enable_power_reduction=self.enable_power_reduction,
         )
 
         optimized = reducer.visit(func_ast)
@@ -314,8 +280,7 @@ def apply_strength_reduction(func_ast, config=None):
     enable_power = config.get('enable_power_reduction', True)
 
     optimizer = StrengthReductionOptimizer(
-        enable_division_to_multiply=enable_division,
-        enable_power_reduction=enable_power
+        enable_division_to_multiply=enable_division, enable_power_reduction=enable_power
     )
 
     return optimizer.optimize(func_ast)

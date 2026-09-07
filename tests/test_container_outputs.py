@@ -26,6 +26,7 @@ cotangent. Structurally mismatched container seeds are rejected with a clean
 ValueError. The container-output gradients below are verified against finite
 differences on the flattened leaves.
 """
+
 import math
 
 import numpy as np
@@ -70,6 +71,7 @@ def _flat(tree):
 # ---------------------------------------------------------------------------
 # Container inputs: gradients flow through tuples, lists, dicts, nesting
 # ---------------------------------------------------------------------------
+
 
 def test_tuple_input():
     def f(params):
@@ -154,6 +156,7 @@ def test_wrt_container_argument():
 # Container outputs: the seed is reconciled with the return value's structure
 # ---------------------------------------------------------------------------
 
+
 def test_dict_output_default_seed():
     def f(x):
         return {'a': x * x, 'b': 3.0 * x}
@@ -227,6 +230,7 @@ def test_container_output_preserve_result():
 # Structurally mismatched seeds are rejected cleanly, not crashed on
 # ---------------------------------------------------------------------------
 
+
 def test_wrong_dict_seed_keys_rejected():
     def f(x):
         return {'a': x * x, 'b': 3.0 * x}
@@ -281,6 +285,7 @@ def test_container_seed_for_scalar_output_rejected():
 # Higher-order through container inputs must stay correct
 # ---------------------------------------------------------------------------
 
+
 def test_higher_order_through_container_input():
     def f(params):
         return np.sum(params[0] * params[0])
@@ -294,8 +299,7 @@ def test_higher_order_through_container_input():
     # Verify against finite differences of the first-order gradient (whose
     # own output is a container, so its leaves are summed by the default
     # seed of the second-order gradient).
-    assert np.allclose(_flat(list(got)), _fd_grad(lambda p: list(df(p)), (a,)),
-                       atol=1e-4)
+    assert np.allclose(_flat(list(got)), _fd_grad(lambda p: list(df(p)), (a,)), atol=1e-4)
 
 
 def test_higher_order_scalar_unaffected():
@@ -312,6 +316,7 @@ def test_higher_order_scalar_unaffected():
 # ---------------------------------------------------------------------------
 # seed_pytree / match_seed building blocks
 # ---------------------------------------------------------------------------
+
 
 def test_seed_pytree_structure():
     x = np.array([1.0, 2.0])

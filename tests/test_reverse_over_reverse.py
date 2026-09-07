@@ -20,6 +20,7 @@ Arguments func, a, b, c, x, and n are automatically filled in.
 Pass --short for a quick run.
 
 """
+
 from autograd import grad as ag_grad
 import autograd.numpy as ag_np
 import numpy as np
@@ -30,77 +31,82 @@ import utils
 
 
 def _test_gradgrad_array(func, optimized, *args):
-  """Test gradients of functions with NumPy-compatible signatures."""
+    """Test gradients of functions with NumPy-compatible signatures."""
 
-  def tangent_func():
-    func.__globals__['np'] = np
-    df = tangent.grad(func, optimized=optimized, verbose=utils.TEST_VERBOSE)
-    ddf = tangent.grad(df, optimized=optimized, verbose=utils.TEST_VERBOSE)
-    return ddf(*args)
+    def tangent_func():
+        func.__globals__['np'] = np
+        df = tangent.grad(func, optimized=optimized, verbose=utils.TEST_VERBOSE)
+        ddf = tangent.grad(df, optimized=optimized, verbose=utils.TEST_VERBOSE)
+        return ddf(*args)
 
-  def reference_func():
-    func.__globals__['np'] = ag_np
-    return ag_grad(ag_grad(func))(*args)
+    def reference_func():
+        func.__globals__['np'] = ag_np
+        return ag_grad(ag_grad(func))(*args)
 
-  def backup_reference_func():
-    return utils.numeric_grad(utils.numeric_grad(func))(*args)
+    def backup_reference_func():
+        return utils.numeric_grad(utils.numeric_grad(func))(*args)
 
-  utils.assert_result_matches_reference(
-      tangent_func, reference_func, backup_reference_func,
-      tolerance=1e-2)  # extra loose bounds for 2nd order grad
+    utils.assert_result_matches_reference(
+        tangent_func, reference_func, backup_reference_func, tolerance=1e-2
+    )  # extra loose bounds for 2nd order grad
 
 
 def test_reverse_over_reverse_unary(func, a, optimized):
-  _test_gradgrad_array(func, optimized, a)
+    _test_gradgrad_array(func, optimized, a)
 
 
 def test_reverse_over_reverse_binary(func, a, b, optimized):
-  _test_gradgrad_array(func, optimized, a, b)
+    _test_gradgrad_array(func, optimized, a, b)
 
 
 def test_reverse_over_reverse_ternary(func, optimized, a, b, c):
-  _test_gradgrad_array(func, optimized, a, b, c)
+    _test_gradgrad_array(func, optimized, a, b, c)
 
 
 def test_third_derivative_polynomial(optimized):
-  """Third derivatives of ordinary functions (reverse-over-reverse-over-reverse).
+    """Third derivatives of ordinary functions (reverse-over-reverse-over-reverse).
 
-  Requires the adjoints registered for Tangent's own accumulation helpers
-  (tangent.unreduce_like etc.) so that differentiating second-order adjoint
-  code does not step into their type-dispatch bodies. `optimized` is supplied
-  by conftest for both modes.
-  """
-  def f(x):
-    return np.sum(x * x * x)
+    Requires the adjoints registered for Tangent's own accumulation helpers
+    (tangent.unreduce_like etc.) so that differentiating second-order adjoint
+    code does not step into their type-dispatch bodies. `optimized` is supplied
+    by conftest for both modes.
+    """
 
-  x = np.array([1.0, 2.0])
-  old_limit = sys.getrecursionlimit()
-  sys.setrecursionlimit(max(old_limit, 20000))
-  try:
-    d3 = tangent.grad(tangent.grad(tangent.grad(f, optimized=optimized),
-                                    optimized=optimized), optimized=optimized)
-    got = d3(x)
-  finally:
-    sys.setrecursionlimit(old_limit)
-  # d^3/dx^3 sum(x^3) = 6 elementwise.
-  assert np.allclose(got, np.array([6.0, 6.0]), atol=1e-2)
+    def f(x):
+        return np.sum(x * x * x)
+
+    x = np.array([1.0, 2.0])
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 20000))
+    try:
+        d3 = tangent.grad(
+            tangent.grad(tangent.grad(f, optimized=optimized), optimized=optimized),
+            optimized=optimized,
+        )
+        got = d3(x)
+    finally:
+        sys.setrecursionlimit(old_limit)
+    # d^3/dx^3 sum(x^3) = 6 elementwise.
+    assert np.allclose(got, np.array([6.0, 6.0]), atol=1e-2)
 
 
 def test_third_derivative_exp(optimized):
-  def f(x):
-    return np.sum(np.exp(x))
+    def f(x):
+        return np.sum(np.exp(x))
 
-  x = np.array([0.5, 1.0])
-  old_limit = sys.getrecursionlimit()
-  sys.setrecursionlimit(max(old_limit, 20000))
-  try:
-    d3 = tangent.grad(tangent.grad(tangent.grad(f, optimized=optimized),
-                                    optimized=optimized), optimized=optimized)
-    got = d3(x)
-  finally:
-    sys.setrecursionlimit(old_limit)
-  assert np.allclose(got, np.exp(x), atol=1e-2)
+    x = np.array([0.5, 1.0])
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 20000))
+    try:
+        d3 = tangent.grad(
+            tangent.grad(tangent.grad(f, optimized=optimized), optimized=optimized),
+            optimized=optimized,
+        )
+        got = d3(x)
+    finally:
+        sys.setrecursionlimit(old_limit)
+    assert np.allclose(got, np.exp(x), atol=1e-2)
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__, '--short'])
+    assert not pytest.main([__file__, '--short'])

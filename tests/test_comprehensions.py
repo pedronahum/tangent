@@ -22,6 +22,7 @@ silently mis-differentiated. (List comprehensions over dynamic iterables used
 to be lowered to an `.append()` loop, which crashed naming in return position
 and silently produced zero gradients in assignment position.)
 """
+
 import numpy as np
 import pytest
 
@@ -32,7 +33,7 @@ from tangent.errors import TangentParseError
 class TestDictComprehension:
     def test_int_keys_subscript(self):
         def f(x):
-            powers = {i: x ** i for i in range(1, 3)}
+            powers = {i: x**i for i in range(1, 3)}
             return powers[1] + powers[2]
 
         # d/dx (x + x^2) = 1 + 2x = 5 at x = 2
@@ -55,7 +56,7 @@ class TestDictComprehension:
 
     def test_forward_mode(self):
         def f(x):
-            powers = {i: x ** i for i in range(1, 3)}
+            powers = {i: x**i for i in range(1, 3)}
             return powers[1] + powers[2]
 
         df = tangent.autodiff(f, mode='forward', preserve_result=False)
@@ -72,8 +73,8 @@ class TestSetComprehension:
             return y
 
         df = tangent.grad(f)
-        assert df(2.0) == pytest.approx(4.0)   # 2 in {0..4} -> 2x
-        assert df(9.0) == pytest.approx(1.0)   # 9 not in set -> 1
+        assert df(2.0) == pytest.approx(4.0)  # 2 in {0..4} -> 2x
+        assert df(9.0) == pytest.approx(1.0)  # 9 not in set -> 1
 
     def test_membership_guard_active_elements(self):
         def f(x):
@@ -169,6 +170,7 @@ class TestUnsupportedComprehensions:
         per-iteration binding is not differentiated, silently returning zero
         gradients.
         """
+
         def f(x):
             vals = [v * 3.0 for v in x]
             return np.sum(vals)
@@ -182,6 +184,7 @@ class TestUnsupportedComprehensions:
         This form (the `listcomp` corpus entry) previously crashed naming with
         an opaque AttributeError.
         """
+
         def f(x):
             return np.sum([v * 3.0 for v in x])
 
@@ -190,6 +193,7 @@ class TestUnsupportedComprehensions:
 
     def test_dynamic_range_listcomp_rejected(self):
         """range() over a runtime bound cannot be unrolled either."""
+
         def f(x, n=3):
             vals = [x * i for i in range(n)]
             return np.sum(vals)

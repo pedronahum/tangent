@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Automatically test gradients with multiple inputs, modes and motions."""
+
 import os
 
 import numpy as np
@@ -69,73 +70,72 @@ blacklist = [f for f in funcs if f.__name__ in blacklisted]
 
 
 def pytest_addoption(parser):
-  # Only test with one input
-  parser.addoption('--short', action='store_true')
-  # Only test with all inputs
-  parser.addoption('--all', action='store_true')
-  # Restrict to certain functions by name
-  parser.addoption('--func_filter', action='store')
+    # Only test with one input
+    parser.addoption('--short', action='store_true')
+    # Only test with all inputs
+    parser.addoption('--all', action='store_true')
+    # Restrict to certain functions by name
+    parser.addoption('--func_filter', action='store')
 
 
 def pytest_generate_tests(metafunc):
-  # Parametrize the functions
-  if 'func' in metafunc.fixturenames:
-    func_filter = metafunc.config.option.func_filter
+    # Parametrize the functions
+    if 'func' in metafunc.fixturenames:
+        func_filter = metafunc.config.option.func_filter
 
-    # Test takes args, only pass funcs with same signature
-    args = tuple(
-        arg for arg in metafunc.fixturenames
-        if arg not in ('func', 'motion', 'optimized', 'preserve_result'))
-    if args:
-      func_args = []
-      for f in whitelist:
-        fc = f.__code__
-        if fc.co_varnames[:fc.co_argcount] == args:
-          func_args.append(f)
-    else:
-      func_args = funcs
+        # Test takes args, only pass funcs with same signature
+        args = tuple(
+            arg
+            for arg in metafunc.fixturenames
+            if arg not in ('func', 'motion', 'optimized', 'preserve_result')
+        )
+        if args:
+            func_args = []
+            for f in whitelist:
+                fc = f.__code__
+                if fc.co_varnames[: fc.co_argcount] == args:
+                    func_args.append(f)
+        else:
+            func_args = funcs
 
-    if func_filter:
-      func_args = [f for f in func_args if func_filter in f.__name__]
+        if func_filter:
+            func_args = [f for f in func_args if func_filter in f.__name__]
 
-    func_names = [f.__name__ for f in func_args]
-    metafunc.parametrize('func', func_args, ids=func_names)
+        func_names = [f.__name__ for f in func_args]
+        metafunc.parametrize('func', func_args, ids=func_names)
 
-  if 'motion' in metafunc.fixturenames:
-    metafunc.parametrize('motion', ('split', 'joint'))
+    if 'motion' in metafunc.fixturenames:
+        metafunc.parametrize('motion', ('split', 'joint'))
 
-  if 'optimized' in metafunc.fixturenames:
-    metafunc.parametrize('optimized', (True, False),
-                         ids=('optimized', 'unoptimized'))
+    if 'optimized' in metafunc.fixturenames:
+        metafunc.parametrize('optimized', (True, False), ids=('optimized', 'unoptimized'))
 
-  if 'preserve_result' in metafunc.fixturenames:
-    metafunc.parametrize('preserve_result', (True, False))
+    if 'preserve_result' in metafunc.fixturenames:
+        metafunc.parametrize('preserve_result', (True, False))
 
-  # Parametrize the arguments
-  short = metafunc.config.option.short
+    # Parametrize the arguments
+    short = metafunc.config.option.short
 
-  bools = [True, False]
-  for arg in ['boolean', 'boolean1', 'boolean2']:
-    if arg in metafunc.fixturenames:
-      metafunc.parametrize(arg, bools)
+    bools = [True, False]
+    for arg in ['boolean', 'boolean1', 'boolean2']:
+        if arg in metafunc.fixturenames:
+            metafunc.parametrize(arg, bools)
 
-  scalars = [2.] if short else [
-      -2., -1.5, -1., -0.5, -0.1, 0.1, 0.5, 1., 1.5, 2.
-  ]
-  for arg in 'abc':
-    if arg in metafunc.fixturenames:
-      metafunc.parametrize(arg, scalars)
+    scalars = [2.0] if short else [-2.0, -1.5, -1.0, -0.5, -0.1, 0.1, 0.5, 1.0, 1.5, 2.0]
+    for arg in 'abc':
+        if arg in metafunc.fixturenames:
+            metafunc.parametrize(arg, scalars)
 
-  integers = [1] if short else [1, 2, 3]
-  if 'n' in metafunc.fixturenames:
-    metafunc.parametrize('n', integers)
+    integers = [1] if short else [1, 2, 3]
+    if 'n' in metafunc.fixturenames:
+        metafunc.parametrize('n', integers)
 
-  vectors = [np.random.randn(i) for i in ((3,) if short else (3, 5, 10))]
-  if 'x' in metafunc.fixturenames:
-    metafunc.parametrize('x', vectors)
+    vectors = [np.random.randn(i) for i in ((3,) if short else (3, 5, 10))]
+    if 'x' in metafunc.fixturenames:
+        metafunc.parametrize('x', vectors)
 
-  square_matrices = [np.random.randn(*i) for i in (((3, 3),) if short else ((1, 1), (5, 5)))]
-  if 'sqm' in metafunc.fixturenames:
-    metafunc.parametrize('sqm', square_matrices)
+    square_matrices = [np.random.randn(*i) for i in (((3, 3),) if short else ((1, 1), (5, 5)))]
+    if 'sqm' in metafunc.fixturenames:
+        metafunc.parametrize('sqm', square_matrices)
 
-  tfe_utils.register_parametrizations(metafunc, short)
+    tfe_utils.register_parametrizations(metafunc, short)

@@ -1,6 +1,7 @@
 """
 Tests for unified optimization pipeline (Phase 4).
 """
+
 import unittest
 import tangent
 
@@ -10,6 +11,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_constant_folding_with_dce(self):
         """Test that constant folding creates opportunities for DCE."""
+
         def f(x, y):
             # Constants that get folded
             a = 2.0 * 3.0  # Will be folded to 6.0
@@ -26,6 +28,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_assignment_propagation_with_dce(self):
         """Test that assignment propagation enhances DCE."""
+
         def f(x, y):
             a = x * x
             b = a  # Single-use assignment (can be propagated)
@@ -40,6 +43,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_multi_pass_optimization(self):
         """Test that multiple optimization passes find more opportunities."""
+
         def f(x, y, z):
             # First pass: constant folding
             factor = 1.0 * 2.0  # Folds to 2.0
@@ -65,6 +69,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_unified_vs_basic_optimization(self):
         """Verify unified optimization provides better results than basic."""
+
         def f(x, y, z):
             # Complex computation
             a = x * x
@@ -91,6 +96,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_loop_optimization(self):
         """Test optimization with loops."""
+
         def f(x, y):
             result = 0.0
             for i in [1.0, 2.0, 3.0]:
@@ -113,6 +119,7 @@ class TestUnifiedOptimization(unittest.TestCase):
 
     def test_conditional_optimization(self):
         """Test optimization with conditionals."""
+
         def f(x, y, flag):
             # Constants
             c1 = 2.0 * 2.0
@@ -146,6 +153,7 @@ class TestOptimizationCorrectness(unittest.TestCase):
 
     def test_complex_function_correctness(self):
         """Test a complex function with multiple optimization opportunities."""
+
         def complex_model(x, w1, w2, w3, learning_rate, momentum):
             # Forward pass
             h1 = x * w1
@@ -163,7 +171,9 @@ class TestOptimizationCorrectness(unittest.TestCase):
             return output
 
         # Get gradient w.r.t. w1 with full optimization
-        grad_optimized = tangent.grad(complex_model, wrt=(1,), optimized=True, optimizations={'dce': True})
+        grad_optimized = tangent.grad(
+            complex_model, wrt=(1,), optimized=True, optimizations={'dce': True}
+        )
 
         # Get gradient without optimization
         grad_basic = tangent.grad(complex_model, wrt=(1,), optimized=False)
@@ -179,6 +189,7 @@ class TestOptimizationCorrectness(unittest.TestCase):
 
     def test_numerical_stability(self):
         """Verify optimizations don't affect numerical results."""
+
         def f(x, y, z):
             a = x * x + y * y
             b = a / 2.0

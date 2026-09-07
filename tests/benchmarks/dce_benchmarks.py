@@ -2,6 +2,7 @@
 Benchmark suite for Dead Code Elimination.
 Tests various scenarios where DCE should provide benefits.
 """
+
 import time
 import tracemalloc
 import tangent
@@ -53,6 +54,7 @@ class SelectiveGradientBenchmark(Benchmark):
 
     def setup(self, n_params=10):
         """Create function with many parameters (reduced to 10 for testing)."""
+
         def model(x, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10):
             # Chain computation through all parameters
             result = x
@@ -159,12 +161,8 @@ class UnusedRegularizationBenchmark(Benchmark):
     def run(self):
         grad_func = tangent.grad(self.func, wrt=(1,))  # w.r.t. w1
 
-        time_baseline = self.time_it(
-            grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight
-        )
-        mem_baseline = self.memory_it(
-            grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight
-        )
+        time_baseline = self.time_it(grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight)
+        mem_baseline = self.memory_it(grad_func, self.x, self.w1, self.w2, self.w3, self.reg_weight)
 
         self.results['baseline_time'] = time_baseline
         self.results['baseline_memory'] = mem_baseline
@@ -232,12 +230,13 @@ def run_all_benchmarks():
             results = bench.run()
             all_results[bench.name] = results
 
-            print(f"  Time: {results['baseline_time']*1000:.3f} ms")
+            print(f"  Time: {results['baseline_time'] * 1000:.3f} ms")
             print(f"  Memory: {results['baseline_memory']:.2f} MB")
             print()
         except Exception as e:
             print(f"  ERROR: {e}")
             import traceback
+
             traceback.print_exc()
             print()
 
@@ -246,10 +245,12 @@ def run_all_benchmarks():
 
 if __name__ == "__main__":
     import os
+
     results = run_all_benchmarks()
 
     # Save baseline results in the benchmarks directory
     import json
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     results_path = os.path.join(script_dir, 'baseline_results.json')
     with open(results_path, 'w') as f:

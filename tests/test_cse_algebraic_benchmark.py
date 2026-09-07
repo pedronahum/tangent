@@ -3,6 +3,7 @@ Comprehensive benchmarks for CSE + Algebraic Simplification.
 
 This tests the complete integration of symbolic optimizations with Tangent.
 """
+
 import unittest
 import tangent
 import numpy as np
@@ -14,6 +15,7 @@ class TestCSEBenchmark(unittest.TestCase):
 
     def test_redundant_computation_gradient(self):
         """Test gradient with redundant computations."""
+
         def f(x):
             # Deliberately redundant computation
             a = x * x
@@ -26,9 +28,9 @@ class TestCSEBenchmark(unittest.TestCase):
         result_no_opt = grad_f_no_opt(5.0)
 
         # WITH CSE
-        grad_f_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                        optimizations={'dce': False, 'cse': True},
-                                        verbose=2)
+        grad_f_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': False, 'cse': True}, verbose=2
+        )
         result_with_cse = grad_f_with_cse(5.0)
 
         # Results should match
@@ -39,6 +41,7 @@ class TestCSEBenchmark(unittest.TestCase):
 
     def test_product_rule_with_redundancy(self):
         """Test product rule gradient with redundant terms."""
+
         def f(x, y):
             a = x * x
             b = y * y
@@ -51,9 +54,9 @@ class TestCSEBenchmark(unittest.TestCase):
         result_no_opt = grad_f_no_opt(3.0, 4.0)
 
         # WITH CSE
-        grad_f_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                        optimizations={'dce': False, 'cse': True},
-                                        verbose=2)
+        grad_f_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': False, 'cse': True}, verbose=2
+        )
         result_with_cse = grad_f_with_cse(3.0, 4.0)
 
         # Results should match
@@ -64,6 +67,7 @@ class TestCSEBenchmark(unittest.TestCase):
 
     def test_chain_rule_redundancy(self):
         """Test chain rule gradient with common subexpressions."""
+
         def f(x):
             # f(x) = (x²)³ = x⁶
             temp = x * x
@@ -75,14 +79,14 @@ class TestCSEBenchmark(unittest.TestCase):
         result_no_opt = grad_f_no_opt(2.0)
 
         # WITH CSE
-        grad_f_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                        optimizations={'dce': False, 'cse': True},
-                                        verbose=2)
+        grad_f_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': False, 'cse': True}, verbose=2
+        )
         result_with_cse = grad_f_with_cse(2.0)
 
         # Results should match
         # d(x⁶)/dx = 6x⁵ = 6*32 = 192
-        expected = 6 * (2.0 ** 5)
+        expected = 6 * (2.0**5)
         self.assertAlmostEqual(result_no_opt, expected, places=3)
         self.assertAlmostEqual(result_with_cse, expected, places=3)
 
@@ -95,6 +99,7 @@ class TestAlgebraicBenchmark(unittest.TestCase):
 
     def test_identity_simplification(self):
         """Test simplification of identity operations."""
+
         def f(x):
             a = x * 1.0
             b = a + 0.0
@@ -105,9 +110,9 @@ class TestAlgebraicBenchmark(unittest.TestCase):
         result_no_opt = grad_f_no_opt(5.0)
 
         # WITH algebraic
-        grad_f_with_alg = tangent.grad(f, wrt=(0,), optimized=True,
-                                        optimizations={'dce': False, 'algebraic': True},
-                                        verbose=2)
+        grad_f_with_alg = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': False, 'algebraic': True}, verbose=2
+        )
         result_with_alg = grad_f_with_alg(5.0)
 
         # Results should match
@@ -118,10 +123,12 @@ class TestAlgebraicBenchmark(unittest.TestCase):
 
     def test_trig_identity_in_gradient(self):
         """Test trigonometric identity simplification."""
+
         def f(x):
             # This won't actually use sin²+cos²=1 in forward pass,
             # but we test the algebraic simplifier works
             import math
+
             a = math.sin(x) ** 2
             b = math.cos(x) ** 2
             c = a + b  # Should simplify to 1
@@ -133,9 +140,13 @@ class TestAlgebraicBenchmark(unittest.TestCase):
             result_no_opt = grad_f_no_opt(1.0)
 
             # WITH algebraic
-            grad_f_with_alg = tangent.grad(f, wrt=(0,), optimized=True,
-                                            optimizations={'dce': False, 'algebraic': True},
-                                            verbose=2)
+            grad_f_with_alg = tangent.grad(
+                f,
+                wrt=(0,),
+                optimized=True,
+                optimizations={'dce': False, 'algebraic': True},
+                verbose=2,
+            )
             result_with_alg = grad_f_with_alg(1.0)
 
             # Results should match
@@ -152,6 +163,7 @@ class TestCombinedOptimizations(unittest.TestCase):
 
     def test_all_optimizations_together(self):
         """Test all symbolic optimizations together."""
+
         def f(x, y):
             # Multiple optimization opportunities:
             # - Redundant x*x computations (CSE)
@@ -168,9 +180,13 @@ class TestCombinedOptimizations(unittest.TestCase):
         result_no_opt = grad_f_no_opt(3.0, 5.0)
 
         # WITH all optimizations
-        grad_f_optimized = tangent.grad(f, wrt=(0,), optimized=True,
-                                         optimizations={'dce': True, 'cse': True, 'algebraic': True},
-                                         verbose=2)
+        grad_f_optimized = tangent.grad(
+            f,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': True},
+            verbose=2,
+        )
         result_optimized = grad_f_optimized(3.0, 5.0)
 
         # Results should match
@@ -181,6 +197,7 @@ class TestCombinedOptimizations(unittest.TestCase):
 
     def test_ml_style_function(self):
         """Test on ML-style function."""
+
         def neural_layer(x, w1, w2):
             # Simulate a simple neural network layer
             h1 = x * w1
@@ -194,9 +211,13 @@ class TestCombinedOptimizations(unittest.TestCase):
         result_no_opt = grad_w1_no_opt(2.0, 0.5, 0.3)
 
         # WITH all optimizations
-        grad_w1_optimized = tangent.grad(neural_layer, wrt=(1,), optimized=True,
-                                          optimizations={'dce': True, 'cse': True, 'algebraic': True},
-                                          verbose=2)
+        grad_w1_optimized = tangent.grad(
+            neural_layer,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': True},
+            verbose=2,
+        )
         result_optimized = grad_w1_optimized(2.0, 0.5, 0.3)
 
         # Results should match
@@ -211,6 +232,7 @@ class TestPerformanceImpact(unittest.TestCase):
 
     def test_performance_comparison(self):
         """Compare performance with and without optimizations."""
+
         def complex_function(x):
             # Create many redundant computations
             a = x * x
@@ -230,19 +252,31 @@ class TestPerformanceImpact(unittest.TestCase):
         grad_f_no_opt = tangent.grad(complex_function, wrt=(0,), optimized=False, verbose=0)
 
         print("\n2. WITH standard optimizations:")
-        grad_f_standard = tangent.grad(complex_function, wrt=(0,), optimized=True,
-                                        optimizations={'dce': True, 'cse': False, 'algebraic': False},
-                                        verbose=0)
+        grad_f_standard = tangent.grad(
+            complex_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': False, 'algebraic': False},
+            verbose=0,
+        )
 
         print("\n3. WITH CSE only:")
-        grad_f_cse = tangent.grad(complex_function, wrt=(0,), optimized=True,
-                                   optimizations={'dce': False, 'cse': True, 'algebraic': False},
-                                   verbose=0)
+        grad_f_cse = tangent.grad(
+            complex_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': False, 'cse': True, 'algebraic': False},
+            verbose=0,
+        )
 
         print("\n4. WITH all symbolic optimizations:")
-        grad_f_all = tangent.grad(complex_function, wrt=(0,), optimized=True,
-                                   optimizations={'dce': True, 'cse': True, 'algebraic': True},
-                                   verbose=0)
+        grad_f_all = tangent.grad(
+            complex_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': True},
+            verbose=0,
+        )
 
         # Test correctness
         test_input = 3.0

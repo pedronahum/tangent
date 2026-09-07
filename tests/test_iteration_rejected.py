@@ -10,6 +10,7 @@ Iterating a *constant* collection (``for i in [0, 1, 2]``) is a legitimate fixed
 loop and is still allowed, as is ``for i in range(n)`` and iterating a NumPy
 array bound to a variable.
 """
+
 import numpy as np
 import pytest
 
@@ -116,7 +117,7 @@ class TestStillAllowedIteration:
     def test_sum_values_still_works(self):
         # sum(d.values()) is desugared before the loop check and must keep working.
         def f(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return sum(d.values())
 
         assert tangent.grad(f)(2.0) == pytest.approx(5.0)

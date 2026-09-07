@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Several imports to flatten the Tangent namespace for end users."""
+
 from __future__ import absolute_import
 import functools
 
@@ -63,19 +64,19 @@ from tangent.grads import (
     numpy_tanh,
     numpy_leaky_relu,
     numpy_elu,
-    numpy_softplus
+    numpy_softplus,
 )
 
 # Checkpointing for memory-efficient gradient computation
 from tangent.checkpointing_simple import (
     compute_checkpoint_positions,
     checkpointed_loop,
-    get_memory_savings
+    get_memory_savings,
 )
 from tangent.grad_checkpoint import (
     grad_with_checkpointing,
     estimate_checkpoint_savings,
-    should_checkpoint
+    should_checkpoint,
 )
 from tangent.checkpoint_helpers import (
     compute_optimal_checkpoints,
@@ -85,15 +86,19 @@ from tangent.checkpoint_helpers import (
     restore_checkpoint,
     estimate_memory_savings as estimate_memory_savings_helper,
     get_checkpoint_info,
-    CheckpointAwareStack
+    CheckpointAwareStack,
 )
 
 # Imported last to avoid circular imports
 from tangent.grad_util import grad, autodiff, vjp, jvp
 from tangent.errors import *
-from tangent.function_cache import (clear_cache, get_cache_stats,
-                                     reset_cache_stats, set_cache_size,
-                                     get_cache_size)
+from tangent.function_cache import (
+    clear_cache,
+    get_cache_stats,
+    reset_cache_stats,
+    set_cache_size,
+    get_cache_size,
+)
 
 # Optional backend extensions. A missing optional dependency is a normal,
 # silent condition (logged at DEBUG level on the 'tangent' logger); a backend
@@ -109,141 +114,149 @@ _backend_status = {'numpy': 'available'}
 
 
 def backend_status():
-  """Return the load status of Tangent's optional backend extensions.
+    """Return the load status of Tangent's optional backend extensions.
 
-  Returns:
-    A dict mapping backend names (e.g. 'jax', 'torch') to one of
-    'available', 'not installed', or 'broken: <error message>'.
+    Returns:
+      A dict mapping backend names (e.g. 'jax', 'torch') to one of
+      'available', 'not installed', or 'broken: <error message>'.
 
-  Missing optional backends are logged at DEBUG level at import time; to see
-  those messages, enable debug logging before importing tangent:
+    Missing optional backends are logged at DEBUG level at import time; to see
+    those messages, enable debug logging before importing tangent:
 
-      logging.getLogger('tangent').setLevel(logging.DEBUG)
-  """
-  return dict(_backend_status)
+        logging.getLogger('tangent').setLevel(logging.DEBUG)
+    """
+    return dict(_backend_status)
 
 
 def _optional_backend_failed(backend, error, requires, install_hint):
-  """Record and report a failed optional-extension import.
+    """Record and report a failed optional-extension import.
 
-  Silently logs at DEBUG level when the underlying dependency is simply not
-  installed; emits a real warning when the dependency is present but the
-  extension failed to load (broken/incompatible installation).
-  """
-  missing = []
-  for dep in requires:
-    try:
-      if _importlib_util.find_spec(dep) is None:
-        missing.append(dep)
-    except (ImportError, ValueError):
-      missing.append(dep)
-  if missing:
-    _backend_status[backend] = 'not installed'
-    _logger.debug(
-        '%s extensions not loaded (%s not installed). '
-        'Install with: pip install %s', backend, ', '.join(missing),
-        install_hint)
-  else:
-    _backend_status[backend] = f'broken: {error}'
-    _warnings.warn(
-        f'{backend} is installed but its Tangent extensions failed to load: '
-        f'{error}. Core autodiff functionality still works.')
+    Silently logs at DEBUG level when the underlying dependency is simply not
+    installed; emits a real warning when the dependency is present but the
+    extension failed to load (broken/incompatible installation).
+    """
+    missing = []
+    for dep in requires:
+        try:
+            if _importlib_util.find_spec(dep) is None:
+                missing.append(dep)
+        except (ImportError, ValueError):
+            missing.append(dep)
+    if missing:
+        _backend_status[backend] = 'not installed'
+        _logger.debug(
+            '%s extensions not loaded (%s not installed). Install with: pip install %s',
+            backend,
+            ', '.join(missing),
+            install_hint,
+        )
+    else:
+        _backend_status[backend] = f'broken: {error}'
+        _warnings.warn(
+            f'{backend} is installed but its Tangent extensions failed to load: '
+            f'{error}. Core autodiff functionality still works.'
+        )
 
 
 try:
-  from tangent.tf_extensions import *
-  _backend_status['tensorflow'] = 'available'
+    from tangent.tf_extensions import *
+
+    _backend_status['tensorflow'] = 'available'
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('tensorflow', e, ['tensorflow'], 'tensorflow')
+    _optional_backend_failed('tensorflow', e, ['tensorflow'], 'tensorflow')
 
 # JAX extensions (optional)
 try:
-  from tangent.jax_extensions import *
-  _backend_status['jax'] = 'available'
+    from tangent.jax_extensions import *
+
+    _backend_status['jax'] = 'available'
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('jax', e, ['jax'], 'jax jaxlib')
+    _optional_backend_failed('jax', e, ['jax'], 'jax jaxlib')
 
 # PyTorch extensions (optional)
 try:
-  from tangent.torch_extensions import *
-  _backend_status['torch'] = 'available'
+    from tangent.torch_extensions import *
+
+    _backend_status['torch'] = 'available'
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('torch', e, ['torch'], 'torch')
+    _optional_backend_failed('torch', e, ['torch'], 'torch')
 
 # Keras extensions (optional; work with any Keras 3 backend)
 try:
-  from tangent.keras_extensions import *
-  _backend_status['keras'] = 'available'
+    from tangent.keras_extensions import *
+
+    _backend_status['keras'] = 'available'
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('keras', e, ['keras'], 'keras')
+    _optional_backend_failed('keras', e, ['keras'], 'keras')
 
 # tinygrad extensions (optional; tinygrad's method-based tensor API)
 try:
-  from tangent.tinygrad_extensions import *
-  _backend_status['tinygrad'] = 'available'
+    from tangent.tinygrad_extensions import *
+
+    _backend_status['tinygrad'] = 'available'
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('tinygrad', e, ['tinygrad'], 'tinygrad')
+    _optional_backend_failed('tinygrad', e, ['tinygrad'], 'tinygrad')
 
 # Extended NumPy gradients (only requires numpy, so a failure here is a bug)
 try:
-  from tangent import numpy_extended
-  # Varargs concat/stack helpers referenced by generated code as tangent.<name>
-  from tangent.numpy_extended import (np_concat_seq, np_stack_seq,
-                                      np_concat_grads, np_stack_grads)
+    from tangent import numpy_extended
+
+    # Varargs concat/stack helpers referenced by generated code as tangent.<name>
+    from tangent.numpy_extended import np_concat_seq, np_stack_seq, np_concat_grads, np_stack_grads
 except (ImportError, AttributeError) as e:
-  _warnings.warn(f'Extended NumPy gradients not available: {e}')
+    _warnings.warn(f'Extended NumPy gradients not available: {e}')
 
 # Extended TensorFlow gradients
 try:
-  from tangent import tf_extended
-  # Varargs concat/stack helpers referenced by generated code as tangent.<name>
-  from tangent.tf_extended import (tf_concat_seq, tf_stack_seq,
-                                   tf_concat_grads, tf_stack_grads)
+    from tangent import tf_extended
+
+    # Varargs concat/stack helpers referenced by generated code as tangent.<name>
+    from tangent.tf_extended import tf_concat_seq, tf_stack_seq, tf_concat_grads, tf_stack_grads
 except (ImportError, AttributeError) as e:
-  if _backend_status.get('tensorflow') == 'available':
-    _warnings.warn(f'Extended TensorFlow gradients not available: {e}')
-  else:
-    _logger.debug('Extended TensorFlow gradients not loaded: %s', e)
+    if _backend_status.get('tensorflow') == 'available':
+        _warnings.warn(f'Extended TensorFlow gradients not available: {e}')
+    else:
+        _logger.debug('Extended TensorFlow gradients not loaded: %s', e)
 
 # Visualization tools (optional; require matplotlib and networkx)
 try:
-  from tangent import visualization as _visualization
-  from tangent.visualization import visualize, compare_gradients, show_gradient_code
-  if (_visualization.MATPLOTLIB_AVAILABLE and
-      _visualization.NETWORKX_AVAILABLE):
-    _backend_status['visualization'] = 'available'
-  else:
-    _backend_status['visualization'] = 'not installed'
-    _logger.debug('Visualization tools not fully available. '
-                  'Install with: pip install matplotlib networkx')
+    from tangent import visualization as _visualization
+    from tangent.visualization import visualize, compare_gradients, show_gradient_code
+
+    if _visualization.MATPLOTLIB_AVAILABLE and _visualization.NETWORKX_AVAILABLE:
+        _backend_status['visualization'] = 'available'
+    else:
+        _backend_status['visualization'] = 'not installed'
+        _logger.debug(
+            'Visualization tools not fully available. Install with: pip install matplotlib networkx'
+        )
 except (ImportError, AttributeError) as e:
-  _optional_backend_failed('visualization', e, ['matplotlib', 'networkx'],
-                           'matplotlib networkx')
+    _optional_backend_failed('visualization', e, ['matplotlib', 'networkx'], 'matplotlib networkx')
 
 
 class RemoveWith(gast.NodeTransformer):
-  """A transformer that removes `with insert_grad_of` statements."""
+    """A transformer that removes `with insert_grad_of` statements."""
 
-  def visit_With(self, node):
-    if ast_.is_insert_grad_of_statement(node):
-      return None
-    else:
-      return node
+    def visit_With(self, node):
+        if ast_.is_insert_grad_of_statement(node):
+            return None
+        else:
+            return node
 
 
 def tangent(f):
-  """A decorator which removes the `with insert_grad_of` statement.
+    """A decorator which removes the `with insert_grad_of` statement.
 
-  This allows the function to be called as usual.
+    This allows the function to be called as usual.
 
-  Args:
-    f: A function
+    Args:
+      f: A function
 
-  Returns:
-    A function with any `with insert_grad_of` context managers removed.
-  """
-  node = annotate.resolve_calls(f)
-  RemoveWith().visit(node)
-  wrapped = functools.wraps(f)(compile_.compile_function(node))
-  wrapped.tangent = f
-  return wrapped
+    Returns:
+      A function with any `with insert_grad_of` context managers removed.
+    """
+    node = annotate.resolve_calls(f)
+    RemoveWith().visit(node)
+    wrapped = functools.wraps(f)(compile_.compile_function(node))
+    wrapped.tangent = f
+    return wrapped

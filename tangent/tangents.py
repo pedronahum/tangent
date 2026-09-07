@@ -30,6 +30,7 @@ Tangents have access to the inputs and outputs of the primal. They are expected
 to contain expressions for the derivative with respect to the output. They don't
 have access to any intermediate variables from the primal.
 """
+
 from __future__ import absolute_import
 
 import math
@@ -50,29 +51,29 @@ tangent_ = grads.create_register(tangents)
 
 @tangent_(gast.Assign)
 def tassign(temp, tangent, target, value):
-  temp = value
-  tangent
-  target = temp
+    temp = value
+    tangent
+    target = temp
 
 
 @tangent_(gast.Constant)
 def tconstant(z, x):
-  d[z] = tangent.init_grad(x)
+    d[z] = tangent.init_grad(x)
 
 
 @tangent_(gast.Name)
 def tname(z, x):
-  d[z] = d[x]
+    d[z] = d[x]
 
 
 @tangent_(gast.Attribute)
 def tattr(z, x):
-  d[z] = tangent.init_grad(x)
+    d[z] = tangent.init_grad(x)
 
 
 @tangent_(gast.Subscript)
 def tsubscript(z, x, i):
-  d[z] = d[x][i]
+    d[z] = d[x][i]
 
 
 # For a reference for primitive tangents, see:
@@ -88,37 +89,37 @@ def tsubscript(z, x, i):
 
 @tangent_(gast.Add)
 def tadd(z, x, y):
-  d[z] = d[x] + d[y]
+    d[z] = d[x] + d[y]
 
 
 @tangent_(gast.Mult)
 def tmult(z, x, y):
-  d[z] = d[x] * y + x * d[y]
+    d[z] = d[x] * y + x * d[y]
 
 
 @tangent_(gast.Sub)
 def tsub(z, x, y):
-  d[z] = d[x] - d[y]
+    d[z] = d[x] - d[y]
 
 
 @tangent_(gast.Div)
 def tdiv(z, x, y):
-  d[z] = (d[x] * y - x * d[y]) / (y * y)
+    d[z] = (d[x] * y - x * d[y]) / (y * y)
 
 
 @tangent_(gast.Pow)
 def tpow(z, x, y):
-  d[z] = y * (x ** (y - 1.0)) * d[x]
+    d[z] = y * (x ** (y - 1.0)) * d[x]
 
 
 @tangent_(gast.USub)
 def tusub(z, x):
-  d[z] = -d[x]
+    d[z] = -d[x]
 
 
 @tangent_(gast.MatMult)
 def tmatmult(z, x, y):
-  d[z] = d[x] @ y + x @ d[y]
+    d[z] = d[x] @ y + x @ d[y]
 
 
 #
@@ -128,12 +129,12 @@ def tmatmult(z, x, y):
 
 @tangent_(tuple)
 def ttangent(z, x):
-  d[z] = tuple(d[x])
+    d[z] = tuple(d[x])
 
 
 @tangent_(list)
 def tlist(z, x):
-  d[z] = list(d[x])
+    d[z] = list(d[x])
 
 
 #
@@ -143,135 +144,134 @@ def tlist(z, x):
 
 @tangent_(numpy.cos)
 def tcos(z, x):
-  d[z] = -d[x] * numpy.sin(x)
+    d[z] = -d[x] * numpy.sin(x)
 
 
 @tangent_(numpy.sin)
 def tsin(z, x):
-  d[z] = d[x] * numpy.cos(x)
+    d[z] = d[x] * numpy.cos(x)
 
 
 @tangent_(numpy.tan)
 def ttan(z, x):
-  cx = numpy.cos(x)
-  d[z] = d[x] / (cx * cx)
+    cx = numpy.cos(x)
+    d[z] = d[x] / (cx * cx)
 
 
 @tangent_(numpy.cosh)
 def tcosh(z, x):
-  d[z] = d[x] * numpy.sinh(x)
+    d[z] = d[x] * numpy.sinh(x)
 
 
 @tangent_(numpy.sinh)
 def tsinh(z, x):
-  d[z] = d[x] * numpy.cosh(x)
+    d[z] = d[x] * numpy.cosh(x)
 
 
 @tangent_(numpy.tanh)
 def ttanh(z, x):
-  cx = numpy.cosh(x)
-  d[z] = d[x] / (cx * cx)
+    cx = numpy.cosh(x)
+    d[z] = d[x] / (cx * cx)
 
 
 @tangent_(numpy.arccos)
 def tarccos(z, x):
-  d[z] = -d[x] / numpy.sqrt(1.0 - x * x)
+    d[z] = -d[x] / numpy.sqrt(1.0 - x * x)
 
 
 @tangent_(numpy.arcsin)
 def tarcsin(z, x):
-  d[z] = d[x] / numpy.sqrt(1.0 - x * x)
+    d[z] = d[x] / numpy.sqrt(1.0 - x * x)
 
 
 @tangent_(numpy.arctan)
 def tarctan(z, x):
-  d[z] = d[x] / (1.0 + x * x)
+    d[z] = d[x] / (1.0 + x * x)
 
 
 @tangent_(numpy.exp)
 def texp(z, x):
-  d[z] = d[x] * z
+    d[z] = d[x] * z
 
 
 @tangent_(numpy.log)
 def tlog(z, x):
-  d[z] = d[x] / x
+    d[z] = d[x] / x
 
 
 @tangent_(numpy.sqrt)
 def tsqrt(z, x):
-  d[z] = d[x] / (2 * z)
+    d[z] = d[x] / (2 * z)
 
 
 @tangent_(numpy.dot)
 def tdot(z, x, y):
-  d[z] = numpy.dot(d[x], y) + numpy.dot(x, d[y])
+    d[z] = numpy.dot(d[x], y) + numpy.dot(x, d[y])
 
 
 @tangent_(numpy.atleast_1d)
 def tatleast_1d(z, x):
-  d[z] = numpy.atleast_1d(d[x])
+    d[z] = numpy.atleast_1d(d[x])
 
 
 @tangent_(numpy.atleast_2d)
 def tatleast_2d(z, x):
-  d[z] = numpy.atleast_2d(d[x])
+    d[z] = numpy.atleast_2d(d[x])
 
 
 @tangent_(numpy.atleast_3d)
 def tatleast_3d(z, x):
-  d[z] = numpy.atleast_3d(d[x])
+    d[z] = numpy.atleast_3d(d[x])
 
 
 @tangent_(numpy.transpose)
 def ttranspose(z, x, axes=None):
-  d[z] = numpy.transpose(d[x], axes)
+    d[z] = numpy.transpose(d[x], axes)
 
 
 @tangent_(numpy.sum)
 def tsum(y, x, axis=None, dtype=None, keepdims=False):
-  d[y] = numpy.sum(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
+    d[y] = numpy.sum(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
 
 
 @tangent_(numpy.mean)
-def tmean(
-    y, x, axis=None, dtype=None, keepdims=False):
-  d[y] = numpy.mean(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
+def tmean(y, x, axis=None, dtype=None, keepdims=False):
+    d[y] = numpy.mean(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
 
 
 @tangent_(numpy.multiply)
 def tmultiply(z, x, y):
-  d[z] = numpy.multiply(d[x], y) + numpy.multiply(x, d[y])
+    d[z] = numpy.multiply(d[x], y) + numpy.multiply(x, d[y])
 
 
 @tangent_(numpy.arange)
 def tarange(z, stop):
-  d[z] = numpy.zeros_like(z)
+    d[z] = numpy.zeros_like(z)
 
 
 @tangent_(numpy.ndim)
 def tndim(z, x):
-  d[z] = numpy.ndim(d[x])
+    d[z] = numpy.ndim(d[x])
 
 
 @tangent_(numpy.rollaxis)
 def trollaxis(z, a, axis, start=0):
-  d[z] = numpy.rollaxis(d[a], axis, start)
+    d[z] = numpy.rollaxis(d[a], axis, start)
 
 
 @tangent_(numpy.shape)
 def tshape(z, x):
-  d[z] = numpy.shape(d[x])
+    d[z] = numpy.shape(d[x])
 
 
 @tangent_(tangent.transpose_inverse_axes)
 def ttranspose_inverse_axes(z, x):
-  d[z] = tangent.transpose_inverse_axes(d[x])
+    d[z] = tangent.transpose_inverse_axes(d[x])
 
 
 @tangent_(numpy.array)
 def tarray(z, x):
-  d[z] = numpy.array(d[x])
+    d[z] = numpy.array(d[x])
 
 
 #
@@ -282,42 +282,44 @@ def tarray(z, x):
 
 @tangent_(numpy.add)
 def tadd_ufunc(z, x, y):
-  d[z] = d[x] + d[y]
+    d[z] = d[x] + d[y]
 
 
 @tangent_(numpy.subtract)
 def tsubtract(z, x, y):
-  d[z] = d[x] - d[y]
+    d[z] = d[x] - d[y]
 
 
 # numpy.divide is numpy.true_divide, so this registration covers both
 # spellings.
 @tangent_(numpy.divide)
 def tdivide(z, x, y):
-  d[z] = (d[x] * y - x * d[y]) / (y * y)
+    d[z] = (d[x] * y - x * d[y]) / (y * y)
 
 
 @tangent_(numpy.negative)
 def tnegative(z, x):
-  d[z] = -d[x]
+    d[z] = -d[x]
 
 
 @tangent_(numpy.power)
 def tpower(z, x, y):
-  # The exponent term is guarded so that an inactive exponent (zero seed)
-  # contributes exactly zero even where log(x) is undefined (x <= 0); an
-  # active exponent at x <= 0 has no defined derivative and yields nan.
-  d[z] = (y * x ** (y - 1.0) * d[x] +
-          numpy.where(numpy.equal(d[y], 0.0), 0.0,
-                      numpy.log(x) * x ** y) * d[y])
+    # The exponent term is guarded so that an inactive exponent (zero seed)
+    # contributes exactly zero even where log(x) is undefined (x <= 0); an
+    # active exponent at x <= 0 has no defined derivative and yields nan.
+    d[z] = (
+        y * x ** (y - 1.0) * d[x]
+        + numpy.where(numpy.equal(d[y], 0.0), 0.0, numpy.log(x) * x**y) * d[y]
+    )
 
 
 @tangent_(numpy.float_power)
 def tfloat_power(z, x, y):
-  # See the numpy.power tangent for the exponent-term guard.
-  d[z] = (y * x ** (y - 1.0) * d[x] +
-          numpy.where(numpy.equal(d[y], 0.0), 0.0,
-                      numpy.log(x) * x ** y) * d[y])
+    # See the numpy.power tangent for the exponent-term guard.
+    d[z] = (
+        y * x ** (y - 1.0) * d[x]
+        + numpy.where(numpy.equal(d[y], 0.0), 0.0, numpy.log(x) * x**y) * d[y]
+    )
 
 
 #
@@ -327,67 +329,67 @@ def tfloat_power(z, x, y):
 
 @tangent_(numpy.arctan2)
 def tarctan2(z, x, y):
-  d[z] = (d[x] * y - x * d[y]) / (x * x + y * y)
+    d[z] = (d[x] * y - x * d[y]) / (x * x + y * y)
 
 
 @tangent_(numpy.hypot)
 def thypot(z, x, y):
-  d[z] = (x * d[x] + y * d[y]) / z
+    d[z] = (x * d[x] + y * d[y]) / z
 
 
 @tangent_(numpy.logaddexp)
 def tlogaddexp(z, x, y):
-  d[z] = d[x] * numpy.exp(x - z) + d[y] * numpy.exp(y - z)
+    d[z] = d[x] * numpy.exp(x - z) + d[y] * numpy.exp(y - z)
 
 
 @tangent_(numpy.arcsinh)
 def tarcsinh(z, x):
-  d[z] = d[x] / numpy.sqrt(x * x + 1.0)
+    d[z] = d[x] / numpy.sqrt(x * x + 1.0)
 
 
 @tangent_(numpy.arccosh)
 def tarccosh(z, x):
-  d[z] = d[x] / numpy.sqrt(x * x - 1.0)
+    d[z] = d[x] / numpy.sqrt(x * x - 1.0)
 
 
 @tangent_(numpy.arctanh)
 def tarctanh(z, x):
-  d[z] = d[x] / (1.0 - x * x)
+    d[z] = d[x] / (1.0 - x * x)
 
 
 @tangent_(numpy.exp2)
 def texp2(z, x):
-  d[z] = d[x] * z * numpy.log(2.0)
+    d[z] = d[x] * z * numpy.log(2.0)
 
 
 @tangent_(numpy.cbrt)
 def tcbrt(z, x):
-  d[z] = d[x] / (3.0 * z * z)
+    d[z] = d[x] / (3.0 * z * z)
 
 
 @tangent_(numpy.square)
 def tsquare(z, x):
-  d[z] = 2.0 * x * d[x]
+    d[z] = 2.0 * x * d[x]
 
 
 @tangent_(numpy.maximum)
 def tmaximum(z, x, y):
-  d[z] = numpy.where(x == z, d[x], d[y])
+    d[z] = numpy.where(x == z, d[x], d[y])
 
 
 @tangent_(numpy.minimum)
 def tminimum(z, x, y):
-  d[z] = numpy.where(x == z, d[x], d[y])
+    d[z] = numpy.where(x == z, d[x], d[y])
 
 
 @tangent_(numpy.fmax)
 def tfmax(z, x, y):
-  d[z] = numpy.where(x == z, d[x], d[y])
+    d[z] = numpy.where(x == z, d[x], d[y])
 
 
 @tangent_(numpy.fmin)
 def tfmin(z, x, y):
-  d[z] = numpy.where(x == z, d[x], d[y])
+    d[z] = numpy.where(x == z, d[x], d[y])
 
 
 #
@@ -400,50 +402,47 @@ def tfmin(z, x, y):
 
 @tangent_(numpy.cumsum)
 def tcumsum(z, x, axis=None):
-  d[z] = numpy.cumsum(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+    d[z] = numpy.cumsum(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
 
 
 @tangent_(numpy.flip)
 def tflip(z, x, axis=None):
-  d[z] = numpy.flip(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+    d[z] = numpy.flip(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
 
 
 @tangent_(numpy.ravel)
 def travel(z, x):
-  d[z] = numpy.ravel(numpy.broadcast_to(d[x], numpy.shape(x)))
+    d[z] = numpy.ravel(numpy.broadcast_to(d[x], numpy.shape(x)))
 
 
 @tangent_(numpy.reshape)
 def treshape(z, x, shape):
-  d[z] = numpy.reshape(numpy.broadcast_to(d[x], numpy.shape(x)), shape)
+    d[z] = numpy.reshape(numpy.broadcast_to(d[x], numpy.shape(x)), shape)
 
 
 @tangent_(numpy.swapaxes)
 def tswapaxes(z, x, axis1, axis2):
-  d[z] = numpy.swapaxes(
-      numpy.broadcast_to(d[x], numpy.shape(x)), axis1, axis2)
+    d[z] = numpy.swapaxes(numpy.broadcast_to(d[x], numpy.shape(x)), axis1, axis2)
 
 
 @tangent_(numpy.moveaxis)
 def tmoveaxis(z, x, source, destination):
-  d[z] = numpy.moveaxis(
-      numpy.broadcast_to(d[x], numpy.shape(x)), source, destination)
+    d[z] = numpy.moveaxis(numpy.broadcast_to(d[x], numpy.shape(x)), source, destination)
 
 
 @tangent_(numpy.tile)
 def ttile(z, x, reps):
-  d[z] = numpy.tile(numpy.broadcast_to(d[x], numpy.shape(x)), reps)
+    d[z] = numpy.tile(numpy.broadcast_to(d[x], numpy.shape(x)), reps)
 
 
 @tangent_(numpy.repeat)
 def trepeat(z, x, repeats, axis=None):
-  d[z] = numpy.repeat(
-      numpy.broadcast_to(d[x], numpy.shape(x)), repeats, axis)
+    d[z] = numpy.repeat(numpy.broadcast_to(d[x], numpy.shape(x)), repeats, axis)
 
 
 @tangent_(numpy.roll)
 def troll(z, x, shift, axis=None):
-  d[z] = numpy.roll(numpy.broadcast_to(d[x], numpy.shape(x)), shift, axis)
+    d[z] = numpy.roll(numpy.broadcast_to(d[x], numpy.shape(x)), shift, axis)
 
 
 #
@@ -453,19 +452,21 @@ def troll(z, x, shift, axis=None):
 
 @tangent_(numpy.linalg.solve)
 def tsolve(z, a, b):
-  # a @ z = b  =>  da @ z + a @ dz = db  =>  dz = solve(a, db - da @ z).
-  # The tangents are broadcast to the primal shapes because forward-mode
-  # seeds arrive as scalars.
-  d[z] = numpy.linalg.solve(
-      a, numpy.broadcast_to(d[b], numpy.shape(b)) -
-      numpy.matmul(numpy.broadcast_to(d[a], numpy.shape(a)), z))
+    # a @ z = b  =>  da @ z + a @ dz = db  =>  dz = solve(a, db - da @ z).
+    # The tangents are broadcast to the primal shapes because forward-mode
+    # seeds arrive as scalars.
+    d[z] = numpy.linalg.solve(
+        a,
+        numpy.broadcast_to(d[b], numpy.shape(b))
+        - numpy.matmul(numpy.broadcast_to(d[a], numpy.shape(a)), z),
+    )
 
 
 @tangent_(numpy.linalg.norm)
 def tnorm(z, x, axis=None, keepdims=False):
-  # Default (2-norm / Frobenius) case only; `ord` is deliberately
-  # unsupported, matching the adjoint.
-  d[z] = numpy.sum(x * d[x], axis=axis, keepdims=keepdims) / z
+    # Default (2-norm / Frobenius) case only; `ord` is deliberately
+    # unsupported, matching the adjoint.
+    d[z] = numpy.sum(x * d[x], axis=axis, keepdims=keepdims) / z
 
 
 #
@@ -473,41 +474,39 @@ def tnorm(z, x, axis=None, keepdims=False):
 #
 
 # Import activation functions from grads module
-from tangent.grads import (
-    numpy_relu, numpy_sigmoid, numpy_leaky_relu, numpy_elu, numpy_softplus
-)
+from tangent.grads import numpy_relu, numpy_sigmoid, numpy_leaky_relu, numpy_elu, numpy_softplus
 
 
 @tangent_(numpy_relu)
 def trelu(y, x):
-  """Forward mode for ReLU."""
-  d[y] = d[x] * (x > 0).astype(x.dtype)
+    """Forward mode for ReLU."""
+    d[y] = d[x] * (x > 0).astype(x.dtype)
 
 
 @tangent_(numpy_sigmoid)
 def tsigmoid(y, x):
-  """Forward mode for sigmoid."""
-  # d[y] = d[x] * sigmoid(x) * (1 - sigmoid(x))
-  d[y] = d[x] * y * (1.0 - y)
+    """Forward mode for sigmoid."""
+    # d[y] = d[x] * sigmoid(x) * (1 - sigmoid(x))
+    d[y] = d[x] * y * (1.0 - y)
 
 
 @tangent_(numpy_leaky_relu)
 def tleaky_relu(y, x, alpha=0.01):
-  """Forward mode for Leaky ReLU."""
-  d[y] = d[x] * numpy.where(x > 0, 1.0, alpha)
+    """Forward mode for Leaky ReLU."""
+    d[y] = d[x] * numpy.where(x > 0, 1.0, alpha)
 
 
 @tangent_(numpy_elu)
 def telu(y, x, alpha=1.0):
-  """Forward mode for ELU."""
-  d[y] = d[x] * numpy.where(x > 0, 1.0, alpha * numpy.exp(x))
+    """Forward mode for ELU."""
+    d[y] = d[x] * numpy.where(x > 0, 1.0, alpha * numpy.exp(x))
 
 
 @tangent_(numpy_softplus)
 def tsoftplus(y, x):
-  """Forward mode for softplus."""
-  sigmoid_x = 1.0 / (1.0 + numpy.exp(-x))
-  d[y] = d[x] * sigmoid_x
+    """Forward mode for softplus."""
+    sigmoid_x = 1.0 / (1.0 + numpy.exp(-x))
+    d[y] = d[x] * sigmoid_x
 
 
 #
@@ -517,12 +516,12 @@ def tsoftplus(y, x):
 
 @tangent_(tangent.add_grad)
 def tadd_grad(z, x, y):
-  d[z] = tangent.add_grad(d[x], d[y])
+    d[z] = tangent.add_grad(d[x], d[y])
 
 
 @tangent_(tangent.init_grad)
 def tinit_grad(z, x, allow_lazy_initializer=False):
-  d[z] = tangent.init_grad(d[x], allow_lazy_initializer=False)
+    d[z] = tangent.init_grad(d[x], allow_lazy_initializer=False)
 
 
 # In these tangents the op_id is a non-differentiable tape marker (a string
@@ -531,61 +530,60 @@ def tinit_grad(z, x, allow_lazy_initializer=False):
 # leaked an undefined `d` into the generated code.
 @tangent_(tangent.push)
 def tpush(x, stack, op_id):
-  tangent.push(d[stack], d[x], op_id)
+    tangent.push(d[stack], d[x], op_id)
 
 
 @tangent_(tangent.push_stack)
 def tpush_stack(x, stack, op_id):
-  tangent.push_stack(d[stack], d[x], op_id)
+    tangent.push_stack(d[stack], d[x], op_id)
 
 
 @tangent_(tangent.pop)
 def tpop(x, stack, op_id):
-  d[x] = tangent.pop(d[stack], op_id)
+    d[x] = tangent.pop(d[stack], op_id)
 
 
 @tangent_(tangent.pop_stack)
 def tpop_stack(x, stack, op_id):
-  d[x] = tangent.pop_stack(d[stack], op_id)
+    d[x] = tangent.pop_stack(d[stack], op_id)
 
 
 @tangent_(tangent.unbroadcast)
 def tunbroadcast(z, x, y):
-  d[z] = tangent.unbroadcast(d[x], d[y])
+    d[z] = tangent.unbroadcast(d[x], d[y])
 
 
 @tangent_(tangent.Stack)
 def tstack(z):
-  d[z] = tangent.Stack()
+    d[z] = tangent.Stack()
 
 
 @tangent_(tangent.astype)
 def tastype(z, x, y):
-  d[z] = tangent.astype(d[x], d[y])
+    d[z] = tangent.astype(d[x], d[y])
 
 
 @tangent_(tangent.match_seed)
 def tmatch_seed(z, primal, seed):
-  # match_seed only reads the *structure* of `primal` and is linear in
-  # `seed`, so its JVP is the same reconciliation applied to the seed's
-  # tangent (identity when the structures already match).
-  d[z] = tangent.match_seed(primal, d[seed])
+    # match_seed only reads the *structure* of `primal` and is linear in
+    # `seed`, so its JVP is the same reconciliation applied to the seed's
+    # tangent (identity when the structures already match).
+    d[z] = tangent.match_seed(primal, d[seed])
 
 
 @tangent_(tangent.match_seed_grad)
 def tmatch_seed_grad(z, seed, dz):
-  # Linear in dz: the JVP is the same map applied to dz's tangent.
-  d[z] = tangent.match_seed_grad(seed, d[dz])
+    # Linear in dz: the JVP is the same map applied to dz's tangent.
+    d[z] = tangent.match_seed_grad(seed, d[dz])
 
 
 @tangent_(tangent.unreduce)
 def tunreduce(z, array, shape, axis, keepdims):
-  # The shape argument is non-differentiable metadata: the tangent is the
-  # same unreduce applied to the array's tangent, using the primal shape.
-  # Passing d[shape] (zeros) would reshape the tangent to a zero-sized
-  # array.
-  d[z] = tangent.unreduce(d[array], shape, axis, keepdims)
-
+    # The shape argument is non-differentiable metadata: the tangent is the
+    # same unreduce applied to the array's tangent, using the primal shape.
+    # Passing d[shape] (zeros) would reshape the tangent to a zero-sized
+    # array.
+    d[z] = tangent.unreduce(d[array], shape, axis, keepdims)
 
 
 # Until we've written the adjoints of all functions we want to support,
@@ -594,4 +592,5 @@ def tunreduce(z, array, shape, axis, keepdims):
 # tangent functions
 
 UNIMPLEMENTED_TANGENTS = grads.get_module_functions(
-    (numpy, numpy.fft, numpy.linalg, numpy.random, math)) - set(tangents)
+    (numpy, numpy.fft, numpy.linalg, numpy.random, math)
+) - set(tangents)

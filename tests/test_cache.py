@@ -129,7 +129,7 @@ def test_cache_preserve_result_flag():
     assert isinstance(result1, (int, float))
     assert isinstance(result2, tuple)
     assert result2[0] == result1  # gradient should match
-    assert result2[1] == 9.0      # original result
+    assert result2[1] == 9.0  # original result
 
 
 def test_clear_cache():
@@ -164,8 +164,10 @@ def test_cache_size_limit():
 
     def make_func(n):
         """Create a unique function."""
+
         def f(x):
-            return x ** n
+            return x**n
+
         # Make function unique by modifying its name
         f.__name__ = f'f{n}'
         return f
@@ -309,8 +311,8 @@ def test_cache_correctness():
     # Test multiple times (should use cached version)
     for _ in range(5):
         assert abs(df(2.0) - 14.0) < 0.001  # 6*2 + 2 = 14
-        assert abs(df(0.0) - 2.0) < 0.001   # 6*0 + 2 = 2
-        assert abs(df(1.0) - 8.0) < 0.001   # 6*1 + 2 = 8
+        assert abs(df(0.0) - 2.0) < 0.001  # 6*0 + 2 = 2
+        assert abs(df(1.0) - 8.0) < 0.001  # 6*1 + 2 = 8
 
 
 def test_cache_distinct_optimizations():

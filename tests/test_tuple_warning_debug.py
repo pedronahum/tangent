@@ -1,4 +1,5 @@
 """Debug tuple return warning."""
+
 import warnings
 import tangent
 
@@ -7,7 +8,7 @@ def test_basic():
     """Test basic tuple return."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     print("Creating gradient function...")
     warnings.simplefilter("always")

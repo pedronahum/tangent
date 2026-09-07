@@ -1,14 +1,10 @@
 """
 Unit tests for Dead Code Elimination.
 """
+
 import unittest
 import tangent
-from tangent.optimizations.dce import (
-    DefUseAnalyzer,
-    BackwardSlicer,
-    GradientDCE,
-    VariableCollector
-)
+from tangent.optimizations.dce import DefUseAnalyzer, BackwardSlicer, GradientDCE, VariableCollector
 import ast
 import gast
 
@@ -180,6 +176,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_selective_gradient(self):
         """Test gradient w.r.t. one variable eliminates others."""
+
         def f(x, y, z):
             a = x * x
             b = y * y
@@ -195,6 +192,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_unused_computation(self):
         """Test that unused computations can be eliminated."""
+
         def f(x, y):
             used = x * x
             unused = y * y * y  # Never used!
@@ -209,6 +207,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_dce_disabled(self):
         """Test that DCE can be disabled."""
+
         def f(x, y):
             a = x * x
             b = y * y
@@ -221,6 +220,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_correctness_preserved(self):
         """Test that DCE doesn't break correctness."""
+
         def f(x, y, z):
             # Complex function
             a = x * y

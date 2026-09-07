@@ -3,6 +3,7 @@ Performance profiling for CSE + Algebraic Simplification optimizations.
 
 Measures actual execution time speedups on representative gradient functions.
 """
+
 import unittest
 import tangent
 import numpy as np
@@ -41,7 +42,7 @@ def benchmark_function(func, *args, iterations=1000, warmup=100):
         'std': statistics.stdev(times) if len(times) > 1 else 0,
         'min': min(times),
         'max': max(times),
-        'result': result
+        'result': result,
     }
 
 
@@ -50,6 +51,7 @@ class TestPerformanceProfiling(unittest.TestCase):
 
     def test_redundant_computation_speedup(self):
         """Measure speedup from CSE on redundant computations."""
+
         def f(x):
             # Many redundant x*x computations
             a = x * x
@@ -65,12 +67,12 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Generate gradients
         grad_no_opt = tangent.grad(f, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(f, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': False}, verbose=0
+        )
+        grad_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': True}, verbose=0
+        )
 
         # Benchmark
         test_input = 3.5
@@ -88,15 +90,20 @@ class TestPerformanceProfiling(unittest.TestCase):
         speedup_cse_vs_standard = stats_standard['mean'] / stats_with_cse['mean']
 
         print(f"\nNo optimization:       {stats_no_opt['mean']:.2f} ± {stats_no_opt['std']:.2f} μs")
-        print(f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
-              f"(speedup: {speedup_standard:.2f}×)")
-        print(f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
-              f"(speedup: {speedup_cse:.2f}×)")
+        print(
+            f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
+            f"(speedup: {speedup_standard:.2f}×)"
+        )
+        print(
+            f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
+            f"(speedup: {speedup_cse:.2f}×)"
+        )
         print(f"\nCSE improvement over standard: {speedup_cse_vs_standard:.2f}×")
         print("=" * 70)
 
     def test_complex_expression_speedup(self):
         """Measure speedup on complex expressions with redundancy."""
+
         def f(x, y):
             # Complex expression with shared subexpressions
             a = x * x + y * y
@@ -111,12 +118,12 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Generate gradients
         grad_no_opt = tangent.grad(f, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(f, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': False}, verbose=0
+        )
+        grad_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': True}, verbose=0
+        )
 
         # Benchmark
         test_inputs = (2.5, 3.5)
@@ -134,15 +141,20 @@ class TestPerformanceProfiling(unittest.TestCase):
         speedup_cse_vs_standard = stats_standard['mean'] / stats_with_cse['mean']
 
         print(f"\nNo optimization:       {stats_no_opt['mean']:.2f} ± {stats_no_opt['std']:.2f} μs")
-        print(f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
-              f"(speedup: {speedup_standard:.2f}×)")
-        print(f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
-              f"(speedup: {speedup_cse:.2f}×)")
+        print(
+            f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
+            f"(speedup: {speedup_standard:.2f}×)"
+        )
+        print(
+            f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
+            f"(speedup: {speedup_cse:.2f}×)"
+        )
         print(f"\nCSE improvement over standard: {speedup_cse_vs_standard:.2f}×")
         print("=" * 70)
 
     def test_neural_network_layer_speedup(self):
         """Measure speedup on neural network-style function."""
+
         def neural_layer(x, w1, w2, w3):
             # Simulates a 3-layer neural network with square activations
             h1 = x * w1
@@ -162,15 +174,27 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Generate gradients w.r.t. first weight
         grad_no_opt = tangent.grad(neural_layer, wrt=(1,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(neural_layer, wrt=(1,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(neural_layer, wrt=(1,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
-        grad_all_opts = tangent.grad(neural_layer, wrt=(1,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True, 'algebraic': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            neural_layer,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': False},
+            verbose=0,
+        )
+        grad_with_cse = tangent.grad(
+            neural_layer,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True},
+            verbose=0,
+        )
+        grad_all_opts = tangent.grad(
+            neural_layer,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': True},
+            verbose=0,
+        )
 
         # Benchmark
         test_inputs = (2.0, 0.5, 0.3, 0.7)
@@ -192,18 +216,25 @@ class TestPerformanceProfiling(unittest.TestCase):
         speedup_all_vs_cse = stats_with_cse['mean'] / stats_all_opts['mean']
 
         print(f"\nNo optimization:       {stats_no_opt['mean']:.2f} ± {stats_no_opt['std']:.2f} μs")
-        print(f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
-              f"(speedup: {speedup_standard:.2f}×)")
-        print(f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
-              f"(speedup: {speedup_cse:.2f}×)")
-        print(f"All optimizations:     {stats_all_opts['mean']:.2f} ± {stats_all_opts['std']:.2f} μs  "
-              f"(speedup: {speedup_all:.2f}×)")
+        print(
+            f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
+            f"(speedup: {speedup_standard:.2f}×)"
+        )
+        print(
+            f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
+            f"(speedup: {speedup_cse:.2f}×)"
+        )
+        print(
+            f"All optimizations:     {stats_all_opts['mean']:.2f} ± {stats_all_opts['std']:.2f} μs  "
+            f"(speedup: {speedup_all:.2f}×)"
+        )
         print(f"\nCSE improvement over standard: {speedup_cse_vs_standard:.2f}×")
         print(f"Algebraic improvement over CSE: {speedup_all_vs_cse:.2f}×")
         print("=" * 70)
 
     def test_polynomial_gradient_speedup(self):
         """Measure speedup on polynomial gradient."""
+
         def f(x):
             # Polynomial: x^2 + 2x^3 + 3x^4
             x2 = x * x
@@ -217,12 +248,12 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Generate gradients
         grad_no_opt = tangent.grad(f, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(f, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': False}, verbose=0
+        )
+        grad_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': True}, verbose=0
+        )
 
         # Benchmark
         test_input = 2.0
@@ -232,7 +263,7 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Verify correctness
         # d/dx(x² + 2x³ + 3x⁴) = 2x + 6x² + 12x³
-        expected = 2*2.0 + 6*(2.0**2) + 12*(2.0**3)
+        expected = 2 * 2.0 + 6 * (2.0**2) + 12 * (2.0**3)
         self.assertAlmostEqual(stats_no_opt['result'], expected, places=3)
         self.assertAlmostEqual(stats_standard['result'], expected, places=3)
         self.assertAlmostEqual(stats_with_cse['result'], expected, places=3)
@@ -243,10 +274,14 @@ class TestPerformanceProfiling(unittest.TestCase):
         speedup_cse_vs_standard = stats_standard['mean'] / stats_with_cse['mean']
 
         print(f"\nNo optimization:       {stats_no_opt['mean']:.2f} ± {stats_no_opt['std']:.2f} μs")
-        print(f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
-              f"(speedup: {speedup_standard:.2f}×)")
-        print(f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
-              f"(speedup: {speedup_cse:.2f}×)")
+        print(
+            f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
+            f"(speedup: {speedup_standard:.2f}×)"
+        )
+        print(
+            f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
+            f"(speedup: {speedup_cse:.2f}×)"
+        )
         print(f"\nCSE improvement over standard: {speedup_cse_vs_standard:.2f}×")
         print(f"Expected gradient value: {expected:.2f}")
         print(f"Actual gradient value:   {stats_with_cse['result']:.2f}")
@@ -254,6 +289,7 @@ class TestPerformanceProfiling(unittest.TestCase):
 
     def test_product_rule_chain_speedup(self):
         """Measure speedup on product rule with chain rule."""
+
         def f(x, y, z):
             # f = (x*y) * (y*z) * (x*z)
             xy = x * y
@@ -267,12 +303,12 @@ class TestPerformanceProfiling(unittest.TestCase):
 
         # Generate gradients w.r.t. x
         grad_no_opt = tangent.grad(f, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(f, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(f, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': False}, verbose=0
+        )
+        grad_with_cse = tangent.grad(
+            f, wrt=(0,), optimized=True, optimizations={'dce': True, 'cse': True}, verbose=0
+        )
 
         # Benchmark
         test_inputs = (2.0, 3.0, 4.0)
@@ -290,10 +326,14 @@ class TestPerformanceProfiling(unittest.TestCase):
         speedup_cse_vs_standard = stats_standard['mean'] / stats_with_cse['mean']
 
         print(f"\nNo optimization:       {stats_no_opt['mean']:.2f} ± {stats_no_opt['std']:.2f} μs")
-        print(f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
-              f"(speedup: {speedup_standard:.2f}×)")
-        print(f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
-              f"(speedup: {speedup_cse:.2f}×)")
+        print(
+            f"Standard (DCE):        {stats_standard['mean']:.2f} ± {stats_standard['std']:.2f} μs  "
+            f"(speedup: {speedup_standard:.2f}×)"
+        )
+        print(
+            f"With CSE:              {stats_with_cse['mean']:.2f} ± {stats_with_cse['std']:.2f} μs  "
+            f"(speedup: {speedup_cse:.2f}×)"
+        )
         print(f"\nCSE improvement over standard: {speedup_cse_vs_standard:.2f}×")
         print("=" * 70)
 
@@ -309,9 +349,12 @@ class TestOverallSummary(unittest.TestCase):
 
         # Define test functions
         test_cases = [
-            ("Redundant x*x (5×)", lambda x: sum([x*x for _ in range(5)])),
-            ("Complex expression", lambda x, y: (x*x + y*y) * (x*x + y*y) + (x*x*y) * (x*x*y)),
-            ("Polynomial x² + 2x³ + 3x⁴", lambda x: x*x + 2.0*x*x*x + 3.0*x*x*x*x),
+            ("Redundant x*x (5×)", lambda x: sum([x * x for _ in range(5)])),
+            (
+                "Complex expression",
+                lambda x, y: (x * x + y * y) * (x * x + y * y) + (x * x * y) * (x * x * y),
+            ),
+            ("Polynomial x² + 2x³ + 3x⁴", lambda x: x * x + 2.0 * x * x * x + 3.0 * x * x * x * x),
         ]
 
         results = []
@@ -319,46 +362,67 @@ class TestOverallSummary(unittest.TestCase):
         for name, func in test_cases:
             # Determine number of parameters
             import inspect
+
             n_params = len(inspect.signature(func).parameters)
             test_inputs = [2.5] * n_params if n_params > 1 else (2.5,)
 
             try:
                 # Generate gradients
-                grad_standard = tangent.grad(func, wrt=(0,), optimized=True,
-                                              optimizations={'dce': True, 'cse': False},
-                                              verbose=0)
-                grad_with_cse = tangent.grad(func, wrt=(0,), optimized=True,
-                                               optimizations={'dce': True, 'cse': True},
-                                               verbose=0)
+                grad_standard = tangent.grad(
+                    func,
+                    wrt=(0,),
+                    optimized=True,
+                    optimizations={'dce': True, 'cse': False},
+                    verbose=0,
+                )
+                grad_with_cse = tangent.grad(
+                    func,
+                    wrt=(0,),
+                    optimized=True,
+                    optimizations={'dce': True, 'cse': True},
+                    verbose=0,
+                )
 
                 # Benchmark
-                stats_standard = benchmark_function(grad_standard, *test_inputs, iterations=500, warmup=50)
-                stats_with_cse = benchmark_function(grad_with_cse, *test_inputs, iterations=500, warmup=50)
+                stats_standard = benchmark_function(
+                    grad_standard, *test_inputs, iterations=500, warmup=50
+                )
+                stats_with_cse = benchmark_function(
+                    grad_with_cse, *test_inputs, iterations=500, warmup=50
+                )
 
                 # Calculate speedup
                 speedup = stats_standard['mean'] / stats_with_cse['mean']
 
-                results.append({
-                    'name': name,
-                    'standard_time': stats_standard['mean'],
-                    'cse_time': stats_with_cse['mean'],
-                    'speedup': speedup
-                })
+                results.append(
+                    {
+                        'name': name,
+                        'standard_time': stats_standard['mean'],
+                        'cse_time': stats_with_cse['mean'],
+                        'speedup': speedup,
+                    }
+                )
             except Exception as e:
                 print(f"⚠ Skipped {name}: {e}")
 
         # Print summary table
-        print("\n{:<30} {:>15} {:>15} {:>12}".format("Test Case", "Standard (μs)", "CSE (μs)", "Speedup"))
+        print(
+            "\n{:<30} {:>15} {:>15} {:>12}".format(
+                "Test Case", "Standard (μs)", "CSE (μs)", "Speedup"
+            )
+        )
         print("-" * 70)
         for r in results:
-            print("{:<30} {:>15.2f} {:>15.2f} {:>12.2f}×".format(
-                r['name'], r['standard_time'], r['cse_time'], r['speedup']))
+            print(
+                "{:<30} {:>15.2f} {:>15.2f} {:>12.2f}×".format(
+                    r['name'], r['standard_time'], r['cse_time'], r['speedup']
+                )
+            )
 
         if results:
             avg_speedup = statistics.mean([r['speedup'] for r in results])
             print("-" * 70)
-            print("{:<30} {:>15} {:>15} {:>12.2f}×".format(
-                "AVERAGE", "", "", avg_speedup))
+            print("{:<30} {:>15} {:>15} {:>12.2f}×".format("AVERAGE", "", "", avg_speedup))
 
         print("=" * 70)
         print("\nKEY FINDINGS:")

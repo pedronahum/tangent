@@ -21,7 +21,7 @@ from tangent.checkpointing_simple import (
     compute_checkpoint_positions,
     checkpointed_loop,
     get_memory_savings,
-    _copy_state
+    _copy_state,
 )
 
 
@@ -75,6 +75,7 @@ class TestCheckpointedLoop:
 
     def test_simple_loop(self):
         """Test basic checkpointed loop execution."""
+
         def step_func(x):
             return x * 1.1 + 0.1
 
@@ -94,6 +95,7 @@ class TestCheckpointedLoop:
 
     def test_nonlinear_function(self):
         """Test with nonlinear function (tanh)."""
+
         def step_func(x):
             return np.tanh(x * 0.9 + 0.1)
 
@@ -134,6 +136,7 @@ class TestCheckpointedLoop:
 
     def test_default_num_checkpoints(self):
         """Test default checkpoint count (sqrt(n))."""
+
         def step_func(x):
             return x * 1.1
 
@@ -146,6 +149,7 @@ class TestCheckpointedLoop:
 
     def test_checkpoint_positions_correct(self):
         """Test that checkpoints are saved at computed positions."""
+
         def step_func(x):
             return x + 1.0
 
@@ -276,6 +280,7 @@ class TestEdgeCases:
 
     def test_zero_length_sequence(self):
         """Test with zero-length sequence."""
+
         def step_func(x):
             return x + 1.0
 
@@ -288,6 +293,7 @@ class TestEdgeCases:
 
     def test_single_step(self):
         """Test with single step."""
+
         def step_func(x):
             return x * 2.0
 
@@ -298,6 +304,7 @@ class TestEdgeCases:
 
     def test_very_long_sequence(self):
         """Test with very long sequence."""
+
         def step_func(x):
             return x * 0.999  # Decay to prevent overflow
 
@@ -321,7 +328,7 @@ def run_all_tests():
         TestCheckpointedLoop,
         TestMemoryUsage,
         TestStateCopying,
-        TestEdgeCases
+        TestEdgeCases,
     ]
 
     total_passed = 0

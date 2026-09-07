@@ -12,6 +12,7 @@ These tests differentiate twice in both optimized and unoptimized modes (the
 the push/pop operations, which is what exercises the tape adjoints) and check
 the result against analytic second derivatives.
 """
+
 import math
 
 import numpy as np
@@ -26,14 +27,14 @@ def _gradgrad(f, optimized):
 
 def test_second_derivative_cubic(optimized):
     def f(x):
-        return x ** 3
+        return x**3
 
     assert _gradgrad(f, optimized)(2.0) == pytest.approx(12.0)
 
 
 def test_second_derivative_quartic(optimized):
     def f(x):
-        return x ** 4
+        return x**4
 
     # d2/dx2 x^4 = 12 x^2 = 48 at x = 2
     assert _gradgrad(f, optimized)(2.0) == pytest.approx(48.0)
@@ -49,7 +50,7 @@ def test_second_derivative_tanh(optimized):
 
 def test_second_derivative_product_of_powers(optimized):
     def f(x):
-        return x ** 2 * x  # x^3
+        return x**2 * x  # x^3
 
     assert _gradgrad(f, optimized)(3.0) == pytest.approx(18.0)  # 6x
 

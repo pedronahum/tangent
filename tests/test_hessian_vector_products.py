@@ -29,105 +29,103 @@ import tfe_utils
 # provide the name `tf` (the TensorFlow module), so the import must use this
 # exact name. The TF fixture is called tf_mod to avoid shadowing it.
 try:
-  import tensorflow as tf
+    import tensorflow as tf
 except ImportError:
-  tf = None
+    tf = None
+
 
 @pytest.fixture
 def tf_mod():
-  try:
-    import tensorflow as tf
-    return tf
-  except ImportError:
-    pytest.skip("TensorFlow not installed")
+    try:
+        import tensorflow as tf
+
+        return tf
+    except ImportError:
+        pytest.skip("TensorFlow not installed")
 
 
 # This test function broke HVPs several times
 # during development, so we're using it as a unit test.
 def f_straightline(x):
-  a = x * x * x
-  b = a * x**2.0
-  return np.sum(b)
+    a = x * x * x
+    b = a * x**2.0
+    return np.sum(b)
 
 
 def cube(a):
-  b = a * a * a
-  return b
+    b = a * a * a
+    return b
 
 
 def f_calltree(x):
-  a = cube(x)
-  b = a * x**2.0
-  return np.sum(b)
+    a = cube(x)
+    b = a * x**2.0
+    return np.sum(b)
 
 
 def tf_straightline(x):
-  a = x * x * x
-  b = a * x ** 2.0
-  return tf.reduce_sum(b)
+    a = x * x * x
+    b = a * x**2.0
+    return tf.reduce_sum(b)
 
 
 def _test_hvp(func, optimized):
-  np.random.seed(0)
-  a = np.random.normal(scale=1, size=(300,)).astype('float32')
-  v = a.ravel()
+    np.random.seed(0)
+    a = np.random.normal(scale=1, size=(300,)).astype('float32')
+    v = a.ravel()
 
-  modes = ['forward', 'reverse']
-  for mode1 in modes:
-    for mode2 in modes:
-      if mode1 == mode2 == 'forward':
-        continue
-      df = tangent.autodiff(
-          func,
-          mode=mode1,
-          motion='joint',
-          optimized=optimized,
-          check_dims=False)
-      ddf = tangent.autodiff(
-          df, mode=mode2, motion='joint', optimized=optimized, check_dims=False)
-      dx = ddf(a, 1, v)
-      hvp_ag = hessian_vector_product(func)
-      dx_ag = hvp_ag(a, v)
-      assert np.allclose(dx, dx_ag)
+    modes = ['forward', 'reverse']
+    for mode1 in modes:
+        for mode2 in modes:
+            if mode1 == mode2 == 'forward':
+                continue
+            df = tangent.autodiff(
+                func, mode=mode1, motion='joint', optimized=optimized, check_dims=False
+            )
+            ddf = tangent.autodiff(
+                df, mode=mode2, motion='joint', optimized=optimized, check_dims=False
+            )
+            dx = ddf(a, 1, v)
+            hvp_ag = hessian_vector_product(func)
+            dx_ag = hvp_ag(a, v)
+            assert np.allclose(dx, dx_ag)
 
 
 def _test_tf_hvp(func, optimized, tf):
-  # TF 2.x: tf.random_normal → tf.random.normal
-  try:
-    a = tf.random.normal(shape=(300,))
-  except AttributeError:
-    a = tf.random_normal(shape=(300,))  # Fallback for TF 1.x
-  v = tf.reshape(a, shape=(-1,))
+    # TF 2.x: tf.random_normal → tf.random.normal
+    try:
+        a = tf.random.normal(shape=(300,))
+    except AttributeError:
+        a = tf.random_normal(shape=(300,))  # Fallback for TF 1.x
+    v = tf.reshape(a, shape=(-1,))
 
-  modes = ['forward', 'reverse']
-  for mode1 in modes:
-    for mode2 in modes:
-      if mode1 == mode2 == 'forward':
-        continue
-      df = tangent.autodiff(
-          func,
-          mode=mode1,
-          motion='joint',
-          optimized=optimized,
-          check_dims=False)
-      ddf = tangent.autodiff(
-          df, mode=mode2, motion='joint', optimized=optimized, check_dims=False)
-      dx = ddf(a, tf.constant(1.0), v)
-      # We just ensure it computes something in this case.
-      assert dx.shape == a.shape
+    modes = ['forward', 'reverse']
+    for mode1 in modes:
+        for mode2 in modes:
+            if mode1 == mode2 == 'forward':
+                continue
+            df = tangent.autodiff(
+                func, mode=mode1, motion='joint', optimized=optimized, check_dims=False
+            )
+            ddf = tangent.autodiff(
+                df, mode=mode2, motion='joint', optimized=optimized, check_dims=False
+            )
+            dx = ddf(a, tf.constant(1.0), v)
+            # We just ensure it computes something in this case.
+            assert dx.shape == a.shape
 
 
 def test_hvp_complex_tf(optimized, tf_mod):
-  _test_tf_hvp(tf_straightline, optimized, tf_mod)
+    _test_tf_hvp(tf_straightline, optimized, tf_mod)
 
 
 def test_hvp_straightline(optimized):
-  _test_hvp(f_straightline, optimized)
+    _test_hvp(f_straightline, optimized)
 
 
 def test_hvp_calltree(optimized):
-  _test_hvp(f_calltree, optimized)
+    _test_hvp(f_calltree, optimized)
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__, '--short'])
+    assert not pytest.main([__file__, '--short'])

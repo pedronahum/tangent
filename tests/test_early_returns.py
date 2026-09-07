@@ -17,6 +17,7 @@ Returns at the tail of if/else branches, fall-through returns, elif chains, and
 nested conditionals are supported. Returns inside a loop require early loop exit
 (unsupported) and are rejected with a clear error.
 """
+
 import pytest
 
 import tangent
@@ -32,7 +33,7 @@ class TestEarlyReturns:
                 return x * 3.0
 
         df = tangent.grad(f)
-        assert df(2.0) == pytest.approx(4.0)   # x>0 -> 2x
+        assert df(2.0) == pytest.approx(4.0)  # x>0 -> 2x
         assert df(-2.0) == pytest.approx(3.0)  # else -> 3
 
     def test_if_return_fallthrough(self):
@@ -54,7 +55,7 @@ class TestEarlyReturns:
 
         df = tangent.grad(f)
         assert df(3.0) == pytest.approx(12.0)  # y*x = 2x^2 -> 4x
-        assert df(6.0) == pytest.approx(2.0)   # y = 2x -> 2
+        assert df(6.0) == pytest.approx(2.0)  # y = 2x -> 2
 
     def test_elif_chain(self):
         def f(x):

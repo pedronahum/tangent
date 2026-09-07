@@ -12,6 +12,7 @@ Following the __wrapped__ chain for both resolution and namespace assembly fixes
 grad-of-grad for scalar functions. (Second derivatives of array-valued
 functions remain limited by a separate, pre-existing issue.)
 """
+
 import math
 
 import numpy as np
@@ -27,7 +28,7 @@ def _gradgrad(f):
 class TestScalarSecondDerivatives:
     def test_cubic(self):
         def f(x):
-            return x ** 3
+            return x**3
 
         # d2/dx2 x^3 = 6x = 12 at x = 2
         assert _gradgrad(f)(2.0) == pytest.approx(12.0)
@@ -40,7 +41,7 @@ class TestScalarSecondDerivatives:
 
     def test_polynomial(self):
         def f(x):
-            return x ** 4 + 2.0 * x ** 2
+            return x**4 + 2.0 * x**2
 
         # 12x^2 + 4 = 52 at x = 2
         assert _gradgrad(f)(2.0) == pytest.approx(52.0)

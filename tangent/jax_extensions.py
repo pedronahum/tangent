@@ -32,6 +32,7 @@ Example:
     df = tangent.grad(f)
     gradient = df(jnp.array([1.0, 2.0, 3.0]))
 """
+
 from __future__ import absolute_import
 
 from numbers import Number
@@ -88,13 +89,25 @@ register_shape_function(ArrayType, shape_as_list)
 
 # Register non-differentiable functions (shape queries, constructors, etc.)
 non_differentiable.register_non_differentiable_functions(
-    jnp.shape, jnp.size, jnp.ndim,
-    jnp.zeros, jnp.ones, jnp.empty,
-    jnp.zeros_like, jnp.ones_like, jnp.empty_like,
-    jnp.full, jnp.full_like,
-    jnp.eye, jnp.identity,
-    jnp.arange, jnp.linspace, jnp.logspace,
-    size, shape_as_list, dtype
+    jnp.shape,
+    jnp.size,
+    jnp.ndim,
+    jnp.zeros,
+    jnp.ones,
+    jnp.empty,
+    jnp.zeros_like,
+    jnp.ones_like,
+    jnp.empty_like,
+    jnp.full,
+    jnp.full_like,
+    jnp.eye,
+    jnp.identity,
+    jnp.arange,
+    jnp.linspace,
+    jnp.logspace,
+    size,
+    shape_as_list,
+    dtype,
 )
 
 # Register gradient initializers
@@ -200,6 +213,7 @@ except ValueError as e:
     if "already mapped" not in str(e):
         raise
 
+
 # JAX-specific unbroadcast and unreduce functions
 def jax_unbroadcast_to(array, shape):
     """Reverse the broadcasting operation for JAX arrays."""
@@ -245,6 +259,7 @@ except (AttributeError, KeyError):
 # Reverse-mode (adjoint) gradient definitions
 # ============================================================================
 
+
 # Basic arithmetic operations
 @adjoint(jnp.add)
 def adjoint_add(z, x, y):
@@ -271,14 +286,14 @@ def adjoint_multiply(z, x, y):
 def adjoint_divide(z, x, y):
     """Adjoint for jnp.divide: ∂L/∂x = ∂L/∂z/y, ∂L/∂y = -x·∂L/∂z/y²"""
     d[x] = tangent.unbroadcast(d[z] / y, x)
-    d[y] = tangent.unbroadcast(-d[z] * x / (y ** 2), y)
+    d[y] = tangent.unbroadcast(-d[z] * x / (y**2), y)
 
 
 @adjoint(jnp.true_divide)
 def adjoint_true_divide(z, x, y):
     """Adjoint for jnp.true_divide (same as divide)"""
     d[x] = tangent.unbroadcast(d[z] / y, x)
-    d[y] = tangent.unbroadcast(-d[z] * x / (y ** 2), y)
+    d[y] = tangent.unbroadcast(-d[z] * x / (y**2), y)
 
 
 @adjoint(jnp.power)
@@ -496,8 +511,8 @@ def adjoint_take(y, x, indices, axis=None):
     """Adjoint for jnp.take: scatter the gradient back to the indexed
     positions. Only the axis=None (flattened-index) form is supported."""
     d[x] = jnp.reshape(
-        jnp.zeros_like(jnp.ravel(x)).at[jnp.ravel(indices)].add(
-            jnp.ravel(d[y])), x.shape)
+        jnp.zeros_like(jnp.ravel(x)).at[jnp.ravel(indices)].add(jnp.ravel(d[y])), x.shape
+    )
 
 
 # Concatenation and stacking.
@@ -507,6 +522,7 @@ def adjoint_take(y, x, indices, axis=None):
 # concat_desugar rewrites list-literal calls into the varargs helpers below
 # (tangent.concat_seq / tangent.stack_seq), which carry varargs adjoints
 # modelled on the numpy.broadcast_arrays adjoint.
+
 
 def concat_seq(axis, *arrays):
     """Runtime helper: concatenate a varargs sequence of arrays."""
@@ -533,15 +549,13 @@ def concat_split_points(arrays, axis):
     return points
 
 
-non_differentiable.register_non_differentiable_functions(
-    concat_split_points)
+non_differentiable.register_non_differentiable_functions(concat_split_points)
 
 
 @adjoint(concat_seq)
 def adjoint_concat_seq(z, axis, *arrays):
     """Adjoint for concat_seq: split the gradient back to the original arrays."""
-    d[arrays] = tuple(jnp.split(d[z], tangent.concat_split_points(arrays, axis),
-                                axis=axis))
+    d[arrays] = tuple(jnp.split(d[z], tangent.concat_split_points(arrays, axis), axis=axis))
 
 
 @adjoint(stack_seq)
@@ -560,7 +574,8 @@ def adjoint_concatenate(dz, arrays, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate jnp.concatenate/stack when the list of '
         'arrays is a literal. Bind the list to a variable and pass its '
-        'elements explicitly, or use a list literal.')
+        'elements explicitly, or use a list literal.'
+    )
 
 
 @adjoint(jnp.stack)
@@ -569,11 +584,13 @@ def adjoint_stack(dz, arrays, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate jnp.concatenate/stack when the list of '
         'arrays is a literal. Bind the list to a variable and pass its '
-        'elements explicitly, or use a list literal.')
+        'elements explicitly, or use a list literal.'
+    )
 
 
 # JAX neural network activations (jax.nn.*)
 import jax.nn
+
 
 # Register adjoints for all wrapped versions of relu
 # JAX wraps functions in custom_jvp -> PjitFunction -> function
@@ -585,8 +602,10 @@ def adjoint_jax_relu(y, x):
     # This works with both scalars and arrays without needing jnp.where
     d[x] = d[y] * (x > 0)
 
+
 # Also register for the unwrapped versions
 if hasattr(jax.nn.relu, '__wrapped__'):
+
     @adjoint(jax.nn.relu.__wrapped__)
     def adjoint_jax_relu_pjit(y, x):
         """Adjoint for jax.nn.relu (PjitFunction version)."""
@@ -594,6 +613,7 @@ if hasattr(jax.nn.relu, '__wrapped__'):
         d[x] = d[y] * (x > 0)
 
     if hasattr(jax.nn.relu.__wrapped__, '__wrapped__'):
+
         @adjoint(jax.nn.relu.__wrapped__.__wrapped__)
         def adjoint_jax_relu_fn(y, x):
             """Adjoint for jax.nn.relu (unwrapped function)."""
@@ -607,8 +627,10 @@ def adjoint_jax_sigmoid(y, x):
     sig = jax.nn.sigmoid(x)
     d[x] = d[y] * sig * (1.0 - sig)
 
+
 # Register unwrapped versions
 if hasattr(jax.nn.sigmoid, '__wrapped__'):
+
     @adjoint(jax.nn.sigmoid.__wrapped__)
     def adjoint_jax_sigmoid_pjit(y, x):
         """Adjoint for jax.nn.sigmoid (PjitFunction version)."""
@@ -665,8 +687,10 @@ def adjoint_jax_gelu(y, x, approximate=True):
     """Adjoint for jax.nn.gelu: Gaussian Error Linear Unit."""
     # GELU gradient is complex; use JAX's built-in implementation
     import jax
+
     def gelu_fn(x_):
         return jax.nn.gelu(x_, approximate=approximate)
+
     # Use JAX to compute the gradient
     _, vjp_fn = jax.vjp(gelu_fn, x)
     d[x] = vjp_fn(d[y])[0]
@@ -675,6 +699,7 @@ def adjoint_jax_gelu(y, x, approximate=True):
 #
 # Forward Mode (Tangent) Definitions
 #
+
 
 # Arithmetic Operations
 @tangent_(jnp.add)
@@ -699,8 +724,7 @@ def tangent_jnp_multiply(z, x, y):
 def tangent_jnp_divide(z, x, y):
     """Forward mode for jnp.divide: d[z] = (d[x]*y - x*d[y]) / y^2."""
     d[z] = jnp.divide(
-        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])),
-        jnp.multiply(y, y)
+        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])), jnp.multiply(y, y)
     )
 
 
@@ -708,8 +732,7 @@ def tangent_jnp_divide(z, x, y):
 def tangent_jnp_true_divide(z, x, y):
     """Forward mode for jnp.true_divide."""
     d[z] = jnp.divide(
-        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])),
-        jnp.multiply(y, y)
+        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])), jnp.multiply(y, y)
     )
 
 
@@ -718,7 +741,7 @@ def tangent_jnp_power(z, x, y):
     """Forward mode for jnp.power: d[z] = d[x]*y*x^(y-1) + d[y]*x^y*log(x)."""
     d[z] = jnp.add(
         jnp.multiply(d[x], jnp.multiply(y, jnp.power(x, y - 1))),
-        jnp.multiply(d[y], jnp.multiply(z, jnp.log(x)))
+        jnp.multiply(d[y], jnp.multiply(z, jnp.log(x))),
     )
 
 
@@ -807,7 +830,7 @@ def tangent_jnp_maximum(z, x, y):
     """Forward mode for jnp.maximum."""
     d[z] = jnp.add(
         jnp.multiply(d[x], jnp.where(jnp.greater(x, y), 1.0, 0.0)),
-        jnp.multiply(d[y], jnp.where(jnp.greater(y, x), 1.0, 0.0))
+        jnp.multiply(d[y], jnp.where(jnp.greater(y, x), 1.0, 0.0)),
     )
 
 
@@ -816,7 +839,7 @@ def tangent_jnp_minimum(z, x, y):
     """Forward mode for jnp.minimum."""
     d[z] = jnp.add(
         jnp.multiply(d[x], jnp.where(jnp.less(x, y), 1.0, 0.0)),
-        jnp.multiply(d[y], jnp.where(jnp.less(y, x), 1.0, 0.0))
+        jnp.multiply(d[y], jnp.where(jnp.less(y, x), 1.0, 0.0)),
     )
 
 
@@ -935,14 +958,19 @@ def tangent_jax_gelu(y, x, approximate=True):
     """Forward mode for jax.nn.gelu."""
     # Use JAX's built-in gradient
     import jax
+
     def gelu_fn(x_):
         return jax.nn.gelu(x_, approximate=approximate)
+
     # Compute JVP
     _, jvp_result = jax.jvp(gelu_fn, (x,), (d[x],))
     d[y] = jvp_result
 
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug(
     'JAX extensions loaded successfully (JAX %s, %d gradient definitions)',
-    jax.__version__, len([f for f in dir() if f.startswith('adjoint_')]))
+    jax.__version__,
+    len([f for f in dir() if f.startswith('adjoint_')]),
+)

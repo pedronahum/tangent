@@ -1,4 +1,5 @@
 """Test TF subscripting issue from notebook cell 22"""
+
 import pytest
 
 # TensorFlow is an optional dependency; skip this module when it is missing.
@@ -7,12 +8,14 @@ pytest.importorskip('tensorflow')
 import tangent
 import tensorflow as tf
 
+
 def simple_layer(x, W, b):
     """Simple neural network layer - returns scalar"""
     linear = tf.matmul(tf.reshape(x, [1, -1]), W) + b
     activation = tf.tanh(linear)
     # Cell 22 uses subscripting: activation[0, 0] + activation[0, 1]
     return activation[0, 0] + activation[0, 1]
+
 
 print("Testing TF layer with subscripting...")
 dlayer_dW = tangent.grad(simple_layer, wrt=(1,))
@@ -29,4 +32,5 @@ try:
 except Exception as e:
     print(f"✗ Failed: {e}")
     import traceback
+
     traceback.print_exc()

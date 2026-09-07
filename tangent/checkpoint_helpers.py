@@ -16,6 +16,7 @@
 These functions are called by generated gradient code to implement
 memory-efficient checkpointing using the Revolve algorithm.
 """
+
 from __future__ import absolute_import
 
 import copy
@@ -100,6 +101,7 @@ def store_checkpoint(checkpoint_data, iteration, state, backend='numpy'):
     if backend == 'jax':
         try:
             import jax
+
             # JAX arrays need special handling
             checkpoint_data[iteration] = jax.tree_map(lambda x: x, state)
         except ImportError:
@@ -108,6 +110,7 @@ def store_checkpoint(checkpoint_data, iteration, state, backend='numpy'):
     elif backend == 'tensorflow':
         try:
             import tensorflow as tf
+
             # TensorFlow tensors need identity operation
             if isinstance(state, tf.Tensor):
                 checkpoint_data[iteration] = tf.identity(state)
@@ -119,6 +122,7 @@ def store_checkpoint(checkpoint_data, iteration, state, backend='numpy'):
         # NumPy or generic Python objects
         try:
             import numpy
+
             if isinstance(state, numpy.ndarray):
                 checkpoint_data[iteration] = numpy.copy(state)
             else:
@@ -214,45 +218,46 @@ def get_checkpoint_info(seq_length, num_checkpoints=None):
         'memory_reduction': estimate_memory_savings(seq_length, num_checkpoints),
     }
 
+
 class CheckpointAwareStack:
     """Stack wrapper that only stores values at checkpoint positions.
-    
+
     This is the KEY component for Phase 4b memory reduction. It intercepts
     all append() operations and only stores values when at a checkpoint position.
     """
-    
+
     def __init__(self, real_stack, checkpoint_positions_set):
         """Initialize checkpoint-aware stack."""
         self.real_stack = real_stack
         self.checkpoint_positions = checkpoint_positions_set
         self.current_iteration = None
         self.skipped_count = 0
-        
+
     def set_current_iteration(self, iteration):
         """Set the current iteration index."""
         self.current_iteration = iteration
-        
+
     def append(self, x):
         """Append (push) - only if at checkpoint."""
         if self.current_iteration in self.checkpoint_positions:
             self.real_stack.append(x)
         else:
             self.skipped_count += 1
-            
+
     def pop(self):
         """Pop from real stack."""
         return self.real_stack.pop()
-        
+
     def __len__(self):
         """Length proxy."""
         return len(self.real_stack)
-        
+
     def __str__(self):
         return f"CheckpointAwareStack(skipped={self.skipped_count})"
-        
+
     def __repr__(self):
         return self.__str__()
-        
+
     def get_stats(self):
         """Get statistics."""
         return {

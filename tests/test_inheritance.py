@@ -16,6 +16,7 @@
 This test suite validates that Tangent can differentiate through
 class hierarchies using Python's inheritance mechanism.
 """
+
 from __future__ import absolute_import
 
 import pytest
@@ -27,16 +28,18 @@ import tangent
 # Test Classes - Simple Inheritance
 # =============================================================================
 
+
 class SimpleBase:
     """Base class with a simple method."""
 
     def square(self, x):
         """Return x squared."""
-        return x ** 2
+        return x**2
 
 
 class SimpleDerived(SimpleBase):
     """Derived class that inherits square method."""
+
     pass
 
 
@@ -44,12 +47,13 @@ class SimpleDerived(SimpleBase):
 # Test Classes - Method Overriding
 # =============================================================================
 
+
 class OverrideBase:
     """Base class with method to be overridden."""
 
     def compute(self, x):
         """Return x squared."""
-        return x ** 2
+        return x**2
 
 
 class OverrideDerived(OverrideBase):
@@ -57,12 +61,13 @@ class OverrideDerived(OverrideBase):
 
     def compute(self, x):
         """Return x cubed (overrides base)."""
-        return x ** 3
+        return x**3
 
 
 # =============================================================================
 # Test Classes - Attribute Inheritance
 # =============================================================================
+
 
 class AttributeBase:
     """Base class with attributes."""
@@ -86,11 +91,12 @@ class AttributeDerived(AttributeBase):
 # Test Classes - Multi-level Inheritance
 # =============================================================================
 
+
 class LevelA:
     """Top-level base class."""
 
     def base_method(self, x):
-        return x ** 2
+        return x**2
 
 
 class LevelB(LevelA):
@@ -110,6 +116,7 @@ class LevelC(LevelB):
 # =============================================================================
 # Test Classes - Combined Attributes
 # =============================================================================
+
 
 class VehicleBase:
     """Base vehicle class."""
@@ -134,11 +141,12 @@ class CarDerived(VehicleBase):
 # Test Classes - Method Chaining Across Hierarchy
 # =============================================================================
 
+
 class ChainBase:
     """Base class with helper method."""
 
     def helper(self, x):
-        return x ** 2
+        return x**2
 
 
 class ChainDerived(ChainBase):
@@ -153,8 +161,10 @@ class ChainDerived(ChainBase):
 # Phase 1: Simple Inheritance Tests
 # =============================================================================
 
+
 def test_simple_inheritance():
     """Test method inherited from parent class."""
+
     def f(x):
         obj = SimpleDerived()
         return obj.square(x)
@@ -171,6 +181,7 @@ def test_simple_inheritance():
 
 def test_inherited_method_with_multiple_uses():
     """Test using inherited method multiple times."""
+
     def f(x):
         obj = SimpleDerived()
         return obj.square(x) + obj.square(x * 2)
@@ -186,8 +197,10 @@ def test_inherited_method_with_multiple_uses():
 # Phase 2: Method Overriding Tests
 # =============================================================================
 
+
 def test_method_override():
     """Test that derived class method overrides base class method."""
+
     def f(x):
         obj = OverrideDerived()
         return obj.compute(x)
@@ -204,6 +217,7 @@ def test_method_override():
 
 def test_base_class_method_still_works():
     """Test that base class method works when using base class."""
+
     def f(x):
         obj = OverrideBase()
         return obj.compute(x)
@@ -219,8 +233,10 @@ def test_base_class_method_still_works():
 # Phase 3: Attribute Inheritance Tests
 # =============================================================================
 
+
 def test_attribute_inheritance_with_super():
     """Test attribute inherited via super().__init__()."""
+
     def f(x):
         obj = AttributeDerived(2.5)
         return obj.scale(x)
@@ -234,6 +250,7 @@ def test_attribute_inheritance_with_super():
 
 def test_combined_parent_child_attributes():
     """Test using both parent and child attributes."""
+
     def f(distance):
         car = CarDerived(speed_factor=1.5, efficiency=0.5)
         return car.cost(distance)
@@ -249,8 +266,10 @@ def test_combined_parent_child_attributes():
 # Phase 4: Multi-level Inheritance Tests
 # =============================================================================
 
+
 def test_multi_level_inheritance():
     """Test inheritance through multiple levels (A -> B -> C)."""
+
     def f(x):
         obj = LevelC()
         return obj.top_method(x)
@@ -269,6 +288,7 @@ def test_multi_level_inheritance():
 
 def test_calling_grandparent_method():
     """Test calling method from grandparent class."""
+
     def f(x):
         obj = LevelC()
         # Even though LevelC is two levels down, it can call base_method
@@ -284,8 +304,10 @@ def test_calling_grandparent_method():
 # Phase 5: Method Chaining with Inheritance Tests
 # =============================================================================
 
+
 def test_method_chaining_across_hierarchy():
     """Test derived method calling inherited method."""
+
     def f(x):
         obj = ChainDerived()
         return obj.compute(x)
@@ -302,6 +324,7 @@ def test_method_chaining_across_hierarchy():
 # Phase 6: NumPy Integration with Inheritance
 # =============================================================================
 
+
 class NumpyBase:
     """Base class with NumPy operations."""
 
@@ -313,11 +336,12 @@ class NumpyDerived(NumpyBase):
     """Derived class using inherited NumPy method."""
 
     def combined(self, x):
-        return self.sin_op(x) + x ** 2
+        return self.sin_op(x) + x**2
 
 
 def test_numpy_with_inheritance():
     """Test NumPy operations in inherited methods."""
+
     def f(x):
         obj = NumpyDerived()
         return obj.combined(x)
@@ -336,14 +360,17 @@ def test_numpy_with_inheritance():
 # Phase 7: Edge Cases
 # =============================================================================
 
+
 class EmptyDerived(SimpleBase):
     """Derived class with no additional methods or attributes."""
+
     def __init__(self):
         pass
 
 
 def test_empty_derived_class():
     """Test derived class with empty __init__."""
+
     def f(x):
         obj = EmptyDerived()
         return obj.square(x)
@@ -356,10 +383,10 @@ class MultipleMethodBase:
     """Base with multiple methods."""
 
     def method_a(self, x):
-        return x ** 2
+        return x**2
 
     def method_b(self, x):
-        return x ** 3
+        return x**3
 
 
 class MultipleMethodDerived(MultipleMethodBase):
@@ -371,6 +398,7 @@ class MultipleMethodDerived(MultipleMethodBase):
 
 def test_multiple_inherited_methods():
     """Test using multiple methods from parent."""
+
     def f(x):
         obj = MultipleMethodDerived()
         return obj.combined(x)

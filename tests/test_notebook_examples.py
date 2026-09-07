@@ -2,6 +2,7 @@
 
 This ensures all notebook cells run without errors before publishing.
 """
+
 import numpy as np
 import pytest
 import tangent
@@ -11,8 +12,10 @@ import tangent
 # Module-level class definitions (required for Tangent's class inlining)
 # =============================================================================
 
+
 class Polynomial:
     """Polynomial class for testing"""
+
     def __init__(self, a, b, c):
         self.a = a
         self.b = b
@@ -20,11 +23,12 @@ class Polynomial:
 
     def evaluate(self, x):
         """Evaluate polynomial: a*x² + b*x + c"""
-        return self.a * x ** 2 + self.b * x + self.c
+        return self.a * x**2 + self.b * x + self.c
 
 
 class NeuralLayer:
     """Base neural network layer"""
+
     def __init__(self, weight):
         self.weight = weight
 
@@ -35,6 +39,7 @@ class NeuralLayer:
 
 class NeuralLayerWithBias(NeuralLayer):
     """Neural layer with bias"""
+
     def __init__(self, weight, bias):
         super().__init__(weight)
         self.bias = bias
@@ -46,6 +51,7 @@ class NeuralLayerWithBias(NeuralLayer):
 
 class Layer:
     """Base layer for OOP network"""
+
     def __init__(self, name):
         self.name = name
 
@@ -55,6 +61,7 @@ class Layer:
 
 class DenseLayer(Layer):
     """Dense layer with inheritance"""
+
     def __init__(self, weight, bias, name="dense"):
         super().__init__(name)
         self.weight = weight
@@ -68,11 +75,13 @@ class DenseLayer(Layer):
 # Tests
 # =============================================================================
 
+
 class TestSection9Lambdas:
     """Test Section 9.1 - Lambda Functions"""
 
     def test_lambda_activations(self):
         """Test lambda functions for neural activations"""
+
         def neural_activation(x):
             """Use lambdas for activation functions"""
             relu = lambda z: np.maximum(0, z)
@@ -99,6 +108,7 @@ class TestSection9Classes:
 
     def test_polynomial_class(self):
         """Test polynomial class with instance attributes"""
+
         def loss_with_class(x):
             poly = Polynomial(2.0, 3.0, 1.0)
             return poly.evaluate(x)
@@ -118,6 +128,7 @@ class TestSection9Inheritance:
 
     def test_inheritance_simple(self):
         """Test simple inheritance without super() method calls"""
+
         def network_loss(x):
             layer = NeuralLayerWithBias(weight=2.5, bias=1.0)
             output = layer.forward(x)
@@ -139,6 +150,7 @@ class TestSection9ControlFlow:
 
     def test_for_loop(self):
         """Test for loop"""
+
         def polynomial_loop(x):
             """Evaluate 1 + x + x² + x³ using a loop"""
             result = 0.0
@@ -149,13 +161,14 @@ class TestSection9ControlFlow:
         dpoly = tangent.grad(polynomial_loop)
         x_test = 2.0
         gradient = dpoly(x_test)
-        expected = 1 + 2*x_test + 3*x_test**2
+        expected = 1 + 2 * x_test + 3 * x_test**2
 
         assert abs(gradient - expected) < 1e-5
         print(f"✓ For loop: gradient = {gradient}, expected = {expected}")
 
     def test_ternary_operator(self):
         """Test ternary operator (ReLU)"""
+
         def relu_ternary(x):
             """ReLU using ternary operator"""
             return x if x > 0 else 0.0
@@ -174,6 +187,7 @@ class TestSection9ControlFlow:
 
     def test_while_loop(self):
         """Test while loop"""
+
         def newton_sqrt(x):
             """Newton's method for sqrt(x) using while loop"""
             estimate = x / 2.0
@@ -197,6 +211,7 @@ class TestSection9OOPNetwork:
 
     def test_oop_network_linear_only(self):
         """Test OOP network with linear layers only"""
+
         def oop_network_loss(x):
             layer1 = DenseLayer(weight=2.0, bias=-1.0, name="layer1")
             h = layer1.forward(x)
@@ -300,6 +315,7 @@ class TestNeuralNetworkTraining:
 
     def test_numpy_neural_network(self):
         """Test NumPy-based neural network training"""
+
         def neural_network_simple(W1, b1, W2, b2, x_sample, y_sample):
             """Two-layer neural network with single sample"""
             hidden = np.maximum(0, np.dot(x_sample, W1) + b1[0])
@@ -338,9 +354,9 @@ class TestNeuralNetworkTraining:
 
 if __name__ == '__main__':
     """Run all tests"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TESTING NOTEBOOK EXAMPLES")
-    print("="*70)
+    print("=" * 70)
 
     # Section 9 tests
     print("\n### Section 9.1 - Lambda Functions ###")
@@ -383,6 +399,6 @@ if __name__ == '__main__':
     test_nn = TestNeuralNetworkTraining()
     test_nn.test_numpy_neural_network()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("✅ ALL TESTS PASSED")
-    print("="*70)
+    print("=" * 70)

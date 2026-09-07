@@ -19,6 +19,7 @@ method calls for functions defined in namespaces that actually use tinygrad,
 leaving ordinary NumPy ``.sum()``/``.mean()`` calls untouched even when
 tinygrad is imported elsewhere in the process.
 """
+
 import numpy as np  # noqa: F401  (available to the differentiated functions)
 
 

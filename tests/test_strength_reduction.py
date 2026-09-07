@@ -1,13 +1,14 @@
 """
 Unit tests for Strength Reduction optimization.
 """
+
 import unittest
 import ast
 import gast
 from tangent.optimizations.strength_reduction import (
     StrengthReducer,
     StrengthReductionOptimizer,
-    apply_strength_reduction
+    apply_strength_reduction,
 )
 
 
@@ -443,10 +444,7 @@ def f(x):
         tree = gast.parse(code)
         func = tree.body[0]
 
-        config = {
-            'enable_power_reduction': True,
-            'enable_division_to_multiply': True
-        }
+        config = {'enable_power_reduction': True, 'enable_division_to_multiply': True}
         optimized = apply_strength_reduction(func, config)
 
         self.assertIsNotNone(optimized)

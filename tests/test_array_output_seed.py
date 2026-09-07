@@ -7,6 +7,7 @@ sum of the outputs. Optimized mode already accepted this (the shape assertion is
 elided there); the unoptimized shape check now accepts it too, so both modes
 behave the same. Genuinely mismatched *array* seeds are still rejected.
 """
+
 import numpy as np
 import pytest
 
@@ -14,8 +15,7 @@ import tangent
 
 
 def _both_modes(f):
-    return (tangent.grad(f, optimized=True),
-            tangent.grad(f, optimized=False))
+    return (tangent.grad(f, optimized=True), tangent.grad(f, optimized=False))
 
 
 def test_elementwise_array_output_default_seed():

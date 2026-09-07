@@ -53,6 +53,7 @@ Ops whose rules genuinely differ per backend (convolutions, pooling, matmul
 variants, reductions, wrapped activation stacks like ``jax.nn.relu``) stay
 hand-written in the extension modules.
 """
+
 from __future__ import absolute_import
 
 import linecache
@@ -106,33 +107,39 @@ ZERO_FORMULA_OPS = ('floor', 'ceil', 'round', 'sign')
 # Vocabularies: how a backend spells calls used inside formulas.
 # ---------------------------------------------------------------------------
 
+
 def prefix_vocab(prefix, **overrides):
     """Vocabulary for function-style backends (``<prefix>.<fn>(arg)``).
 
     Overrides map a vocabulary name to a format string over ``{arg}``
     (e.g. ``mask_pos='tf.cast(({arg}) > 0, x.dtype)'``).
     """
+
     def vocab(fn, arg):
         spelled = overrides.get(fn)
         if spelled is not None:
             return spelled.format(arg=arg)
         return '%s.%s(%s)' % (prefix, fn, arg)
+
     return vocab
 
 
 def method_vocab(**overrides):
     """Vocabulary for method-style backends (``(arg).<fn>()``)."""
+
     def vocab(fn, arg):
         spelled = overrides.get(fn)
         if spelled is not None:
             return spelled.format(arg=arg)
         return '(%s).%s()' % (arg, fn)
+
     return vocab
 
 
 # ---------------------------------------------------------------------------
 # Template generation
 # ---------------------------------------------------------------------------
+
 
 def _compile_template(name, body, filename):
     """Compile one template function from source, retrievably for inspect."""
@@ -143,8 +150,7 @@ def _compile_template(name, body, filename):
     fn = namespace[name]
     # inspect.getsource consults linecache; register the synthetic file so
     # Tangent's quoting.parse_function can recover the template source.
-    linecache.cache[filename] = (len(src), None, src.splitlines(True),
-                                 filename)
+    linecache.cache[filename] = (len(src), None, src.splitlines(True), filename)
     return fn
 
 
@@ -182,11 +188,13 @@ def register_elementwise(backend, ops, vocab, seed='{g}'):
         adjoint_fn = _compile_template(
             'adjoint_%s_%s' % (backend, rule_name),
             'd[x] = %s' % adjoint_expr,
-            '<tangent-elementwise>/%s_%s_adjoint.py' % (backend, rule_name))
+            '<tangent-elementwise>/%s_%s_adjoint.py' % (backend, rule_name),
+        )
         tangent_fn = _compile_template(
             'tangent_%s_%s' % (backend, rule_name),
             'd[y] = %s' % tangent_expr,
-            '<tangent-elementwise>/%s_%s_tangent.py' % (backend, rule_name))
+            '<tangent-elementwise>/%s_%s_tangent.py' % (backend, rule_name),
+        )
 
         for func in funcs:
             if func is None:

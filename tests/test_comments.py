@@ -18,28 +18,28 @@ from tangent import quoting
 
 
 def f(x):
-  y = x
-  return y
+    y = x
+    return y
 
 
 def test_comment():
-  node = quoting.parse_function(f).body[0]
+    node = quoting.parse_function(f).body[0]
 
-  comments.add_comment(node.body[0], 'foo', 'above')
-  source = quoting.to_source(node)
-  lines = source.split('\n')
-  assert lines[1].strip() == '# foo'
+    comments.add_comment(node.body[0], 'foo', 'above')
+    source = quoting.to_source(node)
+    lines = source.split('\n')
+    assert lines[1].strip() == '# foo'
 
-  comments.add_comment(node.body[0], 'foo', 'right')
-  source = quoting.to_source(node)
-  lines = source.split('\n')
-  assert lines[1].strip() == 'y = x # foo'
+    comments.add_comment(node.body[0], 'foo', 'right')
+    source = quoting.to_source(node)
+    lines = source.split('\n')
+    assert lines[1].strip() == 'y = x # foo'
 
-  comments.add_comment(node.body[0], 'foo', 'below')
-  source = quoting.to_source(node)
-  lines = source.split('\n')
-  assert lines[2].strip() == '# foo'
+    comments.add_comment(node.body[0], 'foo', 'below')
+    source = quoting.to_source(node)
+    lines = source.split('\n')
+    assert lines[2].strip() == '# foo'
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

@@ -85,7 +85,8 @@ class DefUseAnalyzer:
                 var = stmt.target.id
                 self.def_map.setdefault(line_num, set()).add(var)
                 self.use_map.setdefault(line_num, set()).update(
-                    {var} | VariableCollector.collect(stmt.value))
+                    {var} | VariableCollector.collect(stmt.value)
+                )
                 self.def_sites.setdefault(var, []).append(line_num)
 
         elif isinstance(stmt, (ast.Return, gast.Return)):
@@ -296,7 +297,9 @@ class GradientDCE:
     returns optimized AST with dead code eliminated.
     """
 
-    def __init__(self, grad_func_ast, requested_grads: List[str], use_activity_analysis=True, verbose=0):
+    def __init__(
+        self, grad_func_ast, requested_grads: List[str], use_activity_analysis=True, verbose=0
+    ):
         self.grad_func_ast = grad_func_ast
         self.requested_grads = set(requested_grads)
         self.use_activity_analysis = use_activity_analysis
@@ -349,8 +352,7 @@ class GradientDCE:
         # must be added to the slice seed. Otherwise their definitions get
         # eliminated and the generated code fails at runtime.
         for stmt in self.grad_func_ast.body:
-            if (_touches_tape(stmt) or self._is_essential(stmt) or
-                    not self._is_modeled(stmt)):
+            if _touches_tape(stmt) or self._is_essential(stmt) or not self._is_modeled(stmt):
                 gradient_vars.update(VariableCollector.collect(stmt))
 
         # Step 4: Backward slice from these gradients
@@ -371,9 +373,12 @@ class GradientDCE:
             # marked keep-alive (e.g. varargs pack/unpack), and any statement
             # type the def-use analysis does not model (eliminating those
             # cannot be proven safe).
-            if (self._is_essential(stmt) or _touches_tape(stmt) or
-                    anno.getanno(stmt, 'tangent_keep', False) or
-                    not self._is_modeled(stmt)):
+            if (
+                self._is_essential(stmt)
+                or _touches_tape(stmt)
+                or anno.getanno(stmt, 'tangent_keep', False)
+                or not self._is_modeled(stmt)
+            ):
                 optimized_body.append(stmt)
             # Keep relevant statements
             elif i in relevant_stmts:
@@ -386,7 +391,9 @@ class GradientDCE:
         # Step 6: Report statistics
         eliminated = original_count - len(optimized_body)
         if eliminated > 0 and self.verbose >= 1:
-            print(f"DCE: Eliminated {eliminated} statements ({original_count} → {len(optimized_body)})")
+            print(
+                f"DCE: Eliminated {eliminated} statements ({original_count} → {len(optimized_body)})"
+            )
 
         return self.grad_func_ast
 
@@ -423,12 +430,23 @@ class GradientDCE:
         (try/except, imports, asserts, ...) is kept because its effects
         cannot be reasoned about here.
         """
-        return isinstance(stmt, (ast.Assign, gast.Assign,
-                                 ast.AugAssign, gast.AugAssign,
-                                 ast.Return, gast.Return,
-                                 ast.If, gast.If,
-                                 ast.For, gast.For,
-                                 ast.While, gast.While))
+        return isinstance(
+            stmt,
+            (
+                ast.Assign,
+                gast.Assign,
+                ast.AugAssign,
+                gast.AugAssign,
+                ast.Return,
+                gast.Return,
+                ast.If,
+                gast.If,
+                ast.For,
+                gast.For,
+                ast.While,
+                gast.While,
+            ),
+        )
 
     def _is_essential(self, stmt):
         """Check if statement is essential (return, control flow, docstring, etc.)."""
@@ -455,8 +473,9 @@ class GradientDCE:
         # targets), so they must not be eliminated either.
         if isinstance(stmt, (ast.Assign, gast.Assign)):
             for target in stmt.targets:
-                if isinstance(target, (ast.Subscript, gast.Subscript,
-                                       ast.Attribute, gast.Attribute)):
+                if isinstance(
+                    target, (ast.Subscript, gast.Subscript, ast.Attribute, gast.Attribute)
+                ):
                     return True
 
         # Docstrings are essential

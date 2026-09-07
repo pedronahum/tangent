@@ -31,6 +31,7 @@ Example usage:
     stats = get_cache_stats()
     print(f"Cache hits: {stats['hits']}, misses: {stats['misses']}")
 """
+
 from __future__ import absolute_import
 
 import functools
@@ -94,9 +95,7 @@ def _canonicalize_config(config):
     if config is None:
         return None
     if isinstance(config, dict):
-        return ('dict', tuple(
-            sorted((str(k), _canonicalize_config(v))
-                   for k, v in config.items())))
+        return ('dict', tuple(sorted((str(k), _canonicalize_config(v)) for k, v in config.items())))
     if isinstance(config, (list, tuple)):
         return ('seq', tuple(_canonicalize_config(v) for v in config))
     try:
@@ -106,9 +105,19 @@ def _canonicalize_config(config):
         return repr(config)
 
 
-def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
-                        check_dims, input_derivative, optimizations=None,
-                        checkpoint_config=None, grad_config=None):
+def _generate_cache_key(
+    func,
+    wrt,
+    motion,
+    mode,
+    optimized,
+    preserve_result,
+    check_dims,
+    input_derivative,
+    optimizations=None,
+    checkpoint_config=None,
+    grad_config=None,
+):
     """Generate a unique cache key for a function transformation.
 
     The cache key is based on:
@@ -187,7 +196,7 @@ def _generate_cache_key(func, wrt, motion, mode, optimized, preserve_result,
         input_derivative_str,
         _canonicalize_config(optimizations),
         _canonicalize_config(checkpoint_config),
-        _canonicalize_config(grad_config)
+        _canonicalize_config(grad_config),
     )
 
     return cache_key
@@ -324,11 +333,22 @@ def cached_autodiff(original_autodiff):
     Returns:
         A wrapped version with caching support
     """
+
     @functools.wraps(original_autodiff)
-    def wrapper(func, wrt=(0,), optimized=True, motion='joint', mode='reverse',
-                preserve_result=False, check_dims=True,
-                input_derivative=None, verbose=0,
-                checkpoint_config=None, optimizations=None, grad_config=None):
+    def wrapper(
+        func,
+        wrt=(0,),
+        optimized=True,
+        motion='joint',
+        mode='reverse',
+        preserve_result=False,
+        check_dims=True,
+        input_derivative=None,
+        verbose=0,
+        checkpoint_config=None,
+        optimizations=None,
+        grad_config=None,
+    ):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
@@ -340,9 +360,17 @@ def cached_autodiff(original_autodiff):
         # Generate cache key. checkpoint_config, optimizations and grad_config
         # all change the compiled gradient, so they participate in the key.
         cache_key = _generate_cache_key(
-            func, wrt, motion, mode, optimized, preserve_result,
-            check_dims, input_derivative, optimizations=optimizations,
-            checkpoint_config=checkpoint_config, grad_config=grad_config
+            func,
+            wrt,
+            motion,
+            mode,
+            optimized,
+            preserve_result,
+            check_dims,
+            input_derivative,
+            optimizations=optimizations,
+            checkpoint_config=checkpoint_config,
+            grad_config=grad_config,
         )
 
         # Try to get from cache
@@ -357,11 +385,18 @@ def cached_autodiff(original_autodiff):
             print(f"[Cache] Computing new gradient function for {func.__name__}")
 
         result = original_autodiff(
-            func, wrt=wrt, optimized=optimized, motion=motion, mode=mode,
-            preserve_result=preserve_result, check_dims=check_dims,
-            input_derivative=input_derivative, verbose=verbose,
-            checkpoint_config=checkpoint_config, optimizations=optimizations,
-            grad_config=grad_config
+            func,
+            wrt=wrt,
+            optimized=optimized,
+            motion=motion,
+            mode=mode,
+            preserve_result=preserve_result,
+            check_dims=check_dims,
+            input_derivative=input_derivative,
+            verbose=verbose,
+            checkpoint_config=checkpoint_config,
+            optimizations=optimizations,
+            grad_config=grad_config,
         )
 
         # Add to cache
@@ -383,17 +418,32 @@ def cached_grad(original_grad):
     Returns:
         A wrapped version with caching support
     """
+
     @functools.wraps(original_grad)
-    def wrapper(func, wrt=(0,), optimized=True, preserve_result=False,
-                check_dims=True, verbose=0, checkpoint=False, checkpoint_config=None,
-                optimizations=None, output_index=None, output_weights=None):
+    def wrapper(
+        func,
+        wrt=(0,),
+        optimized=True,
+        preserve_result=False,
+        check_dims=True,
+        verbose=0,
+        checkpoint=False,
+        checkpoint_config=None,
+        optimizations=None,
+        output_index=None,
+        output_weights=None,
+    ):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
-        from tangent.dict_construction_error import is_dict_construction_error, DictConstructionError
+        from tangent.dict_construction_error import (
+            is_dict_construction_error,
+            DictConstructionError,
+        )
 
         def wrap_with_error_handler(grad_func):
             """Wrap gradient function to catch and enhance dict construction errors."""
+
             @functools.wraps(grad_func)
             def error_enhanced_wrapper(*args, **kwargs):
                 try:
@@ -402,6 +452,7 @@ def cached_grad(original_grad):
                     if is_dict_construction_error(e):
                         raise DictConstructionError() from e
                     raise
+
             return error_enhanced_wrapper
 
         # Disable caching for multi-output configurations (output_index/output_weights)
@@ -409,9 +460,19 @@ def cached_grad(original_grad):
         if output_index is not None or output_weights is not None:
             if verbose >= 1:
                 print("[Cache] Bypassing cache (multi-output configuration)")
-            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
-                               verbose, checkpoint, checkpoint_config, optimizations,
-                               output_index, output_weights)
+            result = original_grad(
+                func,
+                wrt,
+                optimized,
+                preserve_result,
+                check_dims,
+                verbose,
+                checkpoint,
+                checkpoint_config,
+                optimizations,
+                output_index,
+                output_weights,
+            )
             return wrap_with_error_handler(result)
 
         # For now, disable caching when checkpointing is enabled
@@ -419,17 +480,34 @@ def cached_grad(original_grad):
         if checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)):
             if verbose >= 1:
                 print("[Cache] Bypassing cache (checkpointing enabled)")
-            result = original_grad(func, wrt, optimized, preserve_result, check_dims,
-                               verbose, checkpoint, checkpoint_config, optimizations,
-                               output_index, output_weights)
+            result = original_grad(
+                func,
+                wrt,
+                optimized,
+                preserve_result,
+                check_dims,
+                verbose,
+                checkpoint,
+                checkpoint_config,
+                optimizations,
+                output_index,
+                output_weights,
+            )
             return wrap_with_error_handler(result)
 
         # Generate cache key (grad uses specific default parameters). The
         # `optimizations` dict changes the compiled gradient (e.g. cse,
         # algebraic, coarsening), so it participates in the key.
         cache_key = _generate_cache_key(
-            func, wrt, 'joint', 'reverse', optimized, preserve_result,
-            check_dims, INPUT_DERIVATIVE.DefaultOne, optimizations=optimizations
+            func,
+            wrt,
+            'joint',
+            'reverse',
+            optimized,
+            preserve_result,
+            check_dims,
+            INPUT_DERIVATIVE.DefaultOne,
+            optimizations=optimizations,
         )
 
         # Try to get from cache
@@ -444,18 +522,29 @@ def cached_grad(original_grad):
             print(f"[Cache] Computing new gradient function for {func.__name__}")
 
         result = original_grad(
-            func, wrt=wrt, optimized=optimized, preserve_result=preserve_result,
-            check_dims=check_dims, verbose=verbose, checkpoint=checkpoint,
-            checkpoint_config=checkpoint_config, optimizations=optimizations,
-            output_index=output_index, output_weights=output_weights
+            func,
+            wrt=wrt,
+            optimized=optimized,
+            preserve_result=preserve_result,
+            check_dims=check_dims,
+            verbose=verbose,
+            checkpoint=checkpoint,
+            checkpoint_config=checkpoint_config,
+            optimizations=optimizations,
+            output_index=output_index,
+            output_weights=output_weights,
         )
 
         # Wrap the gradient function to catch and enhance dict construction errors
         wrapped_result = wrap_with_error_handler(result)
 
         # Add to cache (only if not using checkpointing or multi-output)
-        if not (checkpoint or (checkpoint_config and checkpoint_config.get('enabled', False)) or
-                output_index is not None or output_weights is not None):
+        if not (
+            checkpoint
+            or (checkpoint_config and checkpoint_config.get('enabled', False))
+            or output_index is not None
+            or output_weights is not None
+        ):
             _add_to_cache(cache_key, wrapped_result)
 
         return wrapped_result

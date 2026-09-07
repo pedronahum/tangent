@@ -6,6 +6,7 @@ argument). This covers common patterns like clamping (``min(x, cap)``) and ReLU
 (``max(x, 0.0)``). These are reverse-mode gradients; the low-level three-or-more
 argument form is not supported.
 """
+
 import numpy as np
 import pytest
 
@@ -21,13 +22,13 @@ class TestMaxBuiltin:
         def f(x):
             return max(x, 1.0)
 
-        assert tangent.grad(f)(2.0) == pytest.approx(1.0)   # x > 1
+        assert tangent.grad(f)(2.0) == pytest.approx(1.0)  # x > 1
 
     def test_second_arg_selected(self):
         def f(x):
             return max(x, 5.0)
 
-        assert tangent.grad(f)(2.0) == pytest.approx(0.0)   # 5 > x
+        assert tangent.grad(f)(2.0) == pytest.approx(0.0)  # 5 > x
 
     def test_relu(self):
         def relu(x):
@@ -58,21 +59,21 @@ class TestMinBuiltin:
         def f(x):
             return min(x, 5.0)
 
-        assert tangent.grad(f)(2.0) == pytest.approx(1.0)   # x < 5
+        assert tangent.grad(f)(2.0) == pytest.approx(1.0)  # x < 5
 
     def test_second_arg_selected(self):
         def f(x):
             return min(x, 1.0)
 
-        assert tangent.grad(f)(2.0) == pytest.approx(0.0)   # 1 < x
+        assert tangent.grad(f)(2.0) == pytest.approx(0.0)  # 1 < x
 
     def test_clamp_on_expression(self):
         def f(x):
             return min(x * x, 4.0)
 
         df = tangent.grad(f)
-        assert df(1.0) == pytest.approx(2.0)   # x^2 < 4 -> d(x^2) = 2x
-        assert df(3.0) == pytest.approx(0.0)   # x^2 > 4 -> cap selected
+        assert df(1.0) == pytest.approx(2.0)  # x^2 < 4 -> d(x^2) = 2x
+        assert df(3.0) == pytest.approx(0.0)  # x^2 > 4 -> cap selected
 
 
 class TestAgainstFiniteDifferences:

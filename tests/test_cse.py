@@ -1,6 +1,7 @@
 """
 Unit tests for Common Subexpression Elimination.
 """
+
 import unittest
 import ast
 import gast
@@ -8,7 +9,7 @@ from tangent.optimizations.cse import (
     SubexpressionAnalyzer,
     CSETransformer,
     CommonSubexpressionEliminator,
-    apply_cse
+    apply_cse,
 )
 
 
@@ -143,9 +144,12 @@ def f(x, y):
         optimized = eliminator.optimize(func)
 
         # Should not add any CSE temps (nothing repeated)
-        temp_count = sum(1 for stmt in optimized.body
-                        if isinstance(stmt, (ast.Assign, gast.Assign)) and
-                           stmt.targets[0].id.startswith('_cse_temp'))
+        temp_count = sum(
+            1
+            for stmt in optimized.body
+            if isinstance(stmt, (ast.Assign, gast.Assign))
+            and stmt.targets[0].id.startswith('_cse_temp')
+        )
 
         self.assertEqual(temp_count, 0)
 

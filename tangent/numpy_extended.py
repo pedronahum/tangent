@@ -12,6 +12,7 @@ The additions focus on:
 5. Element-wise comparison/selection (minimum, maximum, clip, where)
 6. Additional math functions (log10, log2, log1p, expm1)
 """
+
 from __future__ import absolute_import
 
 import numpy
@@ -23,6 +24,7 @@ from tangent.tangents import tangent_
 # ============================================================================
 # Element-wise Operations
 # ============================================================================
+
 
 @adjoint(numpy.absolute)
 def absolute(y, x):
@@ -43,12 +45,13 @@ def square(y, x):
 @adjoint(numpy.reciprocal)
 def reciprocal(y, x):
     """Adjoint for numpy.reciprocal: ∂L/∂x = -∂L/∂z/x²"""
-    d[x] = -d[y] / (x ** 2)
+    d[x] = -d[y] / (x**2)
 
 
 # ============================================================================
 # Logarithmic Functions (additional variants)
 # ============================================================================
+
 
 @adjoint(numpy.log10)
 def log10(y, x):
@@ -77,6 +80,7 @@ def expm1(y, x):
 # ============================================================================
 # Reduction Operations
 # ============================================================================
+
 
 @adjoint(numpy.min)
 def min_(y, x, axis=None, keepdims=False):
@@ -126,6 +130,7 @@ def prod(y, x, axis=None, keepdims=False):
 # Linear Algebra Operations
 # ============================================================================
 
+
 @adjoint(numpy.matmul)
 def matmul(z, x, y):
     """Adjoint for numpy.matmul (matrix multiplication).
@@ -173,6 +178,7 @@ def trace(y, x):
 # Shape Manipulation Operations
 # ============================================================================
 
+
 @adjoint(numpy.squeeze)
 def squeeze(y, x, axis=None):
     """Adjoint for numpy.squeeze: ∂L/∂x = reshape(∂L/∂z, original_shape)"""
@@ -189,6 +195,7 @@ def expand_dims(y, x, axis):
 # cannot distribute gradients into. concat_desugar rewrites list-literal calls
 # into the varargs helpers below (mirroring the JAX concat_seq/stack_seq
 # machinery), whose varargs adjoints split the gradient back per input.
+
 
 def np_concat_seq(axis, *arrays):
     """Runtime helper: concatenate a varargs sequence of arrays."""
@@ -213,8 +220,7 @@ def np_stack_grads(dz, arrays, axis):
     return tuple(numpy.moveaxis(dz, axis, 0))
 
 
-non_differentiable.register_non_differentiable_functions(
-    np_concat_grads, np_stack_grads)
+non_differentiable.register_non_differentiable_functions(np_concat_grads, np_stack_grads)
 
 
 @adjoint(np_concat_seq)
@@ -252,7 +258,8 @@ def concatenate(dz, arrays, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate numpy.concatenate/stack when the '
         'list of arrays is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.')
+        'once from a literal, or pass a list literal directly.'
+    )
 
 
 @adjoint(numpy.stack)
@@ -261,12 +268,14 @@ def stack(dz, arrays, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate numpy.concatenate/stack when the '
         'list of arrays is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.')
+        'once from a literal, or pass a list literal directly.'
+    )
 
 
 # ============================================================================
 # Element-wise Comparison and Selection
 # ============================================================================
+
 
 @adjoint(numpy.minimum)
 def minimum(z, x, y):
@@ -307,6 +316,7 @@ def where(result, condition, x, y):
 # forward-mode seeds arrive as scalars and those operations need a
 # full-shape operand (same convention as tangents.py).
 # ============================================================================
+
 
 @tangent_(numpy.absolute)
 def tabsolute(z, x):
@@ -377,29 +387,30 @@ def tmax(z, x, axis=None, keepdims=False):
 def tprod(z, x, axis=None, keepdims=False):
     """Forward mode for numpy.prod: dz = sum(dx * prod(x) / x_i)."""
     d[z] = numpy.sum(
-        d[x] * tangent.unreduce(z, numpy.shape(x), axis, keepdims) / x,
-        axis=axis, keepdims=keepdims)
+        d[x] * tangent.unreduce(z, numpy.shape(x), axis, keepdims) / x, axis=axis, keepdims=keepdims
+    )
 
 
 @tangent_(numpy.matmul)
 def tmatmul(z, x, y):
     """Forward mode for numpy.matmul: dz = dx @ y + x @ dy."""
-    d[z] = (numpy.matmul(numpy.broadcast_to(d[x], numpy.shape(x)), y) +
-            numpy.matmul(x, numpy.broadcast_to(d[y], numpy.shape(y))))
+    d[z] = numpy.matmul(numpy.broadcast_to(d[x], numpy.shape(x)), y) + numpy.matmul(
+        x, numpy.broadcast_to(d[y], numpy.shape(y))
+    )
 
 
 @tangent_(numpy.linalg.inv)
 def tinv(z, x):
     """Forward mode for numpy.linalg.inv: dz = -z @ dx @ z."""
-    d[z] = -numpy.matmul(
-        numpy.matmul(z, numpy.broadcast_to(d[x], numpy.shape(x))), z)
+    d[z] = -numpy.matmul(numpy.matmul(z, numpy.broadcast_to(d[x], numpy.shape(x))), z)
 
 
 @tangent_(numpy.outer)
 def touter(z, a, b):
     """Forward mode for numpy.outer: dz = outer(da, b) + outer(a, db)."""
-    d[z] = (numpy.outer(numpy.broadcast_to(d[a], numpy.shape(a)), b) +
-            numpy.outer(a, numpy.broadcast_to(d[b], numpy.shape(b))))
+    d[z] = numpy.outer(numpy.broadcast_to(d[a], numpy.shape(a)), b) + numpy.outer(
+        a, numpy.broadcast_to(d[b], numpy.shape(b))
+    )
 
 
 @tangent_(numpy.trace)
@@ -411,15 +422,13 @@ def ttrace(z, x):
 @tangent_(numpy.squeeze)
 def tsqueeze(z, x, axis=None):
     """Forward mode for numpy.squeeze."""
-    d[z] = numpy.squeeze(
-        numpy.broadcast_to(d[x], numpy.shape(x)), axis=axis)
+    d[z] = numpy.squeeze(numpy.broadcast_to(d[x], numpy.shape(x)), axis=axis)
 
 
 @tangent_(numpy.expand_dims)
 def texpand_dims(z, x, axis):
     """Forward mode for numpy.expand_dims."""
-    d[z] = numpy.expand_dims(
-        numpy.broadcast_to(d[x], numpy.shape(x)), axis)
+    d[z] = numpy.expand_dims(numpy.broadcast_to(d[x], numpy.shape(x)), axis)
 
 
 @tangent_(numpy.clip)
@@ -459,10 +468,8 @@ def tvar(z, x, axis=None, ddof=0, keepdims=False):
     if axis is None:
         n = x.size
     else:
-        n = numpy.prod([x.shape[i]
-                        for i in (axis if isinstance(axis, tuple) else (axis,))])
-    d[z] = numpy.sum(2.0 * (x - x_mean) * d[x],
-                     axis=axis, keepdims=keepdims) / (n - ddof)
+        n = numpy.prod([x.shape[i] for i in (axis if isinstance(axis, tuple) else (axis,))])
+    d[z] = numpy.sum(2.0 * (x - x_mean) * d[x], axis=axis, keepdims=keepdims) / (n - ddof)
 
 
 @tangent_(numpy.std)
@@ -472,15 +479,14 @@ def tstd(z, x, axis=None, ddof=0, keepdims=False):
     if axis is None:
         n = x.size
     else:
-        n = numpy.prod([x.shape[i]
-                        for i in (axis if isinstance(axis, tuple) else (axis,))])
-    d[z] = numpy.sum((x - x_mean) * d[x],
-                     axis=axis, keepdims=keepdims) / ((n - ddof) * z)
+        n = numpy.prod([x.shape[i] for i in (axis if isinstance(axis, tuple) else (axis,))])
+    d[z] = numpy.sum((x - x_mean) * d[x], axis=axis, keepdims=keepdims) / ((n - ddof) * z)
 
 
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
 
 @adjoint(numpy.sign)
 def sign(y, x):
@@ -505,6 +511,7 @@ def ceil(y, x):
 # ============================================================================
 # Statistics Operations
 # ============================================================================
+
 
 @adjoint(numpy.var)
 def var(y, x, axis=None, ddof=0, keepdims=False):
@@ -557,14 +564,33 @@ from tangent import grads as _grads_module
 
 # List of functions we registered
 _our_functions = [
-    numpy.absolute, numpy.abs, numpy.square, numpy.reciprocal,
-    numpy.log10, numpy.log2, numpy.log1p, numpy.expm1,
-    numpy.min, numpy.max, numpy.prod,
-    numpy.matmul, numpy.linalg.inv, numpy.outer, numpy.trace,
-    numpy.squeeze, numpy.expand_dims, numpy.concatenate, numpy.stack,
-    numpy.minimum, numpy.clip, numpy.where,
-    numpy.sign, numpy.floor, numpy.ceil,
-    numpy.var, numpy.std
+    numpy.absolute,
+    numpy.abs,
+    numpy.square,
+    numpy.reciprocal,
+    numpy.log10,
+    numpy.log2,
+    numpy.log1p,
+    numpy.expm1,
+    numpy.min,
+    numpy.max,
+    numpy.prod,
+    numpy.matmul,
+    numpy.linalg.inv,
+    numpy.outer,
+    numpy.trace,
+    numpy.squeeze,
+    numpy.expand_dims,
+    numpy.concatenate,
+    numpy.stack,
+    numpy.minimum,
+    numpy.clip,
+    numpy.where,
+    numpy.sign,
+    numpy.floor,
+    numpy.ceil,
+    numpy.var,
+    numpy.std,
 ]
 
 # Remove from UNIMPLEMENTED_ADJOINTS
@@ -576,14 +602,29 @@ for func in _our_functions:
 from tangent import tangents as _tangents_module
 
 _our_tangent_functions = [
-    numpy.absolute, numpy.abs, numpy.reciprocal,
-    numpy.log10, numpy.log2, numpy.log1p, numpy.expm1,
-    numpy.min, numpy.max, numpy.prod,
-    numpy.matmul, numpy.linalg.inv, numpy.outer, numpy.trace,
-    numpy.squeeze, numpy.expand_dims,
-    numpy.clip, numpy.where,
-    numpy.sign, numpy.floor, numpy.ceil,
-    numpy.var, numpy.std,
+    numpy.absolute,
+    numpy.abs,
+    numpy.reciprocal,
+    numpy.log10,
+    numpy.log2,
+    numpy.log1p,
+    numpy.expm1,
+    numpy.min,
+    numpy.max,
+    numpy.prod,
+    numpy.matmul,
+    numpy.linalg.inv,
+    numpy.outer,
+    numpy.trace,
+    numpy.squeeze,
+    numpy.expand_dims,
+    numpy.clip,
+    numpy.where,
+    numpy.sign,
+    numpy.floor,
+    numpy.ceil,
+    numpy.var,
+    numpy.std,
     # numpy.concatenate / numpy.stack deliberately stay unimplemented as
     # direct tangents: list-literal calls are desugared to np_concat_seq /
     # np_stack_seq (which have tangents), and anything else should raise a
@@ -594,6 +635,8 @@ for func in _our_tangent_functions:
     _tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug(
-    'Extended NumPy gradients loaded successfully (%d new gradient '
-    'definitions)', len(_our_functions))
+    'Extended NumPy gradients loaded successfully (%d new gradient definitions)',
+    len(_our_functions),
+)

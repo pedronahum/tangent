@@ -21,11 +21,13 @@ method-resolution machinery in addition to the gradient rules themselves.
 Gradients are checked against tinygrad's own autodiff (``Tensor.gradient``)
 where practical, and against analytic values otherwise.
 """
+
 import numpy as np
 import pytest
 
 try:
     from tinygrad import Tensor
+
     TINYGRAD_AVAILABLE = True
 except ImportError:
     TINYGRAD_AVAILABLE = False
@@ -33,8 +35,7 @@ except ImportError:
 if TINYGRAD_AVAILABLE:
     import tangent
 
-pytestmark = pytest.mark.skipif(not TINYGRAD_AVAILABLE,
-                                reason="tinygrad not installed")
+pytestmark = pytest.mark.skipif(not TINYGRAD_AVAILABLE, reason="tinygrad not installed")
 
 
 def _np(t):
@@ -241,10 +242,8 @@ class TestLinearAlgebra:
         xm = np.random.randn(2, 3).astype(np.float32)
         wm = np.random.randn(3, 4).astype(np.float32)
         x, w = Tensor(xm), Tensor(wm)
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_matvec(self):
         def f(a, x):
@@ -253,10 +252,8 @@ class TestLinearAlgebra:
         am = np.random.randn(3, 4).astype(np.float32)
         xv = np.random.randn(4).astype(np.float32)
         a, x = Tensor(am), Tensor(xv)
-        assert _allclose(tangent.grad(f, wrt=(0,))(a, x),
-                         tinygrad_ref(f, a, x, wrt=0))
-        assert _allclose(tangent.grad(f, wrt=(1,))(a, x),
-                         tinygrad_ref(f, a, x, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(0,))(a, x), tinygrad_ref(f, a, x, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(1,))(a, x), tinygrad_ref(f, a, x, wrt=1))
 
     def test_vec_matmul_inner(self):
         def f(x, y):
@@ -407,8 +404,7 @@ class TestMLP:
         bm = np.random.randn(4).astype(np.float32)
         x, w, b = Tensor(xm), Tensor(wm), Tensor(bm)
         for i in range(3):
-            assert _allclose(tangent.grad(f, wrt=(i,))(x, w, b),
-                             tinygrad_ref(f, x, w, b, wrt=i))
+            assert _allclose(tangent.grad(f, wrt=(i,))(x, w, b), tinygrad_ref(f, x, w, b, wrt=i))
 
     def test_mlp_multi_wrt(self):
         def f(x, w, b):
@@ -549,31 +545,31 @@ class TestNormalization:
             m = x.mean(axis=(0, 2, 3))
             iv = (x.var(axis=(0, 2, 3)) + 1e-5).rsqrt()
             return x.batchnorm(w, b, m, iv).sum()
+
         return f
 
     def _batchnorm_args(self):
         rs = np.random.RandomState(0)
-        return (Tensor(rs.randn(2, 3, 4, 4).astype(np.float32)),
-                Tensor(rs.randn(3).astype(np.float32)),
-                Tensor(rs.randn(3).astype(np.float32)))
+        return (
+            Tensor(rs.randn(2, 3, 4, 4).astype(np.float32)),
+            Tensor(rs.randn(3).astype(np.float32)),
+            Tensor(rs.randn(3).astype(np.float32)),
+        )
 
     def test_batchnorm_wrt_x(self):
         f = self._batchnorm_fn()
         args = self._batchnorm_args()
-        assert _allclose(tangent.grad(f, wrt=(0,))(*args),
-                         tinygrad_ref(f, *args, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(0,))(*args), tinygrad_ref(f, *args, wrt=0))
 
     def test_batchnorm_wrt_weight(self):
         f = self._batchnorm_fn()
         args = self._batchnorm_args()
-        assert _allclose(tangent.grad(f, wrt=(1,))(*args),
-                         tinygrad_ref(f, *args, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(1,))(*args), tinygrad_ref(f, *args, wrt=1))
 
     def test_batchnorm_wrt_bias(self):
         f = self._batchnorm_fn()
         args = self._batchnorm_args()
-        assert _allclose(tangent.grad(f, wrt=(2,))(*args),
-                         tinygrad_ref(f, *args, wrt=2))
+        assert _allclose(tangent.grad(f, wrt=(2,))(*args), tinygrad_ref(f, *args, wrt=2))
 
 
 class TestDot:
@@ -584,30 +580,24 @@ class TestDot:
             return x.dot(w).sum()
 
         rs = np.random.RandomState(0)
-        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), \
-            Tensor(rs.randn(3, 4).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
+        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), Tensor(rs.randn(3, 4).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
 
     def test_dot_matrix_wrt_w(self):
         def f(x, w):
             return x.dot(w).sum()
 
         rs = np.random.RandomState(0)
-        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), \
-            Tensor(rs.randn(3, 4).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), Tensor(rs.randn(3, 4).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_dot_matvec(self):
         def f(x, w):
             return x.dot(w).sum()
 
         rs = np.random.RandomState(0)
-        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), \
-            Tensor(rs.randn(3).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
+        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), Tensor(rs.randn(3).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
 
 
 class TestConvAndPool:
@@ -615,35 +605,33 @@ class TestConvAndPool:
 
     def _conv_args(self):
         rs = np.random.RandomState(0)
-        return (Tensor(rs.randn(2, 3, 6, 6).astype(np.float32)),
-                Tensor(rs.randn(4, 3, 3, 3).astype(np.float32)),
-                Tensor(rs.randn(4).astype(np.float32)))
+        return (
+            Tensor(rs.randn(2, 3, 6, 6).astype(np.float32)),
+            Tensor(rs.randn(4, 3, 3, 3).astype(np.float32)),
+            Tensor(rs.randn(4).astype(np.float32)),
+        )
 
     def test_conv2d_wrt_input(self):
         def f(x, w):
             return x.conv2d(w).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
 
     def test_conv2d_wrt_weight(self):
         def f(x, w):
             return x.conv2d(w).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_padding(self):
         def f(x, w):
             return x.conv2d(w, padding=1).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_stride2_input_grad(self):
         # The input gradient supports stride > 1 via a transposed conv.
@@ -651,8 +639,7 @@ class TestConvAndPool:
             return x.conv2d(w, stride=2).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
 
     def test_conv2d_stride2_weight_grad(self):
         # The weight gradient handles the floor-remainder of the output-size
@@ -661,16 +648,14 @@ class TestConvAndPool:
             return x.conv2d(w, stride=2).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_dilation_weight_grad(self):
         def f(x, w):
             return x.conv2d(w, dilation=2).sum()
 
         x, w, _ = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_stride_dilation_weight_grad(self):
         def f(x, w):
@@ -679,16 +664,14 @@ class TestConvAndPool:
         rs = np.random.RandomState(0)
         x = Tensor(rs.randn(2, 3, 9, 9).astype(np.float32))
         w = Tensor(rs.randn(4, 3, 3, 3).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_conv2d_bias(self):
         def f(x, w, b):
             return x.conv2d(w, b).sum()
 
         x, w, b = self._conv_args()
-        assert _allclose(tangent.grad(f, wrt=(2,))(x, w, b),
-                         tinygrad_ref(f, x, w, b, wrt=2))
+        assert _allclose(tangent.grad(f, wrt=(2,))(x, w, b), tinygrad_ref(f, x, w, b, wrt=2))
 
     def test_avg_pool2d(self):
         def f(x):
@@ -745,24 +728,18 @@ class TestMatmulOperator:
             return (x @ w).sum()
 
         rs = np.random.RandomState(0)
-        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), \
-            Tensor(rs.randn(3).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), Tensor(rs.randn(3).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_matmul(self):
         def f(x, w):
             return (x @ w).sum()
 
         rs = np.random.RandomState(0)
-        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), \
-            Tensor(rs.randn(3, 4).astype(np.float32))
-        assert _allclose(tangent.grad(f, wrt=(0,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=0))
-        assert _allclose(tangent.grad(f, wrt=(1,))(x, w),
-                         tinygrad_ref(f, x, w, wrt=1))
+        x, w = Tensor(rs.randn(2, 3).astype(np.float32)), Tensor(rs.randn(3, 4).astype(np.float32))
+        assert _allclose(tangent.grad(f, wrt=(0,))(x, w), tinygrad_ref(f, x, w, wrt=0))
+        assert _allclose(tangent.grad(f, wrt=(1,))(x, w), tinygrad_ref(f, x, w, wrt=1))
 
     def test_vector_inner_product(self):
         def f(x, y):
@@ -783,7 +760,7 @@ class TestIndexing:
 
         df = tangent.grad(f)
         w = Tensor(np.arange(6.0).astype(np.float32))
-        assert _allclose(df(w), np.array([0., 0., 4., 0., 0., 0.]))
+        assert _allclose(df(w), np.array([0.0, 0.0, 4.0, 0.0, 0.0, 0.0]))
 
     def test_slice(self):
         def f(x):
@@ -791,7 +768,7 @@ class TestIndexing:
 
         df = tangent.grad(f)
         x = Tensor(np.ones(5, dtype=np.float32))
-        assert _allclose(df(x), np.array([1., 1., 0., 0., 0.]))
+        assert _allclose(df(x), np.array([1.0, 1.0, 0.0, 0.0, 0.0]))
 
     def test_row_index(self):
         def f(x):

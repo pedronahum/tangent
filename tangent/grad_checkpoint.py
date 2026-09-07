@@ -33,10 +33,12 @@ from tangent.grad_util import grad as tangent_grad
 from tangent.checkpointing_simple import get_memory_savings
 
 
-def grad_with_checkpointing(func: Callable,
-                            wrt: Tuple[int, ...] = (0,),
-                            num_checkpoints: Optional[int] = None,
-                            **grad_kwargs) -> Callable:
+def grad_with_checkpointing(
+    func: Callable,
+    wrt: Tuple[int, ...] = (0,),
+    num_checkpoints: Optional[int] = None,
+    **grad_kwargs,
+) -> Callable:
     """
     Intended: gradient of `func` with checkpointing applied to its loops.
 
@@ -82,8 +84,7 @@ def grad_with_checkpointing(func: Callable,
         "grad_with_checkpointing: automatic checkpointing via AST "
         "transformation is not implemented, and the function "
         f"'{func.__name__}' contains {len(loop_info)} loop(s):\n"
-        + "\n".join(f"  - Line {info['line']}: {info['type']}"
-                    for info in loop_info)
+        + "\n".join(f"  - Line {info['line']}: {info['type']}" for info in loop_info)
         + "\n"
         "\n"
         "Working alternatives:\n"
@@ -140,7 +141,7 @@ def _detect_loops(func: Callable) -> list:
                 'type': 'for',
                 'line': node.lineno,
                 'target': ast.unparse(node.target) if hasattr(ast, 'unparse') else '<target>',
-                'iter': ast.unparse(node.iter) if hasattr(ast, 'unparse') else '<iter>'
+                'iter': ast.unparse(node.iter) if hasattr(ast, 'unparse') else '<iter>',
             }
             self.loops.append(loop_info)
             self.generic_visit(node)
@@ -149,7 +150,7 @@ def _detect_loops(func: Callable) -> list:
             loop_info = {
                 'type': 'while',
                 'line': node.lineno,
-                'condition': ast.unparse(node.test) if hasattr(ast, 'unparse') else '<condition>'
+                'condition': ast.unparse(node.test) if hasattr(ast, 'unparse') else '<condition>',
             }
             self.loops.append(loop_info)
             self.generic_visit(node)
@@ -159,8 +160,7 @@ def _detect_loops(func: Callable) -> list:
     return finder.loops
 
 
-def estimate_checkpoint_savings(seq_length: int,
-                                num_checkpoints: Optional[int] = None) -> dict:
+def estimate_checkpoint_savings(seq_length: int, num_checkpoints: Optional[int] = None) -> dict:
     """
     Estimate memory savings from checkpointing.
 

@@ -19,60 +19,60 @@ from tangent import quoting
 
 
 def anf_lines(f):
-  """Return the ANF transformed source code as lines."""
-  return quoting.unquote(anf.anf(quoting.parse_function(f))).split('\n')
+    """Return the ANF transformed source code as lines."""
+    return quoting.unquote(anf.anf(quoting.parse_function(f))).split('\n')
 
 
 def anf_function(f, globals_=None):
-  m = gast.gast_to_ast(anf.anf(quoting.parse_function(f)))
-  m = gast.fix_missing_locations(m)
-  exec(compile(m, '<string>', 'exec'), globals_)
-  return f
+    m = gast.gast_to_ast(anf.anf(quoting.parse_function(f)))
+    m = gast.fix_missing_locations(m)
+    exec(compile(m, '<string>', 'exec'), globals_)
+    return f
 
 
 def test_anf():
-  def g(x):
-    return x * 2
+    def g(x):
+        return x * 2
 
-  h = g
+    h = g
 
-  def f(x):
-    y = g(h(x))
-    return y
+    def f(x):
+        y = g(h(x))
+        return y
 
-  assert anf_lines(f)[1].strip() == "h_x = h(x)"
-  assert anf_function(f, locals())(2) == 8
+    assert anf_lines(f)[1].strip() == "h_x = h(x)"
+    assert anf_function(f, locals())(2) == 8
 
-  def f(x):
-    return x * x * x
+    def f(x):
+        return x * x * x
 
-  assert 'return' in anf_lines(f)[-1] and '*' not in anf_lines(f)[-1]
-  assert anf_function(f)(2) == 8
+    assert 'return' in anf_lines(f)[-1] and '*' not in anf_lines(f)[-1]
+    assert anf_function(f)(2) == 8
 
-  def f(x):
-    y = [(x.y[0],), 3]
-    y += x * f(x[g(x)].b, (3, x / -2))
+    def f(x):
+        y = [(x.y[0],), 3]
+        y += x * f(x[g(x)].b, (3, x / -2))
 
-  assert anf.anf(quoting.parse_function(f))
+    assert anf.anf(quoting.parse_function(f))
 
 
 def test_long():
-  def f(x):
-    return some_very_long_name(some_other_long_name(x))
+    def f(x):
+        return some_very_long_name(some_other_long_name(x))
 
-  # If a function name is long, we use the LHS or return statement for the name
-  # instead
-  assert anf_lines(f)[-1].strip() == 'return _return'
-  assert anf_lines(f)[-3].strip().startswith('_return2 = ')
+    # If a function name is long, we use the LHS or return statement for the name
+    # instead
+    assert anf_lines(f)[-1].strip() == 'return _return'
+    assert anf_lines(f)[-3].strip().startswith('_return2 = ')
 
-  def f(x):
-    some_very_long_variable_name_here = f(some_very_long_function_name(x))
-    return some_very_long_variable_name_here
+    def f(x):
+        some_very_long_variable_name_here = f(some_very_long_function_name(x))
+        return some_very_long_variable_name_here
 
-  # If both the target and function name are long, we should back off to short,
-  # random variable names
-  assert len(anf_lines(f)[-3].strip()) < 40
+    # If both the target and function name are long, we should back off to short,
+    # random variable names
+    assert len(anf_lines(f)[-3].strip()) < 40
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

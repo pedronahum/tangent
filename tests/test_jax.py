@@ -3,6 +3,7 @@
 This module tests Tangent's automatic differentiation with JAX arrays and operations.
 Tests are organized by operation category and use pytest fixtures for setup.
 """
+
 import pytest
 import numpy as np
 
@@ -10,6 +11,7 @@ import numpy as np
 try:
     import jax
     import jax.numpy as jnp
+
     JAX_AVAILABLE = True
 except ImportError:
     JAX_AVAILABLE = False
@@ -25,6 +27,7 @@ class TestBasicOperations:
 
     def test_square(self):
         """Test gradient of x^2."""
+
         def f(x):
             return x * x
 
@@ -37,6 +40,7 @@ class TestBasicOperations:
 
     def test_polynomial(self):
         """Test gradient of polynomial: 3x^2 + 2x + 1."""
+
         def f(x):
             return 3.0 * x * x + 2.0 * x + 1.0
 
@@ -49,6 +53,7 @@ class TestBasicOperations:
 
     def test_add(self):
         """Test gradient of addition."""
+
         def f(x, y):
             return jnp.sum(x + y)
 
@@ -66,6 +71,7 @@ class TestBasicOperations:
 
     def test_multiply(self):
         """Test gradient of multiplication."""
+
         def f(x, y):
             return jnp.sum(x * y)
 
@@ -81,6 +87,7 @@ class TestBasicOperations:
 
     def test_divide(self):
         """Test gradient of division."""
+
         def f(x, y):
             return jnp.sum(x / y)
 
@@ -100,6 +107,7 @@ class TestMathFunctions:
 
     def test_exp(self):
         """Test gradient of exponential function."""
+
         def f(x):
             return jnp.sum(jnp.exp(x))
 
@@ -112,6 +120,7 @@ class TestMathFunctions:
 
     def test_log(self):
         """Test gradient of logarithm."""
+
         def f(x):
             return jnp.sum(jnp.log(x))
 
@@ -124,6 +133,7 @@ class TestMathFunctions:
 
     def test_sqrt(self):
         """Test gradient of square root."""
+
         def f(x):
             return jnp.sum(jnp.sqrt(x))
 
@@ -136,6 +146,7 @@ class TestMathFunctions:
 
     def test_power(self):
         """Test gradient of power function."""
+
         def f(x):
             return jnp.sum(jnp.power(x, 3.0))
 
@@ -148,11 +159,12 @@ class TestMathFunctions:
 
     def test_sin(self):
         """Test gradient of sine function."""
+
         def f(x):
             return jnp.sum(jnp.sin(x))
 
         df = tangent.grad(f)
-        x = jnp.array([0.0, jnp.pi/4, jnp.pi/2])
+        x = jnp.array([0.0, jnp.pi / 4, jnp.pi / 2])
         result = df(x)
         expected = jnp.cos(x)
 
@@ -160,11 +172,12 @@ class TestMathFunctions:
 
     def test_cos(self):
         """Test gradient of cosine function."""
+
         def f(x):
             return jnp.sum(jnp.cos(x))
 
         df = tangent.grad(f)
-        x = jnp.array([0.0, jnp.pi/4, jnp.pi/2])
+        x = jnp.array([0.0, jnp.pi / 4, jnp.pi / 2])
         result = df(x)
         expected = -jnp.sin(x)
 
@@ -172,6 +185,7 @@ class TestMathFunctions:
 
     def test_tanh(self):
         """Test gradient of hyperbolic tangent."""
+
         def f(x):
             return jnp.sum(jnp.tanh(x))
 
@@ -188,6 +202,7 @@ class TestLinearAlgebra:
 
     def test_dot_vectors(self):
         """Test gradient of vector dot product."""
+
         def f(x, y):
             return jnp.dot(x, y)
 
@@ -203,6 +218,7 @@ class TestLinearAlgebra:
 
     def test_dot_matrices(self):
         """Test gradient of matrix multiplication."""
+
         def f(x, y):
             return jnp.sum(jnp.dot(x, y))
 
@@ -218,6 +234,7 @@ class TestLinearAlgebra:
 
     def test_matmul(self):
         """Test gradient of matmul."""
+
         def f(x):
             return jnp.sum(jnp.matmul(x, x))
 
@@ -238,6 +255,7 @@ class TestReductions:
 
     def test_sum(self):
         """Test gradient of sum."""
+
         def f(x):
             return jnp.sum(x * x)
 
@@ -250,6 +268,7 @@ class TestReductions:
 
     def test_mean(self):
         """Test gradient of mean."""
+
         def f(x):
             return jnp.mean(x * x)
 
@@ -262,6 +281,7 @@ class TestReductions:
 
     def test_max(self):
         """Test gradient of max."""
+
         def f(x):
             return jnp.max(x * x)
 
@@ -275,6 +295,7 @@ class TestReductions:
 
     def test_sum_with_axis(self):
         """Test gradient of sum with axis parameter."""
+
         def f(x):
             return jnp.sum(jnp.sum(x, axis=0))
 
@@ -291,6 +312,7 @@ class TestActivations:
 
     def test_relu(self):
         """Test gradient of ReLU."""
+
         def f(x):
             return jnp.sum(jax.nn.relu(x))
 
@@ -303,6 +325,7 @@ class TestActivations:
 
     def test_sigmoid(self):
         """Test gradient of sigmoid."""
+
         def f(x):
             return jnp.sum(jax.nn.sigmoid(x))
 
@@ -317,6 +340,7 @@ class TestActivations:
 
     def test_softplus(self):
         """Test gradient of softplus."""
+
         def f(x):
             return jnp.sum(jax.nn.softplus(x))
 
@@ -329,6 +353,7 @@ class TestActivations:
 
     def test_elu(self):
         """Test gradient of ELU."""
+
         def f(x):
             return jnp.sum(jax.nn.elu(x))
 
@@ -341,6 +366,7 @@ class TestActivations:
 
     def test_leaky_relu(self):
         """Test gradient of Leaky ReLU."""
+
         def f(x):
             return jnp.sum(jax.nn.leaky_relu(x))
 
@@ -358,6 +384,7 @@ class TestElementwise:
 
     def test_maximum(self):
         """Test gradient of maximum."""
+
         def f(x, y):
             return jnp.sum(jnp.maximum(x, y))
 
@@ -374,6 +401,7 @@ class TestElementwise:
 
     def test_minimum(self):
         """Test gradient of minimum."""
+
         def f(x, y):
             return jnp.sum(jnp.minimum(x, y))
 
@@ -390,6 +418,7 @@ class TestElementwise:
 
     def test_negative(self):
         """Test gradient of negation."""
+
         def f(x):
             return jnp.sum(jnp.negative(x))
 
@@ -406,6 +435,7 @@ class TestBroadcasting:
 
     def test_broadcast_add(self):
         """Test gradient with broadcasted addition."""
+
         def f(x, y):
             return jnp.sum(x + y)
 
@@ -422,6 +452,7 @@ class TestBroadcasting:
 
     def test_broadcast_multiply(self):
         """Test gradient with broadcasted multiplication."""
+
         def f(x, y):
             return jnp.sum(x * y)
 
@@ -441,6 +472,7 @@ class TestComposedOperations:
 
     def test_neural_network_layer(self):
         """Test gradient of simple neural network layer."""
+
         def f(x, W, b):
             return jnp.sum(jax.nn.relu(jnp.dot(x, W) + b))
 
@@ -457,6 +489,7 @@ class TestComposedOperations:
 
     def test_polynomial_composition(self):
         """Test gradient of composed polynomial."""
+
         def f(x):
             y = x * x
             z = y * y
@@ -467,7 +500,7 @@ class TestComposedOperations:
         result = df(x)
 
         # d/dx(x^4) = 4x^3
-        expected = 4.0 * x ** 3
+        expected = 4.0 * x**3
         assert jnp.allclose(result, expected)
 
 
@@ -476,6 +509,7 @@ class TestMultipleGradients:
 
     def test_multiple_wrt(self):
         """Test gradient with respect to multiple arguments."""
+
         def f(x, y):
             return jnp.sum(x * y)
 
@@ -496,6 +530,7 @@ class TestPreserveResult:
 
     def test_preserve_result_true(self):
         """Test gradient computation with result preservation."""
+
         def f(x):
             return jnp.sum(x * x)
 
@@ -515,6 +550,7 @@ class TestCaching:
 
     def test_cache_hit(self):
         """Test that gradient functions are cached."""
+
         def f(x):
             return x * x
 

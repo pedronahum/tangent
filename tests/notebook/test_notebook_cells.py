@@ -2,6 +2,7 @@
 
 This ensures the notebook works end-to-end in Colab and locally.
 """
+
 import importlib.util
 import sys
 import traceback
@@ -15,27 +16,21 @@ _HAS_MATPLOTLIB = importlib.util.find_spec('matplotlib') is not None
 _HAS_TENSORFLOW = importlib.util.find_spec('tensorflow') is not None
 _HAS_JAX = importlib.util.find_spec('jax') is not None
 
-skip_no_matplotlib = pytest.mark.skipif(
-    not _HAS_MATPLOTLIB, reason='matplotlib not installed')
-skip_no_tensorflow = pytest.mark.skipif(
-    not _HAS_TENSORFLOW, reason='tensorflow not installed')
-skip_no_jax = pytest.mark.skipif(
-    not _HAS_JAX, reason='jax not installed')
+skip_no_matplotlib = pytest.mark.skipif(not _HAS_MATPLOTLIB, reason='matplotlib not installed')
+skip_no_tensorflow = pytest.mark.skipif(not _HAS_TENSORFLOW, reason='tensorflow not installed')
+skip_no_jax = pytest.mark.skipif(not _HAS_JAX, reason='jax not installed')
 
 # Track test results
-results = {
-    'passed': [],
-    'failed': [],
-    'skipped': []
-}
+results = {'passed': [], 'failed': [], 'skipped': []}
+
 
 # Named run_cell (not test_cell) so pytest does not collect this helper as a
 # test function - its parameters are not fixtures.
 def run_cell(cell_name, test_func):
     """Test a notebook cell and record results."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"Testing: {cell_name}")
-    print('='*70)
+    print('=' * 70)
     try:
         test_func()
         results['passed'].append(cell_name)
@@ -52,9 +47,11 @@ def run_cell(cell_name, test_func):
         traceback.print_exc()
         return False
 
+
 # ============================================================================
 # Section 1: Installation & Setup
 # ============================================================================
+
 
 @skip_no_matplotlib
 def test_cell_3_imports():
@@ -62,14 +59,18 @@ def test_cell_3_imports():
     import tangent
     import numpy as np
     import matplotlib
+
     matplotlib.use('Agg')  # Non-interactive backend
     import matplotlib.pyplot as plt
+
     assert tangent is not None
     assert np is not None
+
 
 # ============================================================================
 # Section 2: Basic Concepts
 # ============================================================================
+
 
 def test_cell_5_square():
     """Test simple square function gradient"""
@@ -84,6 +85,7 @@ def test_cell_5_square():
     expected = 2 * x_val
     assert abs(gradient - expected) < 1e-5, f"Expected {expected}, got {gradient}"
 
+
 def test_cell_7_polynomial():
     """Test polynomial gradient and code inspection"""
     import tangent
@@ -97,9 +99,11 @@ def test_cell_7_polynomial():
     assert 'def' in source
     assert 'dpolynomial' in source or 'polynomial' in source.lower()
 
+
 # ============================================================================
 # Section 3: NumPy Integration
 # ============================================================================
+
 
 def test_cell_12_vector_norm():
     """Test vector norm squared gradient"""
@@ -115,26 +119,24 @@ def test_cell_12_vector_norm():
     expected = 2 * x
     assert np.allclose(gradient, expected), f"Expected {expected}, got {gradient}"
 
+
 def test_cell_14_matrix_vector():
     """Test matrix-vector operation gradient"""
     import tangent
     import numpy as np
 
     def matrix_vector_sum(x):
-        A = np.array([[2.0, 1.0, 0.5],
-                      [1.0, 3.0, 0.7],
-                      [0.5, 0.7, 4.0]])
+        A = np.array([[2.0, 1.0, 0.5], [1.0, 3.0, 0.7], [0.5, 0.7, 4.0]])
         return np.sum(np.dot(A, x))
 
     df_dx = tangent.grad(matrix_vector_sum)
     x = np.array([1.0, 2.0, 3.0])
     gradient = df_dx(x)
 
-    A = np.array([[2.0, 1.0, 0.5],
-                  [1.0, 3.0, 0.7],
-                  [0.5, 0.7, 4.0]])
+    A = np.array([[2.0, 1.0, 0.5], [1.0, 3.0, 0.7], [0.5, 0.7, 4.0]])
     expected = np.sum(A, axis=0)
     assert np.allclose(gradient, expected)
+
 
 def test_cell_16_sigmoid():
     """Test sigmoid gradient"""
@@ -152,15 +154,19 @@ def test_cell_16_sigmoid():
     expected = sigmoid_x * (1.0 - sigmoid_x)
     assert np.allclose(gradient, expected)
 
+
 # ============================================================================
 # Section 4: TensorFlow Integration
 # ============================================================================
+
 
 @skip_no_tensorflow
 def test_cell_18_tf_import():
     """Test TensorFlow import"""
     import tensorflow as tf
+
     assert tf.__version__ is not None
+
 
 @skip_no_tensorflow
 def test_cell_20_tf_quadratic():
@@ -176,6 +182,7 @@ def test_cell_20_tf_quadratic():
     gradient = dtf_quadratic(x_tf)
     expected = 11.0  # 4*2 + 3
     assert abs(gradient.numpy() - expected) < 1e-5
+
 
 @skip_no_tensorflow
 def test_cell_22_tf_layer():
@@ -196,16 +203,20 @@ def test_cell_22_tf_layer():
     gradient = dlayer_dW(x, W, b)
     assert gradient.shape == W.shape
 
+
 # ============================================================================
 # Section 5: JAX Integration
 # ============================================================================
+
 
 @skip_no_jax
 def test_cell_24_jax_import():
     """Test JAX import"""
     import jax
     import jax.numpy as jnp
+
     assert jax.__version__ is not None
+
 
 @skip_no_jax
 def test_cell_26_jax_polynomial():
@@ -214,13 +225,14 @@ def test_cell_26_jax_polynomial():
     import jax.numpy as jnp
 
     def jax_polynomial(x):
-        return x**3 - 2*x**2 + 3*x - 1
+        return x**3 - 2 * x**2 + 3 * x - 1
 
     djax_polynomial = tangent.grad(jax_polynomial)
     x_jax = jnp.array(2.0)
     gradient = djax_polynomial(x_jax)
     expected = 3 * x_jax**2 - 4 * x_jax + 3
     assert jnp.allclose(gradient, expected)
+
 
 @skip_no_jax
 def test_cell_28_jax_relu():
@@ -247,9 +259,11 @@ def test_cell_28_jax_relu():
     assert abs(grad1 - (-4.0)) < 1e-5
     assert abs(grad5 - 4.0) < 1e-5
 
+
 # ============================================================================
 # Section 6: Advanced Features
 # ============================================================================
+
 
 def test_cell_32_multivariate():
     """Test multivariate gradient"""
@@ -268,6 +282,7 @@ def test_cell_32_multivariate():
     assert abs(grad_x - expected_grad_x) < 1e-5
     assert abs(grad_y - expected_grad_y) < 1e-5
 
+
 def test_cell_36_preserve_result():
     """Test preserve_result feature"""
     import tangent
@@ -283,9 +298,11 @@ def test_cell_36_preserve_result():
     expected_result = expensive_function(x)
     assert abs(result - expected_result) < 1e-5
 
+
 # ============================================================================
 # Section 9: Advanced Python Features
 # ============================================================================
+
 
 def test_cell_57_lambda():
     """Test lambda functions"""
@@ -304,6 +321,7 @@ def test_cell_57_lambda():
     gradient = d_activation(x_test)
     assert gradient is not None
 
+
 def test_cell_55_classes():
     """Test user-defined classes"""
     import tangent
@@ -315,7 +333,7 @@ def test_cell_55_classes():
             self.c = c
 
         def evaluate(self, x):
-            return self.a * x ** 2 + self.b * x + self.c
+            return self.a * x**2 + self.b * x + self.c
 
     def loss_with_class(x):
         poly = Polynomial(2.0, 3.0, 1.0)
@@ -326,6 +344,7 @@ def test_cell_55_classes():
     gradient = dloss(x_test)
     expected = 4 * x_test + 3
     assert abs(gradient - expected) < 1e-5
+
 
 def test_cell_53_inheritance():
     """Test class inheritance"""
@@ -358,6 +377,7 @@ def test_cell_53_inheritance():
     expected = 5 * (2.5 * x_test - 9)
     assert abs(gradient - expected) < 1e-5
 
+
 def test_cell_51_control_flow():
     """Test control flow"""
     import tangent
@@ -371,7 +391,7 @@ def test_cell_51_control_flow():
     dpoly = tangent.grad(polynomial_loop)
     x1 = 2.0
     grad1 = dpoly(x1)
-    expected1 = 1 + 2*x1 + 3*x1**2
+    expected1 = 1 + 2 * x1 + 3 * x1**2
     assert abs(grad1 - expected1) < 1e-5
 
     def relu_ternary(x):
@@ -381,6 +401,7 @@ def test_cell_51_control_flow():
     assert drelu(5.0) == 1.0
     assert drelu(-3.0) == 0.0
 
+
 def test_cell_49_oop_network():
     """Test OOP neural network"""
     import tangent
@@ -388,6 +409,7 @@ def test_cell_49_oop_network():
     class Layer:
         def __init__(self, name):
             self.name = name
+
         def forward(self, x):
             return x
 
@@ -396,6 +418,7 @@ def test_cell_49_oop_network():
             super().__init__(name)
             self.weight = weight
             self.bias = bias
+
         def forward(self, x):
             return x * self.weight + self.bias
 
@@ -413,43 +436,38 @@ def test_cell_49_oop_network():
     expected_grad = 2 * (x_test - 5.0)
     assert abs(gradient - expected_grad) < 1e-5
 
+
 # ============================================================================
 # Run All Tests
 # ============================================================================
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TANGENT NOTEBOOK COMPREHENSIVE TEST SUITE")
-    print("="*70)
+    print("=" * 70)
 
     # Define test order
     tests = [
         # Section 1: Setup
         ("Cell 3: Imports", test_cell_3_imports),
-
         # Section 2: Basic Concepts
         ("Cell 5: Square Function", test_cell_5_square),
         ("Cell 7: Polynomial", test_cell_7_polynomial),
-
         # Section 3: NumPy
         ("Cell 12: Vector Norm", test_cell_12_vector_norm),
         ("Cell 14: Matrix-Vector", test_cell_14_matrix_vector),
         ("Cell 16: Sigmoid", test_cell_16_sigmoid),
-
         # Section 4: TensorFlow
         ("Cell 18: TF Import", test_cell_18_tf_import),
         ("Cell 20: TF Quadratic", test_cell_20_tf_quadratic),
         ("Cell 22: TF Layer", test_cell_22_tf_layer),
-
         # Section 5: JAX
         ("Cell 24: JAX Import", test_cell_24_jax_import),
         ("Cell 26: JAX Polynomial", test_cell_26_jax_polynomial),
         ("Cell 28: JAX ReLU", test_cell_28_jax_relu),
-
         # Section 6: Advanced Features
         ("Cell 32: Multivariate", test_cell_32_multivariate),
         ("Cell 36: Preserve Result", test_cell_36_preserve_result),
-
         # Section 9: Advanced Python Features
         ("Cell 57: Lambda Functions", test_cell_57_lambda),
         ("Cell 55: Classes", test_cell_55_classes),
@@ -463,9 +481,9 @@ if __name__ == '__main__':
         run_cell(name, test_func)
 
     # Print summary
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEST SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print(f"✓ Passed:  {len(results['passed'])}")
     print(f"✗ Failed:  {len(results['failed'])}")
     print(f"⊘ Skipped: {len(results['skipped'])}")

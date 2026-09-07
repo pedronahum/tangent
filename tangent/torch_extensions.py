@@ -27,6 +27,7 @@ Example:
     df = tangent.grad(f)
     gradient = df(torch.tensor([1.0, 2.0, 3.0]))
 """
+
 from __future__ import absolute_import
 
 from numbers import Number
@@ -95,12 +96,26 @@ register_shape_function(TensorType, shape_as_list)
 
 # Register non-differentiable functions (shape queries, constructors, etc.)
 non_differentiable.register_non_differentiable_functions(
-    torch.zeros, torch.ones, torch.empty,
-    torch.zeros_like, torch.ones_like, torch.empty_like,
-    torch.full, torch.full_like,
-    torch.eye, torch.arange, torch.linspace, torch.logspace,
-    torch.tensor, torch.as_tensor, torch.rand, torch.randn,
-    size, shape_as_list, dtype, torch_seed
+    torch.zeros,
+    torch.ones,
+    torch.empty,
+    torch.zeros_like,
+    torch.ones_like,
+    torch.empty_like,
+    torch.full,
+    torch.full_like,
+    torch.eye,
+    torch.arange,
+    torch.linspace,
+    torch.logspace,
+    torch.tensor,
+    torch.as_tensor,
+    torch.rand,
+    torch.randn,
+    size,
+    shape_as_list,
+    dtype,
+    torch_seed,
 )
 
 # Register gradient initializers
@@ -220,13 +235,13 @@ def torch_matmul_grad_y(dz, x, y):
     return torch.matmul(torch.transpose(x, -2, -1), dz)
 
 
-_utils.register_matmul_grad(
-    TensorType, torch_matmul_grad_x, torch_matmul_grad_y)
+_utils.register_matmul_grad(TensorType, torch_matmul_grad_x, torch_matmul_grad_y)
 
 
 # ============================================================================
 # Reverse-mode (adjoint) gradient definitions
 # ============================================================================
+
 
 # Basic arithmetic operations
 @adjoint(torch.add)
@@ -342,7 +357,9 @@ def adjoint_sum(y, x, axis=None, keepdims=False):
 def adjoint_mean(y, x, axis=None, keepdims=False):
     """Adjoint for torch.mean."""
     n = tangent.size(x, axis)
-    d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) / n
+    d[x] = (
+        tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) / n
+    )
 
 
 @adjoint(torch.max)
@@ -357,7 +374,11 @@ def adjoint_max(y, x, axis=None, keepdims=False):
         max_val = torch.max(x, dim=axis, keepdim=True).values
         mask = (x == max_val).to(x.dtype)
         num_max = torch.sum(mask, dim=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) * mask / num_max
+    d[x] = (
+        tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims)
+        * mask
+        / num_max
+    )
 
 
 @adjoint(torch.min)
@@ -372,7 +393,11 @@ def adjoint_min(y, x, axis=None, keepdims=False):
         min_val = torch.min(x, dim=axis, keepdim=True).values
         mask = (x == min_val).to(x.dtype)
         num_min = torch.sum(mask, dim=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) * mask / num_min
+    d[x] = (
+        tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims)
+        * mask
+        / num_min
+    )
 
 
 # Linear algebra
@@ -519,6 +544,7 @@ adjoint(torch.nn.functional.log_softmax)(adjoint_log_softmax)
 # the varargs helpers below (mirroring the JAX concat_seq/stack_seq
 # machinery), whose varargs adjoints split the gradient back per input.
 
+
 def torch_cat_seq(axis, *tensors):
     """Runtime helper: concatenate a varargs sequence of tensors."""
     return torch.cat(list(tensors), dim=axis)
@@ -542,8 +568,7 @@ def torch_stack_grads(dz, tensors, axis):
     return tuple(torch.unbind(dz, dim=axis))
 
 
-non_differentiable.register_non_differentiable_functions(
-    torch_cat_grads, torch_stack_grads)
+non_differentiable.register_non_differentiable_functions(torch_cat_grads, torch_stack_grads)
 
 
 @adjoint(torch_cat_seq)
@@ -567,7 +592,8 @@ def adjoint_cat(dz, tensors, dim=0):
     raise NotImplementedError(
         'tangent can only differentiate torch.cat/torch.stack when the list '
         'of tensors is a literal. Bind the list to a variable assigned once '
-        'from a literal, or pass a list literal directly.')
+        'from a literal, or pass a list literal directly.'
+    )
 
 
 @adjoint(torch.stack)
@@ -576,7 +602,8 @@ def adjoint_stack(dz, tensors, dim=0):
     raise NotImplementedError(
         'tangent can only differentiate torch.cat/torch.stack when the list '
         'of tensors is a literal. Bind the list to a variable assigned once '
-        'from a literal, or pass a list literal directly.')
+        'from a literal, or pass a list literal directly.'
+    )
 
 
 # torch.concat / torch.concatenate are distinct alias objects for torch.cat.
@@ -587,6 +614,7 @@ adjoint(torch.concatenate)(adjoint_cat)
 #
 # Forward mode (tangent) definitions
 #
+
 
 @tangent_(torch.add)
 def tangent_add(z, x, y):
@@ -705,5 +733,7 @@ def tangent_torch_stack_seq(z, axis, *tensors):
 
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug(
-    'PyTorch extensions loaded successfully (torch %s)', torch.__version__)
+    'PyTorch extensions loaded successfully (torch %s)', torch.__version__
+)

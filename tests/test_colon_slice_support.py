@@ -3,6 +3,7 @@
 This tests the fix for the issue where x[0, :] and similar patterns
 would fail with SyntaxError due to invalid variable name generation.
 """
+
 import pytest
 import tangent
 import numpy as np
@@ -13,6 +14,7 @@ class TestColonSliceBasic:
 
     def test_row_selection_2d(self):
         """Test x[0, :] - select first row."""
+
         def f(x):
             row = x[0, :]
             return row.sum()
@@ -27,6 +29,7 @@ class TestColonSliceBasic:
 
     def test_column_selection_2d(self):
         """Test x[:, 0] - select first column."""
+
         def f(x):
             col = x[:, 0]
             return col.sum()
@@ -41,6 +44,7 @@ class TestColonSliceBasic:
 
     def test_full_array_colon(self):
         """Test x[:, :] - full array."""
+
         def f(x):
             full = x[:, :]
             return full.sum()
@@ -59,6 +63,7 @@ class TestColonSliceMixed:
 
     def test_range_plus_colon(self):
         """Test x[0:2, :] - range in first dim, colon in second."""
+
         def f(x):
             sliced = x[0:2, :]
             return sliced.sum()
@@ -73,6 +78,7 @@ class TestColonSliceMixed:
 
     def test_colon_plus_range(self):
         """Test x[:, 1:3] - colon in first dim, range in second."""
+
         def f(x):
             sliced = x[:, 1:3]
             return sliced.sum()
@@ -87,6 +93,7 @@ class TestColonSliceMixed:
 
     def test_int_plus_colon(self):
         """Test x[1, :] - integer in first dim, colon in second."""
+
         def f(x):
             row = x[1, :]
             return row.sum()
@@ -105,6 +112,7 @@ class TestColonSlice3D:
 
     def test_3d_first_dim_colon(self):
         """Test x[:, 0, 0] - colon in first dimension."""
+
         def f(x):
             sliced = x[:, 0, 0]
             return sliced.sum()
@@ -120,6 +128,7 @@ class TestColonSlice3D:
 
     def test_3d_middle_dim_colon(self):
         """Test x[0, :, 0] - colon in middle dimension."""
+
         def f(x):
             sliced = x[0, :, 0]
             return sliced.sum()
@@ -135,6 +144,7 @@ class TestColonSlice3D:
 
     def test_3d_last_dim_colon(self):
         """Test x[0, 0, :] - colon in last dimension."""
+
         def f(x):
             sliced = x[0, 0, :]
             return sliced.sum()
@@ -154,6 +164,7 @@ class TestColonSliceWithStep:
 
     def test_step_colon(self):
         """Test x[::2, :] - every other row."""
+
         def f(x):
             sliced = x[::2, :]
             return sliced.sum()
@@ -168,6 +179,7 @@ class TestColonSliceWithStep:
 
     def test_colon_with_step(self):
         """Test x[:, 0:4:2] - colon in first dim, range with step in second."""
+
         def f(x):
             sliced = x[:, 0:4:2]
             return sliced.sum()
@@ -186,6 +198,7 @@ class TestRealWorldExamples:
 
     def test_np_dot_with_row_slices(self):
         """Test the original failing example: np.dot(x[0, :], y[0, :])"""
+
         def f(x, y):
             x_row = x[0, :]
             y_row = y[0, :]
@@ -202,6 +215,7 @@ class TestRealWorldExamples:
 
     def test_matrix_vector_multiply(self):
         """Test matrix-vector multiply pattern."""
+
         def f(A, x_vec):
             # Extract row and multiply with vector
             row = A[0, :]
@@ -222,6 +236,7 @@ class TestEdgeCases:
 
     def test_single_element_slice(self):
         """Test x[0, :] when second dimension has size 1."""
+
         def f(x):
             row = x[0, :]
             return row.sum()
@@ -235,6 +250,7 @@ class TestEdgeCases:
 
     def test_nested_slicing(self):
         """Test nested slicing operations."""
+
         def f(x):
             # First slice rows, then slice columns
             rows = x[0:2, :]

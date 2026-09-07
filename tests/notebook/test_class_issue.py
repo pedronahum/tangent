@@ -4,6 +4,7 @@ The notebooks define a small Polynomial class and differentiate a loss that
 instantiates it; this pins that both a class defined locally (test style) and
 one defined at module level (notebook style) differentiate correctly.
 """
+
 import pytest
 
 import tangent
@@ -16,7 +17,7 @@ class Polynomial:
         self.c = c
 
     def evaluate(self, x):
-        return self.a * x ** 2 + self.b * x + self.c
+        return self.a * x**2 + self.b * x + self.c
 
 
 def loss_with_module_class(x):
@@ -34,7 +35,7 @@ def test_local_class():
             self.c = c
 
         def evaluate(self, x):
-            return self.a * x ** 2 + self.b * x + self.c
+            return self.a * x**2 + self.b * x + self.c
 
     def loss_with_class(x):
         poly = LocalPolynomial(2.0, 3.0, 1.0)

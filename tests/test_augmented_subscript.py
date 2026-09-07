@@ -12,6 +12,7 @@ a clear error, because attribute gradients are not supported.
 Plain augmented assignment on a variable (`x += y`) is fully supported and must
 keep working.
 """
+
 import numpy as np
 import pytest
 

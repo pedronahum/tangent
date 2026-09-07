@@ -79,10 +79,12 @@ def compute_checkpoint_positions(seq_length: int, num_checkpoints: int) -> List[
     return positions
 
 
-def checkpointed_loop(func: Callable[[Any], Any],
-                     initial_state: Any,
-                     seq_length: int,
-                     num_checkpoints: Optional[int] = None) -> Tuple[Any, Dict[int, Any]]:
+def checkpointed_loop(
+    func: Callable[[Any], Any],
+    initial_state: Any,
+    seq_length: int,
+    num_checkpoints: Optional[int] = None,
+) -> Tuple[Any, Dict[int, Any]]:
     """
     Execute a loop with checkpointing, storing only selected intermediate states.
 
@@ -164,6 +166,7 @@ def _copy_state(state: Any) -> Any:
         # Primitive type or unknown - try to copy
         try:
             import copy
+
             return copy.deepcopy(state)
         except:
             # If all else fails, return as-is
@@ -215,5 +218,7 @@ def get_memory_savings(seq_length: int, num_checkpoints: Optional[int] = None) -
         'savings_ratio': savings_ratio,
         'savings_percent': savings_percent,
         'num_checkpoints': len(checkpoint_positions),
-        'recomputation_factor': seq_length / len(checkpoint_positions) if len(checkpoint_positions) > 0 else 0
+        'recomputation_factor': seq_length / len(checkpoint_positions)
+        if len(checkpoint_positions) > 0
+        else 0,
     }

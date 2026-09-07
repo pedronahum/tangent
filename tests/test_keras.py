@@ -16,12 +16,14 @@
 These tests exercise Tangent's gradients of keras.ops functions with
 whichever Keras backend is active (TensorFlow, JAX or PyTorch).
 """
+
 import numpy as np
 import pytest
 
 try:
     import keras
     import keras.ops as kops
+
     KERAS_AVAILABLE = True
 except ImportError:
     KERAS_AVAILABLE = False
@@ -29,8 +31,7 @@ except ImportError:
 if KERAS_AVAILABLE:
     import tangent
 
-pytestmark = pytest.mark.skipif(not KERAS_AVAILABLE,
-                                reason="Keras not installed")
+pytestmark = pytest.mark.skipif(not KERAS_AVAILABLE, reason="Keras not installed")
 
 
 def tensor(arr):
@@ -40,8 +41,7 @@ def tensor(arr):
 
 def allclose(a, b, tol=1e-5):
     """Compare backend tensors / scalars numerically."""
-    return np.allclose(np.asarray(kops.convert_to_numpy(a)),
-                       np.asarray(b), atol=tol, rtol=tol)
+    return np.allclose(np.asarray(kops.convert_to_numpy(a)), np.asarray(b), atol=tol, rtol=tol)
 
 
 class TestBasicOperations:
@@ -138,8 +138,7 @@ class TestMathFunctions:
             return kops.sum(kops.tanh(x))
 
         x = tensor([0.5, -0.5])
-        assert allclose(tangent.grad(f)(x),
-                        1.0 - np.tanh([0.5, -0.5]) ** 2)
+        assert allclose(tangent.grad(f)(x), 1.0 - np.tanh([0.5, -0.5]) ** 2)
 
 
 class TestReductions:
@@ -149,8 +148,7 @@ class TestReductions:
         def f(x):
             return kops.sum(x)
 
-        assert allclose(tangent.grad(f)(tensor([1.0, 2.0, 3.0])),
-                        [1.0, 1.0, 1.0])
+        assert allclose(tangent.grad(f)(tensor([1.0, 2.0, 3.0])), [1.0, 1.0, 1.0])
 
     def test_sum_axis(self):
         def f(x):
@@ -163,8 +161,7 @@ class TestReductions:
         def f(x):
             return kops.mean(x)
 
-        assert allclose(tangent.grad(f)(tensor([1.0, 2.0, 3.0, 4.0])),
-                        [0.25] * 4)
+        assert allclose(tangent.grad(f)(tensor([1.0, 2.0, 3.0, 4.0])), [0.25] * 4)
 
 
 class TestLinearAlgebra:

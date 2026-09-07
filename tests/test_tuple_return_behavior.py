@@ -7,6 +7,7 @@ the gradient of the sum of the outputs.
 
 This is mathematically correct behavior for multi-output functions.
 """
+
 import numpy as np
 import tangent
 from tangent import grad
@@ -17,7 +18,7 @@ def test_scalar_return():
     """Test normal scalar return - baseline behavior."""
 
     def f(x):
-        return x ** 2 + x * 3
+        return x**2 + x * 3
 
     df = grad(f)
     result = df(2.0)
@@ -33,14 +34,15 @@ def test_tuple_return_sums_gradients():
     """
 
     def f(x):
-        return x ** 2, x * 3  # Returns tuple
+        return x**2, x * 3  # Returns tuple
 
     df = grad(f)
     result = df(2.0)
 
     # Tangent treats this as: d/dx(x^2 + 3x) = 2x + 3 = 7
-    assert np.isclose(result, 7.0), \
+    assert np.isclose(result, 7.0), (
         "Tuple returns are auto-summed: grad computes d/dx(sum of outputs)"
+    )
 
 
 def test_tuple_return_mathematical_interpretation():
@@ -52,28 +54,27 @@ def test_tuple_return_mathematical_interpretation():
 
     def f(x):
         # f1(x) = x^3, f2(x) = x^2
-        return x ** 3, x ** 2
+        return x**3, x**2
 
     df = grad(f)
     result = df(2.0)
 
     # With seed (1,1): d/dx(1*x^3 + 1*x^2) = 3x^2 + 2x = 3*4 + 2*2 = 16
-    expected = 3 * (2.0 ** 2) + 2 * 2.0
-    assert np.isclose(result, expected), \
-        f"Expected {expected}, got {result}"
+    expected = 3 * (2.0**2) + 2 * 2.0
+    assert np.isclose(result, expected), f"Expected {expected}, got {result}"
 
 
 def test_triple_return():
     """Test with three return values."""
 
     def f(x):
-        return x, x ** 2, x ** 3
+        return x, x**2, x**3
 
     df = grad(f)
     result = df(2.0)
 
     # d/dx(x + x^2 + x^3) = 1 + 2x + 3x^2 = 1 + 4 + 12 = 17
-    expected = 1 + 2 * 2.0 + 3 * (2.0 ** 2)
+    expected = 1 + 2 * 2.0 + 3 * (2.0**2)
     assert np.isclose(result, expected)
 
 
@@ -82,7 +83,7 @@ def test_weighted_tuple_return():
 
     def f(x):
         # One large output, one small output
-        return 1000 * x, 0.001 * x ** 2
+        return 1000 * x, 0.001 * x**2
 
     df = grad(f)
     result = df(2.0)
@@ -96,10 +97,10 @@ def test_comparison_with_explicit_sum():
     """Show that tuple return is equivalent to explicitly summing."""
 
     def f_tuple(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     def f_explicit_sum(x):
-        a = x ** 2
+        a = x**2
         b = x * 3
         return a + b
 
@@ -110,15 +111,16 @@ def test_comparison_with_explicit_sum():
     result_tuple = df_tuple(x)
     result_explicit = df_explicit(x)
 
-    assert np.isclose(result_tuple, result_explicit), \
+    assert np.isclose(result_tuple, result_explicit), (
         "Tuple return should give same gradient as explicit sum"
+    )
 
 
 def test_tuple_with_arrays():
     """Test tuple returns with array inputs."""
 
     def f(x):
-        return np.sum(x ** 2), np.sum(x * 3)
+        return np.sum(x**2), np.sum(x * 3)
 
     x = np.array([1.0, 2.0, 3.0])
     df = grad(f)
@@ -140,8 +142,8 @@ def test_why_this_behavior_makes_sense():
     """
 
     def loss(params):
-        mse = params ** 2  # Simulated MSE
-        reg = 0.01 * params ** 2  # L2 regularization
+        mse = params**2  # Simulated MSE
+        reg = 0.01 * params**2  # L2 regularization
         return mse, reg
 
     df = grad(loss)
@@ -159,7 +161,7 @@ def test_how_to_get_individual_gradients():
     """
 
     def f1(x):
-        return x ** 2
+        return x**2
 
     def f2(x):
         return x * 3
@@ -176,7 +178,7 @@ def test_how_to_get_individual_gradients():
 
     # If you returned (f1, f2), you'd get grad1 + grad2 = 7
     def f_combined(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     df_combined = grad(f_combined)
     grad_combined = df_combined(x)
@@ -209,7 +211,7 @@ def test_documentation_example():
 
     # ❌ Common mistake: Expecting separate gradients
     def model(x):
-        prediction = x ** 2
+        prediction = x**2
         confidence = x * 0.5
         return prediction, confidence
 
@@ -222,7 +224,7 @@ def test_documentation_example():
 
     # ✅ Correct: Sum explicitly if that's your intent
     def combined_loss(x):
-        prediction = x ** 2
+        prediction = x**2
         confidence = x * 0.5
         return prediction + confidence  # Explicit sum
 
@@ -233,7 +235,7 @@ def test_documentation_example():
 
     # ✅ Or define separate functions for separate gradients
     def just_prediction(x):
-        return x ** 2
+        return x**2
 
     d_prediction = grad(just_prediction)
     pred_gradient = d_prediction(3.0)  # = 2*3 = 6

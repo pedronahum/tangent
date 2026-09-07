@@ -17,6 +17,7 @@ To make the generated derivative source code more legible, statements are
 annotated with human-readable comments.
 
 """
+
 from __future__ import absolute_import
 
 import gast
@@ -25,47 +26,47 @@ from tangent import annotations as anno
 
 
 def add_comment(node, text, location='above'):
-  """Add a comment to the given node.
+    """Add a comment to the given node.
 
-  These comments are emitted as part of the source code when the node is
-  converted back to source with `quoting.to_source`.
+    These comments are emitted as part of the source code when the node is
+    converted back to source with `quoting.to_source`.
 
-  Note that a node can only contain one comment. Subsequent calls to
-  `add_comment` will ovverride the existing comments.
+    Note that a node can only contain one comment. Subsequent calls to
+    `add_comment` will ovverride the existing comments.
 
-  Args:
-    node: The AST node whose containing statement will be commented.
-    text: A comment string.
-    location: Where the comment should appear. Valid values are 'above',
-    'below' and 'right'
+    Args:
+      node: The AST node whose containing statement will be commented.
+      text: A comment string.
+      location: Where the comment should appear. Valid values are 'above',
+      'below' and 'right'
 
-  Returns:
-    The node with the comment stored as an annotation.
-  """
-  anno.setanno(node, 'comment', dict(location=location, text=text), safe=False)
-  return node
+    Returns:
+      The node with the comment stored as an annotation.
+    """
+    anno.setanno(node, 'comment', dict(location=location, text=text), safe=False)
+    return node
 
 
 def remove_repeated_comments(node):
-  """Remove comments that repeat themselves.
+    """Remove comments that repeat themselves.
 
-  Multiple statements might be annotated with the same comment. This way if one
-  of the statements is deleted during optimization passes, the comment won't be
-  lost. This pass removes sequences of identical comments, leaving only the
-  first one.
+    Multiple statements might be annotated with the same comment. This way if one
+    of the statements is deleted during optimization passes, the comment won't be
+    lost. This pass removes sequences of identical comments, leaving only the
+    first one.
 
-  Args:
-    node: An AST
+    Args:
+      node: An AST
 
-  Returns:
-    An AST where comments are not repeated in sequence.
+    Returns:
+      An AST where comments are not repeated in sequence.
 
-  """
-  last_comment = {'text': None}
-  for _node in gast.walk(node):
-    if anno.hasanno(_node, 'comment'):
-      comment = anno.getanno(_node, 'comment')
-      if comment['text'] == last_comment['text']:
-        anno.delanno(_node, 'comment')
-      last_comment = comment
-  return node
+    """
+    last_comment = {'text': None}
+    for _node in gast.walk(node):
+        if anno.hasanno(_node, 'comment'):
+            comment = anno.getanno(_node, 'comment')
+            if comment['text'] == last_comment['text']:
+                anno.delanno(_node, 'comment')
+            last_comment = comment
+    return node

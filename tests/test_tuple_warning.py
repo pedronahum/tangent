@@ -1,4 +1,5 @@
 """Test that the warning is issued for tuple returns."""
+
 import warnings
 import tangent
 from tangent.function_cache import clear_cache
@@ -12,7 +13,7 @@ def test_tuple_return_issues_warning():
     clear_cache()
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     # Capture warnings
     with warnings.catch_warnings(record=True) as w:
@@ -24,7 +25,9 @@ def test_tuple_return_issues_warning():
         # Note: There may be deprecation warnings from ast module, so filter for our warning
         tuple_warnings = [warning for warning in w if "returns a tuple" in str(warning.message)]
 
-        assert len(tuple_warnings) >= 1, f"Expected tuple warning, got {len(w)} warnings: {[str(x.message) for x in w]}"
+        assert len(tuple_warnings) >= 1, (
+            f"Expected tuple warning, got {len(w)} warnings: {[str(x.message) for x in w]}"
+        )
         assert issubclass(tuple_warnings[0].category, UserWarning)
         assert "sum of all outputs" in str(tuple_warnings[0].message)
 
@@ -43,7 +46,7 @@ def test_scalar_return_no_warning():
     clear_cache()
 
     def g(x):  # Use different function name to avoid conflicts
-        return x ** 2
+        return x**2
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")

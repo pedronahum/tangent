@@ -3,6 +3,7 @@ Test applying CSE directly to Tangent's generated gradient AST.
 
 This demonstrates CSE working on the actual gradient code AST before compilation.
 """
+
 import unittest
 import tangent
 from tangent.optimizations.cse import apply_cse
@@ -15,6 +16,7 @@ class TestCSEOnTangentAST(unittest.TestCase):
 
     def test_apply_cse_to_gradient_ast(self):
         """Apply CSE to a gradient function's AST."""
+
         def f(x):
             # Function with redundant x*x
             a = x * x
@@ -173,9 +175,12 @@ def dfdx(x, by=1.0):
         print(gast.unparse(optimized))
 
         # Count CSE temps created
-        cse_temp_count = sum(1 for stmt in optimized.body
-                            if isinstance(stmt, (ast.Assign, gast.Assign)) and
-                               stmt.targets[0].id.startswith('_cse_temp'))
+        cse_temp_count = sum(
+            1
+            for stmt in optimized.body
+            if isinstance(stmt, (ast.Assign, gast.Assign))
+            and stmt.targets[0].id.startswith('_cse_temp')
+        )
 
         print(f"\nCSE temporary variables created: {cse_temp_count}")
         print("=" * 60)

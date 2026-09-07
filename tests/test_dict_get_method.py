@@ -9,6 +9,7 @@ subscripting, so Tangent desugars it before differentiation:
 These tests cover reverse mode (the fully supported path), plus the two-argument
 form in forward mode (its ternary is lowered to an if-statement).
 """
+
 import pytest
 
 import tangent
@@ -42,7 +43,7 @@ class TestGetReverseMode:
 
     def test_get_multi_key(self):
         def f(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d.get('a') + d.get('b')
 
         # d/dx (x + x^2) = 1 + 2x = 5 at x = 2
@@ -51,7 +52,7 @@ class TestGetReverseMode:
 
     def test_get_in_loop_accumulates(self):
         def f(x):
-            d = {'w': x ** 2}
+            d = {'w': x**2}
             total = 0.0
             for i in range(3):
                 total = total + d.get('w')
@@ -79,15 +80,14 @@ class TestGetReverseMode:
 
     def test_get_equivalent_to_subscript(self):
         def with_get(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d.get('a') + d.get('b')
 
         def with_subscript(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d['a'] + d['b']
 
-        assert tangent.grad(with_get)(3.0) == pytest.approx(
-            tangent.grad(with_subscript)(3.0))
+        assert tangent.grad(with_get)(3.0) == pytest.approx(tangent.grad(with_subscript)(3.0))
 
 
 class TestGetForwardMode:

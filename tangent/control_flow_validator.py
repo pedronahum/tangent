@@ -17,6 +17,7 @@ This module validates that control flow patterns in user code are compatible
 with Tangent's AD implementation. It detects known limitations and provides
 helpful error messages with workarounds.
 """
+
 from __future__ import absolute_import
 
 import gast
@@ -24,6 +25,7 @@ import gast
 
 class ControlFlowError(ValueError):
     """Exception raised when unsupported control flow patterns are detected."""
+
     pass
 
 
@@ -52,11 +54,13 @@ class ControlFlowValidator(gast.NodeVisitor):
         # Enter while loop context
         old_in_while = self.in_while
         self.in_while = True
-        self.while_stack.append({
-            'assigned_before_continue': set(),
-            'used_after_assignment': set(),
-            'has_continue': False
-        })
+        self.while_stack.append(
+            {
+                'assigned_before_continue': set(),
+                'used_after_assignment': set(),
+                'has_continue': False,
+            }
+        )
 
         # Visit the while body
         for stmt in node.body:
@@ -65,22 +69,25 @@ class ControlFlowValidator(gast.NodeVisitor):
         # Check for problematic pattern: assignment before continue, used in computation
         loop_info = self.while_stack.pop()
         if loop_info['has_continue']:
-            problematic_vars = (loop_info['assigned_before_continue'] &
-                               loop_info['used_after_assignment'])
+            problematic_vars = (
+                loop_info['assigned_before_continue'] & loop_info['used_after_assignment']
+            )
             if problematic_vars:
-                self.warnings.append({
-                    'type': 'while_continue_variable',
-                    'vars': problematic_vars,
-                    'message': (
-                        f"While loop with continue statement uses variables "
-                        f"({', '.join(sorted(problematic_vars))}) that are assigned "
-                        f"before the continue check. This may cause gradient computation "
-                        f"errors if these variables are used in differentiable operations.\n\n"
-                        f"Workaround: Move variable assignments after the continue check, "
-                        f"or avoid using these variables in computations that affect the gradient."
-                    ),
-                    'node': node
-                })
+                self.warnings.append(
+                    {
+                        'type': 'while_continue_variable',
+                        'vars': problematic_vars,
+                        'message': (
+                            f"While loop with continue statement uses variables "
+                            f"({', '.join(sorted(problematic_vars))}) that are assigned "
+                            f"before the continue check. This may cause gradient computation "
+                            f"errors if these variables are used in differentiable operations.\n\n"
+                            f"Workaround: Move variable assignments after the continue check, "
+                            f"or avoid using these variables in computations that affect the gradient."
+                        ),
+                        'node': node,
+                    }
+                )
 
         # Restore context
         self.in_while = old_in_while
@@ -105,6 +112,7 @@ class ControlFlowValidator(gast.NodeVisitor):
             class VarUseFinder(gast.NodeVisitor):
                 def __init__(self):
                     self.used_vars = set()
+
                 def visit_Name(self, n):
                     if isinstance(n.ctx, gast.Load):
                         self.used_vars.add(n.id)
@@ -173,8 +181,7 @@ def validate_control_flow(node, source_code='', verbose=False):
     if errors:
         error_msgs = [validator.format_message(e) for e in errors]
         raise ControlFlowError(
-            "Unsupported control flow patterns detected:\n" +
-            "\n".join(error_msgs)
+            "Unsupported control flow patterns detected:\n" + "\n".join(error_msgs)
         )
 
     # Warnings are informational

@@ -21,17 +21,24 @@ Note that one still needs to provide tangents for non-differentiable functions,
 but these should simply call the original.
 TODO: Remove this requirement.
 """
+
 from __future__ import absolute_import
 
 import numpy
 
 
-NON_DIFFERENTIABLE = set([
-    len,
-    numpy.shape, numpy.zeros, numpy.ones, numpy.zeros_like, numpy.ones_like,
-])
+NON_DIFFERENTIABLE = set(
+    [
+        len,
+        numpy.shape,
+        numpy.zeros,
+        numpy.ones,
+        numpy.zeros_like,
+        numpy.ones_like,
+    ]
+)
 
 
 def register_non_differentiable_functions(*funcs):
-  global NON_DIFFERENTIABLE
-  NON_DIFFERENTIABLE |= set(funcs)
+    global NON_DIFFERENTIABLE
+    NON_DIFFERENTIABLE |= set(funcs)

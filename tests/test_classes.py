@@ -16,6 +16,7 @@
 This test suite validates that Tangent can differentiate through
 user-defined class methods using method inlining transformation.
 """
+
 from __future__ import absolute_import
 
 import pytest
@@ -27,16 +28,17 @@ import tangent
 # Phase 1: Basic Method Inlining Tests
 # =============================================================================
 
+
 class SimpleCalculator:
     """Simple class with basic mathematical methods."""
 
     def square(self, x):
         """Return x squared."""
-        return x ** 2
+        return x**2
 
     def cube(self, x):
         """Return x cubed."""
-        return x ** 3
+        return x**3
 
     def add_constant(self, x):
         """Return x plus a constant."""
@@ -45,6 +47,7 @@ class SimpleCalculator:
 
 def test_simple_method_square():
     """Test differentiation of simple method: x^2."""
+
     def f(x):
         calc = SimpleCalculator()
         return calc.square(x)
@@ -61,6 +64,7 @@ def test_simple_method_square():
 
 def test_simple_method_cube():
     """Test differentiation of simple method: x^3."""
+
     def f(x):
         calc = SimpleCalculator()
         return calc.cube(x)
@@ -77,6 +81,7 @@ def test_simple_method_cube():
 
 def test_simple_method_constant():
     """Test differentiation of method with constant: x + 10."""
+
     def f(x):
         calc = SimpleCalculator()
         return calc.add_constant(x)
@@ -90,6 +95,7 @@ def test_simple_method_constant():
 
 def test_multiple_methods_same_class():
     """Test using multiple methods from the same class instance."""
+
     def f(x):
         calc = SimpleCalculator()
         return calc.square(x) + calc.cube(x)
@@ -98,17 +104,18 @@ def test_multiple_methods_same_class():
     df = tangent.grad(f)
 
     # Test at x = 2: gradient should be 2*2 + 3*4 = 4 + 12 = 16
-    expected = 2*2 + 3*4
+    expected = 2 * 2 + 3 * 4
     assert abs(df(2.0) - expected) < 1e-10, f"Expected {expected}, got {df(2.0)}"
 
     # Test at x = 3: gradient should be 2*3 + 3*9 = 6 + 27 = 33
-    expected = 2*3 + 3*9
+    expected = 2 * 3 + 3 * 9
     assert abs(df(3.0) - expected) < 1e-10, f"Expected {expected}, got {df(3.0)}"
 
 
 # =============================================================================
 # Phase 2: Instance Attributes Tests
 # =============================================================================
+
 
 class Scaler:
     """Class with instance attributes."""
@@ -131,11 +138,12 @@ class Polynomial:
 
     def evaluate(self, x):
         """Evaluate polynomial: a*x^2 + b*x + c."""
-        return self.a * x ** 2 + self.b * x + self.c
+        return self.a * x**2 + self.b * x + self.c
 
 
 def test_instance_attribute_simple():
     """Test method using simple instance attribute."""
+
     def f(x):
         scaler = Scaler(2.5)
         return scaler.scale(x)
@@ -149,6 +157,7 @@ def test_instance_attribute_simple():
 
 def test_instance_attribute_multiple():
     """Test method using multiple instance attributes."""
+
     def f(x):
         poly = Polynomial(2.0, 3.0, 1.0)  # 2x^2 + 3x + 1
         return poly.evaluate(x)
@@ -165,6 +174,7 @@ def test_instance_attribute_multiple():
 
 def test_instance_attribute_different_instances():
     """Test that different instances with different attributes work correctly."""
+
     def f(x):
         scaler1 = Scaler(2.0)
         scaler2 = Scaler(3.0)
@@ -180,11 +190,12 @@ def test_instance_attribute_different_instances():
 # Phase 3: Method Chaining Tests
 # =============================================================================
 
+
 class ChainedCalculator:
     """Class with methods that call other methods."""
 
     def square(self, x):
-        return x ** 2
+        return x**2
 
     def double(self, x):
         return x * 2
@@ -200,6 +211,7 @@ class ChainedCalculator:
 
 def test_method_calling_method():
     """Test method that calls another method."""
+
     def f(x):
         calc = ChainedCalculator()
         return calc.square_then_double(x)
@@ -217,6 +229,7 @@ def test_method_calling_method():
 
 def test_method_multiple_chained_calls():
     """Test method with multiple chained method calls."""
+
     def f(x):
         calc = ChainedCalculator()
         return calc.combined(x)
@@ -236,20 +249,22 @@ def test_method_multiple_chained_calls():
 # NumPy Integration Tests
 # =============================================================================
 
+
 class NumpyCalculator:
     """Class with NumPy operations."""
 
     def sin_plus_square(self, x):
         """Compute sin(x) + x^2."""
-        return np.sin(x) + x ** 2
+        return np.sin(x) + x**2
 
     def array_sum(self, x):
         """Compute sum of array operations."""
-        return np.sum(x ** 2)
+        return np.sum(x**2)
 
 
 def test_numpy_operations_in_method():
     """Test method containing NumPy operations."""
+
     def f(x):
         calc = NumpyCalculator()
         return calc.sin_plus_square(x)
@@ -266,6 +281,7 @@ def test_numpy_operations_in_method():
 
 def test_numpy_array_operations():
     """Test method with NumPy array operations."""
+
     def f(x):
         calc = NumpyCalculator()
         return calc.array_sum(x)
@@ -284,12 +300,13 @@ def test_numpy_array_operations():
 # Edge Cases and Advanced Tests
 # =============================================================================
 
+
 class MultiParameter:
     """Class with multi-parameter methods."""
 
     def multiply_add(self, x, y):
         """Compute x * y + x^2."""
-        return x * y + x ** 2
+        return x * y + x**2
 
 
 class NestedClass:
@@ -305,6 +322,7 @@ class NestedClass:
 
 def test_method_multiple_parameters():
     """Test method with multiple parameters."""
+
     def f(x, y):
         calc = MultiParameter()
         return calc.multiply_add(x, y)
@@ -318,6 +336,7 @@ def test_method_multiple_parameters():
 
 def test_method_wrt_second_parameter():
     """Test gradient w.r.t. second parameter."""
+
     def f(x, y):
         calc = MultiParameter()
         return calc.multiply_add(x, y)
@@ -331,6 +350,7 @@ def test_method_wrt_second_parameter():
 
 def test_class_instantiation_with_no_args():
     """Test class instantiation without __init__ arguments."""
+
     def f(x):
         calc = SimpleCalculator()
         return calc.square(x) + calc.cube(x)

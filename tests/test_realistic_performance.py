@@ -3,6 +3,7 @@ Realistic performance benchmarks showing CSE and Algebraic Simplification impact
 
 These tests target specific patterns where symbolic optimizations provide benefit.
 """
+
 import unittest
 import tangent
 import time
@@ -29,7 +30,7 @@ def benchmark_function(func, *args, iterations=1000, warmup=100):
         'std': statistics.stdev(times) if len(times) > 1 else 0,
         'min': min(times),
         'max': max(times),
-        'result': result
+        'result': result,
     }
 
 
@@ -44,6 +45,7 @@ class TestRealisticPerformance(unittest.TestCase):
         expression multiple times (e.g., bc * x for product rule).
         CSE should optimize these.
         """
+
         def forward_function(x, y, z):
             # Forward pass creates expressions that lead to redundancy in backward
             a = x * y * z
@@ -59,12 +61,20 @@ class TestRealisticPerformance(unittest.TestCase):
 
         # Generate gradients w.r.t. x
         grad_no_opt = tangent.grad(forward_function, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(forward_function, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(forward_function, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            forward_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': False},
+            verbose=0,
+        )
+        grad_with_cse = tangent.grad(
+            forward_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True},
+            verbose=0,
+        )
 
         # Benchmark
         test_inputs = (2.0, 3.0, 4.0)
@@ -83,9 +93,15 @@ class TestRealisticPerformance(unittest.TestCase):
 
         print(f"\n{'Configuration':<25} {'Time (μs)':<15} {'Speedup':<15}")
         print("-" * 70)
-        print(f"{'No optimization':<25} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}")
-        print(f"{'Standard (DCE)':<25} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×")
-        print(f"{'CSE + DCE':<25} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×")
+        print(
+            f"{'No optimization':<25} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}"
+        )
+        print(
+            f"{'Standard (DCE)':<25} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×"
+        )
+        print(
+            f"{'CSE + DCE':<25} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×"
+        )
 
         print(f"\n{'Improvement':<40} {'Factor':<15}")
         print("-" * 70)
@@ -97,6 +113,7 @@ class TestRealisticPerformance(unittest.TestCase):
         """
         Test on chain rule where intermediate values are reused.
         """
+
         def chain_function(x):
             # f(x) = ((x²)² + (x²)²)²
             # This creates redundant x² computations in gradient
@@ -114,12 +131,20 @@ class TestRealisticPerformance(unittest.TestCase):
 
         # Generate gradients
         grad_no_opt = tangent.grad(chain_function, wrt=(0,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(chain_function, wrt=(0,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(chain_function, wrt=(0,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            chain_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': False},
+            verbose=0,
+        )
+        grad_with_cse = tangent.grad(
+            chain_function,
+            wrt=(0,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True},
+            verbose=0,
+        )
 
         # Benchmark
         test_input = 2.0
@@ -138,9 +163,15 @@ class TestRealisticPerformance(unittest.TestCase):
 
         print(f"\n{'Configuration':<25} {'Time (μs)':<15} {'Speedup':<15}")
         print("-" * 70)
-        print(f"{'No optimization':<25} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}")
-        print(f"{'Standard (DCE)':<25} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×")
-        print(f"{'CSE + DCE':<25} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×")
+        print(
+            f"{'No optimization':<25} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}"
+        )
+        print(
+            f"{'Standard (DCE)':<25} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×"
+        )
+        print(
+            f"{'CSE + DCE':<25} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×"
+        )
 
         print(f"\n{'Improvement':<40} {'Factor':<15}")
         print("-" * 70)
@@ -152,6 +183,7 @@ class TestRealisticPerformance(unittest.TestCase):
         """
         Test all optimizations together on a realistic function.
         """
+
         def realistic_ml_function(x, w1, w2):
             # A more realistic ML-style function
             # Hidden layer 1
@@ -174,15 +206,27 @@ class TestRealisticPerformance(unittest.TestCase):
 
         # Generate gradients w.r.t. w1
         grad_no_opt = tangent.grad(realistic_ml_function, wrt=(1,), optimized=False, verbose=0)
-        grad_standard = tangent.grad(realistic_ml_function, wrt=(1,), optimized=True,
-                                      optimizations={'dce': True, 'cse': False, 'algebraic': False},
-                                      verbose=0)
-        grad_with_cse = tangent.grad(realistic_ml_function, wrt=(1,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True, 'algebraic': False},
-                                       verbose=0)
-        grad_all_opts = tangent.grad(realistic_ml_function, wrt=(1,), optimized=True,
-                                       optimizations={'dce': True, 'cse': True, 'algebraic': True},
-                                       verbose=0)
+        grad_standard = tangent.grad(
+            realistic_ml_function,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': False, 'algebraic': False},
+            verbose=0,
+        )
+        grad_with_cse = tangent.grad(
+            realistic_ml_function,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': False},
+            verbose=0,
+        )
+        grad_all_opts = tangent.grad(
+            realistic_ml_function,
+            wrt=(1,),
+            optimized=True,
+            optimizations={'dce': True, 'cse': True, 'algebraic': True},
+            verbose=0,
+        )
 
         # Benchmark
         test_inputs = (2.0, 0.5, 0.3)
@@ -203,10 +247,18 @@ class TestRealisticPerformance(unittest.TestCase):
 
         print(f"\n{'Configuration':<30} {'Time (μs)':<15} {'Speedup':<15}")
         print("-" * 70)
-        print(f"{'No optimization':<30} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}")
-        print(f"{'DCE only':<30} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×")
-        print(f"{'DCE + CSE':<30} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×")
-        print(f"{'DCE + CSE + Algebraic':<30} {stats_all_opts['mean']:>10.2f} ± {stats_all_opts['std']:<8.2f} {speedup_all:<15.2f}×")
+        print(
+            f"{'No optimization':<30} {stats_no_opt['mean']:>10.2f} ± {stats_no_opt['std']:<8.2f} {'baseline':<15}"
+        )
+        print(
+            f"{'DCE only':<30} {stats_standard['mean']:>10.2f} ± {stats_standard['std']:<8.2f} {speedup_standard:<15.2f}×"
+        )
+        print(
+            f"{'DCE + CSE':<30} {stats_with_cse['mean']:>10.2f} ± {stats_with_cse['std']:<8.2f} {speedup_cse:<15.2f}×"
+        )
+        print(
+            f"{'DCE + CSE + Algebraic':<30} {stats_all_opts['mean']:>10.2f} ± {stats_all_opts['std']:<8.2f} {speedup_all:<15.2f}×"
+        )
 
         print(f"\n{'Improvement':<40} {'Factor':<15}")
         print("-" * 70)
@@ -222,6 +274,7 @@ class TestOptimizationImpact(unittest.TestCase):
 
     def test_optimization_breakdown(self):
         """Show contribution of each optimization."""
+
         def test_function(x, y):
             # Function designed to benefit from all optimizations
             a = x * x + y * y
@@ -249,8 +302,9 @@ class TestOptimizationImpact(unittest.TestCase):
         test_inputs = (2.0, 3.0)
 
         for name, opts in configs:
-            grad_func = tangent.grad(test_function, wrt=(0,), optimized=True,
-                                      optimizations=opts, verbose=0)
+            grad_func = tangent.grad(
+                test_function, wrt=(0,), optimized=True, optimizations=opts, verbose=0
+            )
             stats = benchmark_function(grad_func, *test_inputs, iterations=1000)
             results.append((name, stats))
 

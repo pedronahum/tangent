@@ -26,35 +26,38 @@ followed by copies from that target::
 Only chained assignments whose targets are all plain names are rewritten (the
 common case). Anything else is left untouched.
 """
+
 from __future__ import absolute_import
 
 import gast
 
 
 class ChainedAssignDesugarer(gast.NodeTransformer):
-  """Rewrite ``a = b = e`` into ``a = e; b = a``."""
+    """Rewrite ``a = b = e`` into ``a = e; b = a``."""
 
-  def visit_Assign(self, node):
-    self.generic_visit(node)
-    if len(node.targets) <= 1:
-      return node
-    if not all(isinstance(t, gast.Name) for t in node.targets):
-      # Leave chained assignments with non-name targets alone.
-      return node
+    def visit_Assign(self, node):
+        self.generic_visit(node)
+        if len(node.targets) <= 1:
+            return node
+        if not all(isinstance(t, gast.Name) for t in node.targets):
+            # Leave chained assignments with non-name targets alone.
+            return node
 
-    first = node.targets[0]
-    stmts = [gast.Assign(targets=[first], value=node.value)]
-    for target in node.targets[1:]:
-      stmts.append(gast.Assign(
-          targets=[target],
-          value=gast.Name(id=first.id, ctx=gast.Load(), annotation=None)))
-    for stmt in stmts:
-      gast.copy_location(stmt, node)
-    return stmts
+        first = node.targets[0]
+        stmts = [gast.Assign(targets=[first], value=node.value)]
+        for target in node.targets[1:]:
+            stmts.append(
+                gast.Assign(
+                    targets=[target], value=gast.Name(id=first.id, ctx=gast.Load(), annotation=None)
+                )
+            )
+        for stmt in stmts:
+            gast.copy_location(stmt, node)
+        return stmts
 
 
 def desugar_chained_assignments(node):
-  """Rewrite chained (multi-target) assignments in an AST."""
-  node = ChainedAssignDesugarer().visit(node)
-  gast.fix_missing_locations(node)
-  return node
+    """Rewrite chained (multi-target) assignments in an AST."""
+    node = ChainedAssignDesugarer().visit(node)
+    gast.fix_missing_locations(node)
+    return node

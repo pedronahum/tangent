@@ -12,6 +12,7 @@ These tests exercise local dicts in forward mode. Non-active dict *parameters*
 in forward mode remain a separate, pre-existing limitation and are not covered
 here.
 """
+
 import pytest
 
 import tangent
@@ -31,7 +32,7 @@ class TestForwardLocalDict:
 
     def test_multi_key(self):
         def f(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d['a'] + d['b']
 
         # d/dx (x + x^2) = 1 + 2x = 5 at x = 2
@@ -53,7 +54,7 @@ class TestForwardLocalDict:
 
     def test_dict_in_loop(self):
         def f(x):
-            d = {'w': x ** 2}
+            d = {'w': x**2}
             total = 0.0
             for i in range(3):
                 total = total + d['w']
@@ -64,7 +65,7 @@ class TestForwardLocalDict:
 
     def test_matches_reverse_mode(self):
         def f(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d['a'] + d['b']
 
         fwd = _fwd(f)(4.0, 1.0)

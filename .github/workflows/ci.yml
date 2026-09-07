@@ -21,12 +21,19 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: `ruff format --check` must match the version the tree was
+        # formatted with, and formatter output can change between releases.
+        run: pip install ruff==0.16.6
       # Rule selection, builtins (the d[...] gradient sentinel referenced by
       # template code) and per-file ignores live in [tool.ruff] in
       # pyproject.toml.
       - name: Ruff check
         run: ruff check .
+      # Formatting settlement: 4-space indent, 100 cols, quotes preserved.
+      # Scope (tangent/ + tests/ only) and options live in [tool.ruff.format]
+      # in pyproject.toml.
+      - name: Ruff format check
+        run: ruff format --check .
 
   test:
     runs-on: ubuntu-latest

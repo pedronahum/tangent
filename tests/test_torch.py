@@ -17,11 +17,13 @@ This module tests Tangent's automatic differentiation with torch tensors and
 the functional torch API. Gradients are checked against torch.autograd where
 practical, and against analytic values otherwise.
 """
+
 import numpy as np
 import pytest
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -29,14 +31,14 @@ except ImportError:
 if TORCH_AVAILABLE:
     import tangent
 
-pytestmark = pytest.mark.skipif(not TORCH_AVAILABLE,
-                                reason="PyTorch not installed")
+pytestmark = pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not installed")
 
 
 def autograd_ref(f, *args, wrt=0):
     """Reference gradient via torch.autograd."""
-    ts = [a.detach().clone().requires_grad_(True) if isinstance(a, torch.Tensor)
-          else a for a in args]
+    ts = [
+        a.detach().clone().requires_grad_(True) if isinstance(a, torch.Tensor) else a for a in args
+    ]
     out = f(*ts)
     if out.ndim > 0:
         out = out.sum()
@@ -107,7 +109,7 @@ class TestBasicOperations:
 
         df = tangent.grad(f)
         x = torch.tensor([1.0, 2.0])
-        assert torch.allclose(df(x), 3.0 * x ** 2)
+        assert torch.allclose(df(x), 3.0 * x**2)
 
     def test_neg(self):
         def f(x):

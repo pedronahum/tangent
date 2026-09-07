@@ -18,6 +18,7 @@ this module covers the NumPy registration and its rank-promotion cases
 (vector inner product, matrix-vector, matrix-matrix, batched). Backend-specific
 coverage lives in tests/test_tinygrad.py and tests/test_backend_coverage.py.
 """
+
 import numpy as np
 import pytest
 
@@ -25,7 +26,6 @@ import tangent
 
 
 class TestMatMulOperator:
-
     def test_vector_inner_product(self):
         def f(x, y):
             return x @ y
@@ -41,8 +41,7 @@ class TestMatMulOperator:
 
         x = np.random.RandomState(0).randn(2, 3)
         w = np.random.RandomState(1).randn(3)
-        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w),
-                           np.ones(2)[:, None] * w[None, :])
+        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w), np.ones(2)[:, None] * w[None, :])
         assert np.allclose(tangent.grad(f, wrt=(1,))(x, w), x.sum(0))
 
     def test_vector_matrix(self):
@@ -52,8 +51,7 @@ class TestMatMulOperator:
         x = np.random.RandomState(0).randn(3)
         w = np.random.RandomState(1).randn(3, 4)
         assert np.allclose(tangent.grad(f, wrt=(0,))(x, w), w.sum(1))
-        assert np.allclose(tangent.grad(f, wrt=(1,))(x, w),
-                           x[:, None] * np.ones(4)[None, :])
+        assert np.allclose(tangent.grad(f, wrt=(1,))(x, w), x[:, None] * np.ones(4)[None, :])
 
     def test_matrix_matrix(self):
         def f(x, w):
@@ -61,10 +59,8 @@ class TestMatMulOperator:
 
         x = np.random.RandomState(0).randn(2, 3)
         w = np.random.RandomState(1).randn(3, 4)
-        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w),
-                           np.ones((2, 4)) @ w.T)
-        assert np.allclose(tangent.grad(f, wrt=(1,))(x, w),
-                           x.T @ np.ones((2, 4)))
+        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w), np.ones((2, 4)) @ w.T)
+        assert np.allclose(tangent.grad(f, wrt=(1,))(x, w), x.T @ np.ones((2, 4)))
 
     def test_batched(self):
         def f(x, w):
@@ -72,12 +68,12 @@ class TestMatMulOperator:
 
         x = np.random.RandomState(0).randn(5, 2, 3)
         w = np.random.RandomState(1).randn(5, 3, 4)
-        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w),
-                           np.matmul(np.ones((5, 2, 4)),
-                                     np.swapaxes(w, -1, -2)))
-        assert np.allclose(tangent.grad(f, wrt=(1,))(x, w),
-                           np.matmul(np.swapaxes(x, -1, -2),
-                                     np.ones((5, 2, 4))))
+        assert np.allclose(
+            tangent.grad(f, wrt=(0,))(x, w), np.matmul(np.ones((5, 2, 4)), np.swapaxes(w, -1, -2))
+        )
+        assert np.allclose(
+            tangent.grad(f, wrt=(1,))(x, w), np.matmul(np.swapaxes(x, -1, -2), np.ones((5, 2, 4)))
+        )
 
     def test_chained_with_operators(self):
         # @ combines with the ordinary operator adjoints.
@@ -87,8 +83,7 @@ class TestMatMulOperator:
         x = np.random.RandomState(0).randn(2, 3)
         w = np.random.RandomState(1).randn(3, 2)
         z = x @ w
-        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w),
-                           2.0 * z @ w.T)
+        assert np.allclose(tangent.grad(f, wrt=(0,))(x, w), 2.0 * z @ w.T)
 
 
 if __name__ == '__main__':

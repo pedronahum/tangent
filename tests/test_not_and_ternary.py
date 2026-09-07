@@ -7,6 +7,7 @@ previously that value form raised "unknown unary operator" in reverse mode.
 Conditional (ternary) expressions ``a if cond else b`` differentiate through the
 branch selected at runtime.
 """
+
 import pytest
 
 import tangent
@@ -30,8 +31,8 @@ class TestNotOperator:
             return y
 
         df = tangent.grad(f)
-        assert df(2.0) == pytest.approx(4.0)   # not(2>5) True -> 2x = 4
-        assert df(8.0) == pytest.approx(1.0)   # not(8>5) False -> 1
+        assert df(2.0) == pytest.approx(4.0)  # not(2>5) True -> 2x = 4
+        assert df(8.0) == pytest.approx(1.0)  # not(8>5) False -> 1
 
     def test_not_as_gating_flag(self):
         def f(x):
@@ -44,7 +45,7 @@ class TestNotOperator:
 
         df = tangent.grad(f)
         assert df(-3.0) == pytest.approx(2.0)  # flag True -> d(2x) = 2
-        assert df(3.0) == pytest.approx(6.0)   # flag False -> d(x^2) = 2x = 6
+        assert df(3.0) == pytest.approx(6.0)  # flag False -> d(x^2) = 2x = 6
 
     def test_not_in_condition_forward_mode(self):
         def f(x):
@@ -62,11 +63,11 @@ class TestNotOperator:
 class TestTernary:
     def test_ternary_selects_branch(self):
         def f(x):
-            return x ** 2 if x > 1 else x ** 3
+            return x**2 if x > 1 else x**3
 
         df = tangent.grad(f)
-        assert df(2.0) == pytest.approx(4.0)    # x>1 -> d(x^2) = 2x = 4
-        assert df(0.5) == pytest.approx(0.75)   # else -> d(x^3) = 3x^2 = 0.75
+        assert df(2.0) == pytest.approx(4.0)  # x>1 -> d(x^2) = 2x = 4
+        assert df(0.5) == pytest.approx(0.75)  # else -> d(x^3) = 3x^2 = 0.75
 
     def test_ternary_in_assignment(self):
         def f(x):
@@ -92,7 +93,7 @@ class TestTernary:
             return y
 
         df = tangent.autodiff(f, mode='forward', preserve_result=False)
-        assert df(2.0, 1.0) == pytest.approx(4.0)   # x>0 -> d(x^2) = 2x
+        assert df(2.0, 1.0) == pytest.approx(4.0)  # x>0 -> d(x^2) = 2x
         assert df(-2.0, 1.0) == pytest.approx(3.0)  # else -> d(3x) = 3
 
 

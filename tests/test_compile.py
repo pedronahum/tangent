@@ -21,26 +21,26 @@ from tangent import quoting
 
 
 def test_compile():
-  def f(x):
-    return x * 2
+    def f(x):
+        return x * 2
 
-  f = compile_.compile_function(quoting.parse_function(f))
-  assert f(2) == 4
-  assert inspect.getsource(f).split('\n')[0] == 'def f(x):'
+    f = compile_.compile_function(quoting.parse_function(f))
+    assert f(2) == 4
+    assert inspect.getsource(f).split('\n')[0] == 'def f(x):'
 
-  def f(x):
-    return y * 2
+    def f(x):
+        return y * 2
 
-  f = compile_.compile_function(quoting.parse_function(f), {'y': 3})
-  assert f(2) == 6
+    f = compile_.compile_function(quoting.parse_function(f), {'y': 3})
+    assert f(2) == 6
 
 
 def test_function_compile():
-  with pytest.raises(TypeError):
-    compile_.compile_function(quoting.quote('x = y'))
-  with pytest.raises(ValueError):
-    compile_.compile_function(gast.parse('x = y'))
+    with pytest.raises(TypeError):
+        compile_.compile_function(quoting.quote('x = y'))
+    with pytest.raises(ValueError):
+        compile_.compile_function(gast.parse('x = y'))
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

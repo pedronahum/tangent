@@ -5,6 +5,7 @@ message - so they are safe to allow in differentiated functions, just like plain
 string constants and comparison operators. The interpolated string is stored and
 carried through the transformation but never contributes to the gradient.
 """
+
 import pytest
 
 import tangent
@@ -22,7 +23,7 @@ class TestFStringReverseMode:
     def test_assert_message(self):
         def f(x):
             assert x > 0, f"need positive, got {x}"
-            return x ** 2
+            return x**2
 
         df = tangent.grad(f)
         assert df(4.0) == pytest.approx(8.0)
@@ -87,7 +88,7 @@ class TestFStringForwardMode:
     def test_assert_message(self):
         def f(x):
             assert x > 0, f"need positive, got {x}"
-            return x ** 2
+            return x**2
 
         df = tangent.autodiff(f, mode='forward', preserve_result=False)
         assert df(4.0, 1.0) == pytest.approx(8.0)

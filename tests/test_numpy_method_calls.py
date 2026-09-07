@@ -19,6 +19,7 @@ equivalent (numpy.sum(x)). This covers that rewrite, including the varargs
 methods (reshape/transpose) whose numpy counterparts take a single sequence
 argument.
 """
+
 import numpy as np
 
 import tangent

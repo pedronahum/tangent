@@ -1,13 +1,13 @@
 """
 Tests for activity analysis.
 """
+
 import unittest
 import gast
 from tangent.optimizations.dce import ActivityAnalyzer, DefUseAnalyzer
 
 
 class TestActivityAnalysis(unittest.TestCase):
-
     def test_forward_activity(self):
         """Test forward activity propagation."""
         code = """
@@ -67,6 +67,7 @@ def f(x, y, z):
             if isinstance(stmt, gast.Return):
                 if stmt.value:
                     from tangent.optimizations.dce import VariableCollector
+
                     return_vars = VariableCollector.collect(stmt.value)
 
         analyzer.active_outputs = return_vars

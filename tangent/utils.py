@@ -18,6 +18,7 @@ Tangent to new data types.
 
 TODO: Link to guide on how to extend the framework.
 """
+
 from __future__ import absolute_import
 from __future__ import division
 
@@ -33,9 +34,9 @@ from tangent import quoting
 # autograd is optional: it is only needed for interop with autograd-traced
 # values (see astype below) and as a reference oracle in the test suite.
 try:
-  import autograd
+    import autograd
 except ImportError:  # pragma: no cover - exercised only without autograd
-  autograd = None
+    autograd = None
 
 INIT_GRAD = quoting.quote('tangent.init_grad')
 ADD_GRAD = quoting.quote('tangent.add_grad')
@@ -44,68 +45,63 @@ anno.setanno(ADD_GRAD, 'add_grad', True)
 
 
 def array_size(x, axis):
-  """Calculate the size of `x` along `axis` dimensions only."""
-  axis_shape = x.shape if axis is None else tuple(x.shape[a] for a in axis)
-  return max(numpy.prod(axis_shape), 1)
+    """Calculate the size of `x` along `axis` dimensions only."""
+    axis_shape = x.shape if axis is None else tuple(x.shape[a] for a in axis)
+    return max(numpy.prod(axis_shape), 1)
 
 
 class Stack(object):
-  """A stack type that proxies list's `append` and `pop` methods.
+    """A stack type that proxies list's `append` and `pop` methods.
 
-  We don't use list directly so that we can test its type for the multiple-
-  dispatch that occurs in `add_grad` and `init_grad`.
-  """
+    We don't use list directly so that we can test its type for the multiple-
+    dispatch that occurs in `add_grad` and `init_grad`.
+    """
 
-  def __init__(self, vals=()):
-    self._stack = list(vals)
+    def __init__(self, vals=()):
+        self._stack = list(vals)
 
-  def append(self, x):
-    self._stack.append(x)
+    def append(self, x):
+        self._stack.append(x)
 
-  def pop(self):
-    return self._stack.pop()
+    def pop(self):
+        return self._stack.pop()
 
-  def __len__(self):
-    return len(self._stack)
+    def __len__(self):
+        return len(self._stack)
 
-  def __str__(self):
-    return str(self._stack)
+    def __str__(self):
+        return str(self._stack)
 
-  def __repr__(self):
-    return self._stack.__repr__()
+    def __repr__(self):
+        return self._stack.__repr__()
+
 
 # The values are binary functions with signature fn(array, like)
 unbroadcasters = {
-    numpy.ndarray:
-        lambda array, like: unbroadcast_numpy_to(array, numpy.shape(like)),
-    numpy.float32:
-        lambda array, like: array,
-    numpy.float64:
-        lambda array, like: array,
-    float:
-        lambda array, like: array,
-    int:
-        lambda array, like: array,
-    bool:
-        lambda array, like: array,
+    numpy.ndarray: lambda array, like: unbroadcast_numpy_to(array, numpy.shape(like)),
+    numpy.float32: lambda array, like: array,
+    numpy.float64: lambda array, like: array,
+    float: lambda array, like: array,
+    int: lambda array, like: array,
+    bool: lambda array, like: array,
 }
 
 
 def register_unbroadcast(t, unbroadcaster_function):
-  """Register a new unbroadcaster.
+    """Register a new unbroadcaster.
 
-  Unbroadcasters are used to undo broadcasting, e.g. np.eye(3) + 3
-  will broadcast 3 to np.shape(np.eye(3)). In the backward pass, we have to
-  undo this.
+    Unbroadcasters are used to undo broadcasting, e.g. np.eye(3) + 3
+    will broadcast 3 to np.shape(np.eye(3)). In the backward pass, we have to
+    undo this.
 
-  Args:
-    t: A Python type object. The data type supported by the
-      unbroadcaster.
-    unbroadcaster_function: A binary function that takes a first argument of
-      type t, and a second argument that t needs to be unbroadcast to.
-  """
-  assert t not in unbroadcasters
-  unbroadcasters[t] = unbroadcaster_function
+    Args:
+      t: A Python type object. The data type supported by the
+        unbroadcaster.
+      unbroadcaster_function: A binary function that takes a first argument of
+        type t, and a second argument that t needs to be unbroadcast to.
+    """
+    assert t not in unbroadcasters
+    unbroadcasters[t] = unbroadcaster_function
 
 
 # Seed types that carry no backend allegiance of their own. When a gradient
@@ -114,222 +110,233 @@ def register_unbroadcast(t, unbroadcaster_function):
 # primal's backend so the gradient stays in that backend. Containers (list,
 # tuple) are generic too: their gradients are handled element-wise, and they
 # must not take part in the backend cross-dispatch below.
-_GENERIC_GRAD_TYPES = (float, int, bool, list, tuple, numpy.ndarray,
-                       numpy.floating, numpy.integer, numpy.bool_)
+_GENERIC_GRAD_TYPES = (
+    float,
+    int,
+    bool,
+    list,
+    tuple,
+    numpy.ndarray,
+    numpy.floating,
+    numpy.integer,
+    numpy.bool_,
+)
 
 
 def unbroadcast(array, like):
-  """Reverse the broadcasting operation.
+    """Reverse the broadcasting operation.
 
-  Args:
-    array: An array.
-    like: An array that could have been broadcasted to the shape of array.
+    Args:
+      array: An array.
+      like: An array that could have been broadcasted to the shape of array.
 
-  Returns:
-    Tensor with certain dimensions summed to match the shape of `like`.
-  """
-  if isinstance(array, ZeroGradient):
-    # A zero gradient stays zero under any (linear) shape operation; passing
-    # the sentinel through keeps add_grad's identity handling intact.
-    return array
-  unbroadcaster = unbroadcasters[type(array)]
-  if (type(array) is not type(like) and type(like) in unbroadcasters and
-      isinstance(array, _GENERIC_GRAD_TYPES) and
-      not isinstance(like, _GENERIC_GRAD_TYPES)):
-    # The seed is a generic type (Python scalar or NumPy) while the primal
-    # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
-    # primal's backend instead of falling back to NumPy. The `like` guard keeps
-    # this restricted to real backend tensors: when `like` is itself a generic
-    # scalar/array we must use `array`'s own unbroadcaster so the reduction to
-    # `like`'s shape actually happens (the scalar unbroadcasters are identity).
-    unbroadcaster = unbroadcasters[type(like)]
-  return unbroadcaster(array, like)
+    Returns:
+      Tensor with certain dimensions summed to match the shape of `like`.
+    """
+    if isinstance(array, ZeroGradient):
+        # A zero gradient stays zero under any (linear) shape operation; passing
+        # the sentinel through keeps add_grad's identity handling intact.
+        return array
+    unbroadcaster = unbroadcasters[type(array)]
+    if (
+        type(array) is not type(like)
+        and type(like) in unbroadcasters
+        and isinstance(array, _GENERIC_GRAD_TYPES)
+        and not isinstance(like, _GENERIC_GRAD_TYPES)
+    ):
+        # The seed is a generic type (Python scalar or NumPy) while the primal
+        # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
+        # primal's backend instead of falling back to NumPy. The `like` guard keeps
+        # this restricted to real backend tensors: when `like` is itself a generic
+        # scalar/array we must use `array`'s own unbroadcaster so the reduction to
+        # `like`'s shape actually happens (the scalar unbroadcasters are identity).
+        unbroadcaster = unbroadcasters[type(like)]
+    return unbroadcaster(array, like)
 
 
 def unbroadcast_container(array, like):
-  """Unbroadcast a list/tuple gradient element-wise against `like`.
+    """Unbroadcast a list/tuple gradient element-wise against `like`.
 
-  Gradients of container values are containers of gradients; at fourth order
-  and beyond, adjoint code accumulates them via unbroadcast, so each element
-  is unbroadcast against its counterpart.
-  """
-  unbroadcasted = [unbroadcast(a, l) for a, l in zip(array, like)]
-  if isinstance(array, tuple):
-    return tuple(unbroadcasted)
-  return unbroadcasted
+    Gradients of container values are containers of gradients; at fourth order
+    and beyond, adjoint code accumulates them via unbroadcast, so each element
+    is unbroadcast against its counterpart.
+    """
+    unbroadcasted = [unbroadcast(a, l) for a, l in zip(array, like)]
+    if isinstance(array, tuple):
+        return tuple(unbroadcasted)
+    return unbroadcasted
 
 
 unbroadcasters[list] = unbroadcast_container
-unbroadcasters[tuple] = lambda array, like: tuple(
-    unbroadcast(a, l) for a, l in zip(array, like))
+unbroadcasters[tuple] = lambda array, like: tuple(unbroadcast(a, l) for a, l in zip(array, like))
 
 
 def create_unbroadcast_axis(shape, broadcast_shape):
-  """Creates the reduction axis for unbroadcasting.
+    """Creates the reduction axis for unbroadcasting.
 
-  Args:
-    shape: A list. The shape after the broadcast operation.
-    broadcast_shape: A list. The original shape the array being unbroadcast
-      had.
-  Returns:
-    A list. The axes along which the array needs to be reduced. These axes will
-    be distributed evenly into the original shape.
-  """
-  return tuple(
-      -(1 + i)
-      for i in range(len(broadcast_shape))
-      if i >= len(shape) or broadcast_shape[-(1 + i)] > shape[-(1 + i)])
+    Args:
+      shape: A list. The shape after the broadcast operation.
+      broadcast_shape: A list. The original shape the array being unbroadcast
+        had.
+    Returns:
+      A list. The axes along which the array needs to be reduced. These axes will
+      be distributed evenly into the original shape.
+    """
+    return tuple(
+        -(1 + i)
+        for i in range(len(broadcast_shape))
+        if i >= len(shape) or broadcast_shape[-(1 + i)] > shape[-(1 + i)]
+    )
 
 
 def unbroadcast_numpy_to(array, shape):
-  """Reverse the broadcasting operation.
+    """Reverse the broadcasting operation.
 
-  Args:
-    array: An array.
-    shape: A shape that could have been broadcasted to the shape of array.
+    Args:
+      array: An array.
+      shape: A shape that could have been broadcasted to the shape of array.
 
-  Returns:
-    Array with dimensions summed to match `shape`.
-  """
-  axis = create_unbroadcast_axis(shape, numpy.shape(array))
-  return numpy.reshape(numpy.sum(array, axis=axis), shape)
+    Returns:
+      Array with dimensions summed to match `shape`.
+    """
+    axis = create_unbroadcast_axis(shape, numpy.shape(array))
+    return numpy.reshape(numpy.sum(array, axis=axis), shape)
 
 
 def unreduce(array, shape, axis, keepdims):
-  """Reverse summing over a dimension.
+    """Reverse summing over a dimension.
 
-  Args:
-    array: The array that was reduced.
-    shape: The original shape of the array before reduction.
-    axis: The axis or axes that were summed.
-    keepdims: Whether these axes were kept as singleton axes.
+    Args:
+      array: The array that was reduced.
+      shape: The original shape of the array before reduction.
+      axis: The axis or axes that were summed.
+      keepdims: Whether these axes were kept as singleton axes.
 
-  Returns:
-    An array with axes broadcast to match the shape of the original array.
-  """
-  if isinstance(array, ZeroGradient):
-    return array
-  unreducer = unreducers[type(array)]
-  return unreducer(array, shape, axis, keepdims)
+    Returns:
+      An array with axes broadcast to match the shape of the original array.
+    """
+    if isinstance(array, ZeroGradient):
+        return array
+    unreducer = unreducers[type(array)]
+    return unreducer(array, shape, axis, keepdims)
 
 
 def unreduce_like(array, original_array, axis, keepdims):
-  """Reverse summing over a dimension.
+    """Reverse summing over a dimension.
 
-  Args:
-    array: The array that was reduced.
-    original_array: An array whose shape to unreduce to.
-    axis: The axis or axes that were summed.
-    keepdims: Whether these axes were kept as singleton axes.
+    Args:
+      array: The array that was reduced.
+      original_array: An array whose shape to unreduce to.
+      axis: The axis or axes that were summed.
+      keepdims: Whether these axes were kept as singleton axes.
 
-  Returns:
-    An array with axes broadcast to match the shape of the original array.
-  """
-  if isinstance(array, ZeroGradient):
-    return array
-  atype = type(array)
-  otype = type(original_array)
-  cross = (atype is not otype and otype in unreducers and
-           isinstance(array, _GENERIC_GRAD_TYPES))
-  if cross:
-    # The seed is a generic type (Python scalar or NumPy) while the primal
-    # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
-    # primal's backend instead of falling back to NumPy.
-    unreducer = unreducers[otype]
-    shape = shape_functions[otype]
-  else:
-    unreducer = unreducers[atype]
-    shape = shape_functions[atype]
-  return unreducer(array, shape(original_array), axis, keepdims)
+    Returns:
+      An array with axes broadcast to match the shape of the original array.
+    """
+    if isinstance(array, ZeroGradient):
+        return array
+    atype = type(array)
+    otype = type(original_array)
+    cross = atype is not otype and otype in unreducers and isinstance(array, _GENERIC_GRAD_TYPES)
+    if cross:
+        # The seed is a generic type (Python scalar or NumPy) while the primal
+        # belongs to a specific backend (TF/JAX/torch): keep the gradient in the
+        # primal's backend instead of falling back to NumPy.
+        unreducer = unreducers[otype]
+        shape = shape_functions[otype]
+    else:
+        unreducer = unreducers[atype]
+        shape = shape_functions[atype]
+    return unreducer(array, shape(original_array), axis, keepdims)
 
 
 def unreduce_array(array, shape, axis, keepdims):
-  """Reverse summing over a dimension, NumPy implementation.
+    """Reverse summing over a dimension, NumPy implementation.
 
-  Args:
-    array: The array that was reduced.
-    shape: The original shape of the array before reduction.
-    axis: The axis or axes that were summed.
-    keepdims: Whether these axes were kept as singleton axes.
+    Args:
+      array: The array that was reduced.
+      shape: The original shape of the array before reduction.
+      axis: The axis or axes that were summed.
+      keepdims: Whether these axes were kept as singleton axes.
 
-  Returns:
-    An array with axes broadcast to match the shape of the original array.
-  """
-  # NumPy uses a special default value for keepdims, which is equivalent to
-  # False.
-  if axis is not None and (not keepdims or keepdims is numpy._NoValue):  # pylint: disable=protected-access
-    if isinstance(axis, int):
-      axis = axis,
-    for ax in sorted(axis):
-      array = numpy.expand_dims(array, ax)
-  return numpy.broadcast_to(array, shape)
+    Returns:
+      An array with axes broadcast to match the shape of the original array.
+    """
+    # NumPy uses a special default value for keepdims, which is equivalent to
+    # False.
+    if axis is not None and (not keepdims or keepdims is numpy._NoValue):  # pylint: disable=protected-access
+        if isinstance(axis, int):
+            axis = (axis,)
+        for ax in sorted(axis):
+            array = numpy.expand_dims(array, ax)
+    return numpy.broadcast_to(array, shape)
 
 
 def untile(array, like, reps):
-  """Sum the gradient of `numpy.tile` back onto the original array.
+    """Sum the gradient of `numpy.tile` back onto the original array.
 
-  `numpy.tile(x, reps)` lays out copies of `x` in a block pattern; its
-  adjoint sums the incoming gradient over all copies. Viewing the tiled
-  array with shape `(r_0, s_0, r_1, s_1, ...)` (repetitions interleaved
-  with the original dimensions) turns that sum into a single reduction
-  over the repetition axes.
+    `numpy.tile(x, reps)` lays out copies of `x` in a block pattern; its
+    adjoint sums the incoming gradient over all copies. Viewing the tiled
+    array with shape `(r_0, s_0, r_1, s_1, ...)` (repetitions interleaved
+    with the original dimensions) turns that sum into a single reduction
+    over the repetition axes.
 
-  Args:
-    array: The gradient with respect to the tiled output.
-    like: The original (untiled) input array.
-    reps: The `reps` argument that was passed to `numpy.tile`.
+    Args:
+      array: The gradient with respect to the tiled output.
+      like: The original (untiled) input array.
+      reps: The `reps` argument that was passed to `numpy.tile`.
 
-  Returns:
-    The gradient with respect to the untiled input, with `like`'s shape.
-  """
-  like_shape = numpy.shape(like)
-  try:
-    reps = tuple(reps)
-  except TypeError:  # a scalar reps
-    reps = (reps,)
-  reps = tuple(int(r) for r in reps)
-  ndim = max(len(reps), len(like_shape))
-  # numpy.tile promotes both the input and reps to a common rank by
-  # prepending singleton entries.
-  padded_shape = (1,) * (ndim - len(like_shape)) + tuple(like_shape)
-  padded_reps = (1,) * (ndim - len(reps)) + reps
-  interleaved = []
-  for rep, dim in zip(padded_reps, padded_shape):
-    interleaved.extend((rep, dim))
-  array = numpy.reshape(array, interleaved)
-  array = numpy.sum(array, axis=tuple(range(0, 2 * ndim, 2)))
-  return numpy.reshape(array, like_shape)
+    Returns:
+      The gradient with respect to the untiled input, with `like`'s shape.
+    """
+    like_shape = numpy.shape(like)
+    try:
+        reps = tuple(reps)
+    except TypeError:  # a scalar reps
+        reps = (reps,)
+    reps = tuple(int(r) for r in reps)
+    ndim = max(len(reps), len(like_shape))
+    # numpy.tile promotes both the input and reps to a common rank by
+    # prepending singleton entries.
+    padded_shape = (1,) * (ndim - len(like_shape)) + tuple(like_shape)
+    padded_reps = (1,) * (ndim - len(reps)) + reps
+    interleaved = []
+    for rep, dim in zip(padded_reps, padded_shape):
+        interleaved.extend((rep, dim))
+    array = numpy.reshape(array, interleaved)
+    array = numpy.sum(array, axis=tuple(range(0, 2 * ndim, 2)))
+    return numpy.reshape(array, like_shape)
 
 
 def unrepeat(array, like, repeats, axis=None):
-  """Sum the gradient of `numpy.repeat` back onto the original array.
+    """Sum the gradient of `numpy.repeat` back onto the original array.
 
-  Each element of the input appears `repeats` times in the output, so the
-  adjoint sums the gradient over each element's group of copies. Supports
-  scalar and per-element `repeats`, with or without an `axis`.
+    Each element of the input appears `repeats` times in the output, so the
+    adjoint sums the gradient over each element's group of copies. Supports
+    scalar and per-element `repeats`, with or without an `axis`.
 
-  Args:
-    array: The gradient with respect to the repeated output.
-    like: The original (unrepeated) input array.
-    repeats: The `repeats` argument that was passed to `numpy.repeat`.
-    axis: The `axis` argument that was passed to `numpy.repeat`.
+    Args:
+      array: The gradient with respect to the repeated output.
+      like: The original (unrepeated) input array.
+      repeats: The `repeats` argument that was passed to `numpy.repeat`.
+      axis: The `axis` argument that was passed to `numpy.repeat`.
 
-  Returns:
-    The gradient with respect to the unrepeated input, with `like`'s shape.
-  """
-  like_shape = numpy.shape(like)
-  if axis is None:
-    n = int(numpy.size(like))
+    Returns:
+      The gradient with respect to the unrepeated input, with `like`'s shape.
+    """
+    like_shape = numpy.shape(like)
+    if axis is None:
+        n = int(numpy.size(like))
+        index = numpy.repeat(numpy.arange(n), repeats)
+        out = numpy.zeros(n, dtype=numpy.asarray(array).dtype)
+        numpy.add.at(out, index, numpy.ravel(array))
+        return numpy.reshape(out, like_shape)
+    array = numpy.moveaxis(numpy.asarray(array), axis, 0)
+    n = like_shape[axis]
     index = numpy.repeat(numpy.arange(n), repeats)
-    out = numpy.zeros(n, dtype=numpy.asarray(array).dtype)
-    numpy.add.at(out, index, numpy.ravel(array))
-    return numpy.reshape(out, like_shape)
-  array = numpy.moveaxis(numpy.asarray(array), axis, 0)
-  n = like_shape[axis]
-  index = numpy.repeat(numpy.arange(n), repeats)
-  out = numpy.zeros((n,) + array.shape[1:], dtype=array.dtype)
-  numpy.add.at(out, index, array)
-  return numpy.moveaxis(out, 0, axis)
+    out = numpy.zeros((n,) + array.shape[1:], dtype=array.dtype)
+    numpy.add.at(out, index, array)
+    return numpy.moveaxis(out, 0, axis)
 
 
 # The values are unary functions.
@@ -344,44 +351,45 @@ shape_functions = {
 
 
 def get_shape(array):
-  """Get the shape of an array using the appropriate backend function.
+    """Get the shape of an array using the appropriate backend function.
 
-  This function dispatches to the correct shape function based on the
-  array type, supporting NumPy, TensorFlow, JAX, and other backends.
+    This function dispatches to the correct shape function based on the
+    array type, supporting NumPy, TensorFlow, JAX, and other backends.
 
-  Args:
-    array: An array-like object (NumPy, TensorFlow tensor, JAX array, etc.)
+    Args:
+      array: An array-like object (NumPy, TensorFlow tensor, JAX array, etc.)
 
-  Returns:
-    A tuple or list of integers representing the shape.
-  """
-  # Containers (pytrees) map to their structure of leaf shapes, so shape
-  # mismatch errors on container values stay readable.
-  if isinstance(array, dict):
-    return {k: get_shape(v) for k, v in array.items()}
-  if isinstance(array, (list, tuple)):
-    return [get_shape(v) for v in array]
-  shape_func = shape_functions.get(type(array))
-  if shape_func is None:
-    # Fallback: try numpy.shape if no registered function
-    import numpy
-    return numpy.shape(array)
-  return shape_func(array)
+    Returns:
+      A tuple or list of integers representing the shape.
+    """
+    # Containers (pytrees) map to their structure of leaf shapes, so shape
+    # mismatch errors on container values stay readable.
+    if isinstance(array, dict):
+        return {k: get_shape(v) for k, v in array.items()}
+    if isinstance(array, (list, tuple)):
+        return [get_shape(v) for v in array]
+    shape_func = shape_functions.get(type(array))
+    if shape_func is None:
+        # Fallback: try numpy.shape if no registered function
+        import numpy
+
+        return numpy.shape(array)
+    return shape_func(array)
 
 
 def register_shape_function(t, shape_function):
-  """Register a new shape function.
+    """Register a new shape function.
 
-  Shape functions extract the shape of an array-like object.
+    Shape functions extract the shape of an array-like object.
 
-  Args:
-    t: A Python type object. The data type supported by the
-      unreducer.
-    shape_function: A unary function that returns a list or tuple with zero
-      or more integers representing the dimensions of `t`.
-  """
-  assert t not in shape_functions
-  shape_functions[t] = shape_function
+    Args:
+      t: A Python type object. The data type supported by the
+        unreducer.
+      shape_function: A unary function that returns a list or tuple with zero
+        or more integers representing the dimensions of `t`.
+    """
+    assert t not in shape_functions
+    shape_functions[t] = shape_function
 
 
 # The values are functions with signature like `unreduce_array`
@@ -396,20 +404,20 @@ unreducers = {
 
 
 def register_unreduce(t, unreducer_function):
-  """Register a new unreducer.
+    """Register a new unreducer.
 
-  Unreducers are used to undo reduction, e.g. np.sum(np.eye(3))
-  will reduce a (3,3) array to a scalar. In the backward pass, we have to
-  undo this.
+    Unreducers are used to undo reduction, e.g. np.sum(np.eye(3))
+    will reduce a (3,3) array to a scalar. In the backward pass, we have to
+    undo this.
 
-  Args:
-    t: A Python type object. The data type supported by the
-      unreducer.
-    unreducer_function: A function with the same signature
-      as e.g. `unreduce_array`
-  """
-  assert t not in unreducers
-  unreducers[t] = unreducer_function
+    Args:
+      t: A Python type object. The data type supported by the
+        unreducer.
+      unreducer_function: A function with the same signature
+        as e.g. `unreduce_array`
+    """
+    assert t not in unreducers
+    unreducers[t] = unreducer_function
 
 
 # Some tensor backends (notably tinygrad) expose their operations as methods
@@ -422,87 +430,87 @@ def register_unreduce(t, unreducer_function):
 # (`Tensor.sum(x)`) annotated with the corresponding function object, letting
 # the adjoint registered for that function apply. See `annotate.ResolveCalls`.
 class MethodResolver(object):
-  """A claim by a tensor backend over unresolved method calls.
+    """A claim by a tensor backend over unresolved method calls.
 
-  Args:
-    methods: Mapping of method name to the unbound backend function, e.g.
-      `{'relu': Tensor.relu}`. The value is used as the `func` annotation so
-      it must be the same object the adjoint/tangent is registered against.
-    uses_backend: Predicate over the differentiated function's namespace. The
-      claim only applies when this returns True, so e.g. a NumPy `x.sum()` is
-      left untouched in code that does not use this backend.
-    base_node: Given the namespace, returns the gast expression node for the
-      tensor class the method should be called on (e.g. `Tensor` or
-      `tinygrad.Tensor`). The call `x.m(args)` is rewritten to
-      `<base_node>.m(x, args)`.
-    tuple_arg_methods: Iterable of method names whose multiple positional
-      arguments should be packed into a single tuple argument before binding
-      (e.g. `reshape(2, 3)` -> `reshape((2, 3))`), so the adjoint template
-      receives one bindable parameter.
-  """
+    Args:
+      methods: Mapping of method name to the unbound backend function, e.g.
+        `{'relu': Tensor.relu}`. The value is used as the `func` annotation so
+        it must be the same object the adjoint/tangent is registered against.
+      uses_backend: Predicate over the differentiated function's namespace. The
+        claim only applies when this returns True, so e.g. a NumPy `x.sum()` is
+        left untouched in code that does not use this backend.
+      base_node: Given the namespace, returns the gast expression node for the
+        tensor class the method should be called on (e.g. `Tensor` or
+        `tinygrad.Tensor`). The call `x.m(args)` is rewritten to
+        `<base_node>.m(x, args)`.
+      tuple_arg_methods: Iterable of method names whose multiple positional
+        arguments should be packed into a single tuple argument before binding
+        (e.g. `reshape(2, 3)` -> `reshape((2, 3))`), so the adjoint template
+        receives one bindable parameter.
+    """
 
-  def __init__(self, methods, uses_backend, base_node, tuple_arg_methods=()):
-    self.methods = dict(methods)
-    self.uses_backend = uses_backend
-    self.base_node = base_node
-    self.tuple_arg_methods = set(tuple_arg_methods)
+    def __init__(self, methods, uses_backend, base_node, tuple_arg_methods=()):
+        self.methods = dict(methods)
+        self.uses_backend = uses_backend
+        self.base_node = base_node
+        self.tuple_arg_methods = set(tuple_arg_methods)
 
 
 method_resolvers = []
 
 
 def register_method_resolver(resolver):
-  """Register a backend method resolver. See `MethodResolver`."""
-  method_resolvers.append(resolver)
+    """Register a backend method resolver. See `MethodResolver`."""
+    method_resolvers.append(resolver)
 
 
 def resolve_backend_method(namespace, method_name):
-  """Return the first registered resolver claiming `method_name`, else None.
+    """Return the first registered resolver claiming `method_name`, else None.
 
-  A resolver only claims the method when its `uses_backend` predicate accepts
-  the namespace, so backends are scoped to code that actually uses them.
-  """
-  for resolver in method_resolvers:
-    if method_name in resolver.methods and resolver.uses_backend(namespace):
-      return resolver
-  return None
+    A resolver only claims the method when its `uses_backend` predicate accepts
+    the namespace, so backends are scoped to code that actually uses them.
+    """
+    for resolver in method_resolvers:
+        if method_name in resolver.methods and resolver.uses_backend(namespace):
+            return resolver
+    return None
 
 
 def astype(array, y):
-  """A functional form of the `astype` method.
+    """A functional form of the `astype` method.
 
-  Args:
-    array: The array or number to cast.
-    y: An array or number, as the input, whose type should be that of array.
+    Args:
+      array: The array or number to cast.
+      y: An array or number, as the input, whose type should be that of array.
 
-  Returns:
-    An array or number with the same dtype as `y`.
-  """
-  if autograd is not None and isinstance(y, autograd.core.Node):
-    return array.astype(numpy.array(y.value).dtype)
-  return array.astype(numpy.array(y).dtype)
+    Returns:
+      An array or number with the same dtype as `y`.
+    """
+    if autograd is not None and isinstance(y, autograd.core.Node):
+        return array.astype(numpy.array(y.value).dtype)
+    return array.astype(numpy.array(y).dtype)
 
 
 def balanced_eq(x, z, y):
-  """Gradient of the max operator with tie breaking.
+    """Gradient of the max operator with tie breaking.
 
-  Args:
-    x: The left value
-    z: The maximum of x and y
-    y: The right value
+    Args:
+      x: The left value
+      z: The maximum of x and y
+      y: The right value
 
-  Returns:
-    The gradient of the left value i.e. 1 if it is the maximum, 0.5 if they are
-    equal and 0 if it was not the maximum.
-  """
-  return (x == z) / (1.0 + (x == y))
+    Returns:
+      The gradient of the left value i.e. 1 if it is the maximum, 0.5 if they are
+      equal and 0 if it was not the maximum.
+    """
+    return (x == z) / (1.0 + (x == y))
 
 
 def init_common_object(obj):
-  """Initialize gradients for the types of common objects we support."""
-  if obj is numpy._globals._NoValue:  # pylint: disable=protected-access
-    return obj
-  raise ValueError('Unknown value to initialize: "%s"' % obj)
+    """Initialize gradients for the types of common objects we support."""
+    if obj is numpy._globals._NoValue:  # pylint: disable=protected-access
+        return obj
+    raise ValueError('Unknown value to initialize: "%s"' % obj)
 
 
 init_zero_int_warnings_left = 3
@@ -510,26 +518,25 @@ init_zero_bool_warnings_left = 3
 
 
 def init_zero_int(_):
-  """Initialize gradient for an integral type. This prints a warning."""
-  global init_zero_int_warnings_left
-  if init_zero_int_warnings_left:
-    print(
-        'WARNING: Creating intermediate variable of an integer type. This may '
-        'lead to unexpected results. If unsure, cast arguments to floating '
-        'point.')
-    init_zero_int_warnings_left -= 1
-  return 0
+    """Initialize gradient for an integral type. This prints a warning."""
+    global init_zero_int_warnings_left
+    if init_zero_int_warnings_left:
+        print(
+            'WARNING: Creating intermediate variable of an integer type. This may '
+            'lead to unexpected results. If unsure, cast arguments to floating '
+            'point.'
+        )
+        init_zero_int_warnings_left -= 1
+    return 0
 
 
 def init_zero_bool(_):
-  """Initialize gradient for an bool type. This prints a warning."""
-  global init_zero_bool_warnings_left
-  if init_zero_bool_warnings_left:
-    print(
-        'WARNING: Creating intermediate variable of a boolean type. This may '
-        'indicate a bug.')
-    init_zero_bool_warnings_left -= 1
-  return False
+    """Initialize gradient for an bool type. This prints a warning."""
+    global init_zero_bool_warnings_left
+    if init_zero_bool_warnings_left:
+        print('WARNING: Creating intermediate variable of a boolean type. This may indicate a bug.')
+        init_zero_bool_warnings_left -= 1
+    return False
 
 
 # The values are tuples (initializer, allow_lazy_initializer). If
@@ -562,105 +569,106 @@ grad_initializers = {
 }
 
 if hasattr(types, 'ClassType'):
-  grad_initializers[types.ClassType] = (init_common_object, False)
+    grad_initializers[types.ClassType] = (init_common_object, False)
 else:
-  grad_initializers[type] = (init_common_object, False)
+    grad_initializers[type] = (init_common_object, False)
 
 
 class ZeroGradient(object):
-  """Lightweight substitute for zero gradients.
+    """Lightweight substitute for zero gradients.
 
-  This object may be used instead of an actual type when manipulating
-  objects of the respective type is expensive.
-  """
+    This object may be used instead of an actual type when manipulating
+    objects of the respective type is expensive.
+    """
 
-  def __init__(self, like):
-    self._like = like
+    def __init__(self, like):
+        self._like = like
 
-  def like(self):
-    return self._like
+    def like(self):
+        return self._like
 
-  def instantiate(self):
-    return grad_initializers[type(self._like)](self._like)
+    def instantiate(self):
+        return grad_initializers[type(self._like)](self._like)
 
 
 def register_init_grad(t, init_grad_function):
-  """Register a new gradient initializer.
+    """Register a new gradient initializer.
 
-  Gradient initializers are used to initialize new adjoint and tangent
-  variables.
-  TODO: Link to the document explaining the overall terminology and mechanics.
+    Gradient initializers are used to initialize new adjoint and tangent
+    variables.
+    TODO: Link to the document explaining the overall terminology and mechanics.
 
-  Args:
-    t: A Python type object. The data type supported by the initializer.
-    init_grad_function: A unary function that takes an argument of type t
-      and returns a zero object of the same size as the argument. For example,
-      the gradient initializer for Numpy objects is zeros_like.
-  """
-  assert t not in grad_initializers
-  grad_initializers[t] = (init_grad_function, True)
+    Args:
+      t: A Python type object. The data type supported by the initializer.
+      init_grad_function: A unary function that takes an argument of type t
+        and returns a zero object of the same size as the argument. For example,
+        the gradient initializer for Numpy objects is zeros_like.
+    """
+    assert t not in grad_initializers
+    grad_initializers[t] = (init_grad_function, True)
 
 
 def init_grad(obj, allow_lazy_initializer=False):
-  """Initialize the gradient for an object.
+    """Initialize the gradient for an object.
 
-  Args:
-    obj: The object to initialize the gradient for, can be either a number,
-      array, tuple, list, or dictionary.
-    allow_lazy_initializer: Whether to allow using the ZeroGradient wrapper,
-      for efficiency.
+    Args:
+      obj: The object to initialize the gradient for, can be either a number,
+        array, tuple, list, or dictionary.
+      allow_lazy_initializer: Whether to allow using the ZeroGradient wrapper,
+        for efficiency.
 
-  Returns:
-    An object of the same type, shape, etc. but with all numeric values set to
-    zero. If the type is unknown, a zero is returned.
-  """
-  if obj is None:
-    # TODO: fixes.py appears to pass None value and expect 0.0 back. Bug?
-    return 0.0
+    Returns:
+      An object of the same type, shape, etc. but with all numeric values set to
+      zero. If the type is unknown, a zero is returned.
+    """
+    if obj is None:
+        # TODO: fixes.py appears to pass None value and expect 0.0 back. Bug?
+        return 0.0
 
-  initializer, supports_lazy_initializer = grad_initializers[type(obj)]
-  if supports_lazy_initializer:
-    if isinstance(obj, ZeroGradient):
-      if allow_lazy_initializer:
-        return ZeroGradient(obj.like)
-      else:
-        # TODO: Not sure this should normally be hit. In forward-over-reverse?
-        return obj.instantiate()
+    initializer, supports_lazy_initializer = grad_initializers[type(obj)]
+    if supports_lazy_initializer:
+        if isinstance(obj, ZeroGradient):
+            if allow_lazy_initializer:
+                return ZeroGradient(obj.like)
+            else:
+                # TODO: Not sure this should normally be hit. In forward-over-reverse?
+                return obj.instantiate()
+        else:
+            if allow_lazy_initializer:
+                return ZeroGradient(obj)
     else:
-      if allow_lazy_initializer:
-        return ZeroGradient(obj)
-  else:
-    assert not isinstance(obj, ZeroGradient)
-  return initializer(obj)
+        assert not isinstance(obj, ZeroGradient)
+    return initializer(obj)
 
 
 upcasting_int_warnings_left = 3
 
 
 def add_grad_numpy_int_argument(left, right):
-  global upcasting_int_warnings_left
-  if upcasting_int_warnings_left:
-    print(
-        'WARNING: Automatically upcasting a temporary integer variable to '
-        'float. This may happen if you differentiate with respect to an '
-        'integer argument and may lead to unexpected results.')
-    upcasting_int_warnings_left -= 1
-  right = unbroadcast(numpy.array(right), left)
-  return left + right
+    global upcasting_int_warnings_left
+    if upcasting_int_warnings_left:
+        print(
+            'WARNING: Automatically upcasting a temporary integer variable to '
+            'float. This may happen if you differentiate with respect to an '
+            'integer argument and may lead to unexpected results.'
+        )
+        upcasting_int_warnings_left -= 1
+    right = unbroadcast(numpy.array(right), left)
+    return left + right
 
 
 def add_grad_numpy(left, right):
-  right = unbroadcast(numpy.array(right), left)
-  return left + right
+    right = unbroadcast(numpy.array(right), left)
+    return left + right
 
 
 def add_grad_list(left, right):
-  return [add_grad(l, r) for l, r in zip(left, right)]
+    return [add_grad(l, r) for l, r in zip(left, right)]
 
 
 def add_grad_dict(left, right):
-  assert all(k in left for k in right)
-  return {k: add_grad(left[k], right[k]) for k in left}
+    assert all(k in left for k in right)
+    return {k: add_grad(left[k], right[k]) for k in left}
 
 
 grad_adders = {
@@ -674,91 +682,90 @@ grad_adders = {
 
 
 def register_add_grad(left_type, right_type, add_grad_function):
-  """Register a new gradient adder supporting the given types.
+    """Register a new gradient adder supporting the given types.
 
-  Gradient adders are used to add (in the sense of arithmetic addition)
-  intermediate adjoint and tangent variables.
-  TODO: Link to the document explaining the overall terminology and mechanics.
+    Gradient adders are used to add (in the sense of arithmetic addition)
+    intermediate adjoint and tangent variables.
+    TODO: Link to the document explaining the overall terminology and mechanics.
 
-  Args:
-    left_type: A Python type object. The data type of the left operand
-      supported by the adder.
-    right_type: A Python type object. The data type of the right operand
-      supported by the adder.
-    add_grad_function: A binary function that takes two arguments, left and
-      right, of the types left_type and right_type respectively, and returns
-      their sum. For example, the gradient adder for Numpy objects is np.add.
+    Args:
+      left_type: A Python type object. The data type of the left operand
+        supported by the adder.
+      right_type: A Python type object. The data type of the right operand
+        supported by the adder.
+      add_grad_function: A binary function that takes two arguments, left and
+        right, of the types left_type and right_type respectively, and returns
+        their sum. For example, the gradient adder for Numpy objects is np.add.
 
-  Raises:
-    ValueError: If the given type pair was already registered.
-  """
-  key = (left_type, right_type)
-  if key in grad_adders:
-    raise ValueError('Types %s already mapped to %s' % (key, grad_adders[key]))
-  grad_adders[key] = add_grad_function
+    Raises:
+      ValueError: If the given type pair was already registered.
+    """
+    key = (left_type, right_type)
+    if key in grad_adders:
+        raise ValueError('Types %s already mapped to %s' % (key, grad_adders[key]))
+    grad_adders[key] = add_grad_function
 
 
-def register_all_add_grad(
-    add_grad_function, arg_types, exclude=(), ignore_existing=False):
-  """Register a gradient adder for all combinations of given types.
+def register_all_add_grad(add_grad_function, arg_types, exclude=(), ignore_existing=False):
+    """Register a gradient adder for all combinations of given types.
 
-  This is a convenience shorthand for calling register_add_grad when registering
-  gradient adders for multiple types that can be interchanged for the purpose
-  of addition.
+    This is a convenience shorthand for calling register_add_grad when registering
+    gradient adders for multiple types that can be interchanged for the purpose
+    of addition.
 
-  Args:
-    add_grad_function: A gradient adder, see register_add_grad.
-    arg_types: List of Python type objects. The gradient adder will be
-      registered for all pairs of these types.
-    exclude: Optional list of type tuples to exclude.
-    ignore_existing: Boolean. Whether to silently skip argument pairs that were
-      already registered.
-  """
-  for t1 in arg_types:
-    for t2 in arg_types:
-      if (t1, t2) in exclude:
-        continue
-      if ignore_existing and (t1, t2) in grad_adders:
-        continue
-      register_add_grad(t1, t2, add_grad_function)
+    Args:
+      add_grad_function: A gradient adder, see register_add_grad.
+      arg_types: List of Python type objects. The gradient adder will be
+        registered for all pairs of these types.
+      exclude: Optional list of type tuples to exclude.
+      ignore_existing: Boolean. Whether to silently skip argument pairs that were
+        already registered.
+    """
+    for t1 in arg_types:
+        for t2 in arg_types:
+            if (t1, t2) in exclude:
+                continue
+            if ignore_existing and (t1, t2) in grad_adders:
+                continue
+            register_add_grad(t1, t2, add_grad_function)
 
 
 register_all_add_grad(
     lambda left, right: left + right,
     (float, numpy.float32, numpy.float64, numpy.ndarray),
-    exclude=((numpy.ndarray, numpy.ndarray),))
+    exclude=((numpy.ndarray, numpy.ndarray),),
+)
 
 
 register_all_add_grad(
     add_grad_numpy_int_argument,
-    (float, int,
-     numpy.int32, numpy.int64, numpy.float32, numpy.float64,
-     numpy.ndarray),
+    (float, int, numpy.int32, numpy.int64, numpy.float32, numpy.float64, numpy.ndarray),
     exclude=((numpy.ndarray, numpy.ndarray),),
-    ignore_existing=True)
+    ignore_existing=True,
+)
 
 
 def add_grad(left, right):
-  """Recursively add the gradient of two objects.
+    """Recursively add the gradient of two objects.
 
-  Args:
-    left: The left value to add. Can be either an array, a number, list or
-        dictionary.
-    right: The right value. Must be of the same type (recursively) as the left.
+    Args:
+      left: The left value to add. Can be either an array, a number, list or
+          dictionary.
+      right: The right value. Must be of the same type (recursively) as the left.
 
-  Returns:
-    The sum of the two gradients, which will of the same type.
-  """
-  # We assume that initial gradients are always identity WRT add_grad.
-  # We also assume that only init_grad could have created None values.
-  assert left is not None and right is not None
-  left_type = type(left)
-  right_type = type(right)
-  if left_type is ZeroGradient:
-    return right
-  if right_type is ZeroGradient:
-    return left
-  return grad_adders[(left_type, right_type)](left, right)
+    Returns:
+      The sum of the two gradients, which will of the same type.
+    """
+    # We assume that initial gradients are always identity WRT add_grad.
+    # We also assume that only init_grad could have created None values.
+    assert left is not None and right is not None
+    left_type = type(left)
+    right_type = type(right)
+    if left_type is ZeroGradient:
+        return right
+    if right_type is ZeroGradient:
+        return left
+    return grad_adders[(left_type, right_type)](left, right)
 
 
 # The values are functions fn(dz, x, y) returning the partial gradient of
@@ -770,568 +777,586 @@ matmul_grad_ys = {}
 
 
 def register_matmul_grad(t, grad_x_function, grad_y_function):
-  """Register the partial gradients of the `@` (matmul) operator for type t.
+    """Register the partial gradients of the `@` (matmul) operator for type t.
 
-  Args:
-    t: A Python type object. The array type the operands belong to.
-    grad_x_function: A ternary function fn(dz, x, y) returning d[z]/d[x]
-      contributions for z = x @ y (including any rank-promotion cases).
-    grad_y_function: A ternary function fn(dz, x, y) returning d[z]/d[y].
-  """
-  matmul_grad_xs[t] = grad_x_function
-  matmul_grad_ys[t] = grad_y_function
+    Args:
+      t: A Python type object. The array type the operands belong to.
+      grad_x_function: A ternary function fn(dz, x, y) returning d[z]/d[x]
+        contributions for z = x @ y (including any rank-promotion cases).
+      grad_y_function: A ternary function fn(dz, x, y) returning d[z]/d[y].
+    """
+    matmul_grad_xs[t] = grad_x_function
+    matmul_grad_ys[t] = grad_y_function
 
 
 def matmul_grad_x(dz, x, y):
-  """Partial gradient of z = x @ y with respect to x, backend-dispatched."""
-  grad_fn = matmul_grad_xs.get(type(x))
-  if grad_fn is None:
-    raise NotImplementedError(
-        'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
-        'matmul function (e.g. x.matmul(y)) or register one with '
-        'tangent.utils.register_matmul_grad.' % type(x).__name__)
-  return grad_fn(dz, x, y)
+    """Partial gradient of z = x @ y with respect to x, backend-dispatched."""
+    grad_fn = matmul_grad_xs.get(type(x))
+    if grad_fn is None:
+        raise NotImplementedError(
+            'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
+            'matmul function (e.g. x.matmul(y)) or register one with '
+            'tangent.utils.register_matmul_grad.' % type(x).__name__
+        )
+    return grad_fn(dz, x, y)
 
 
 def matmul_grad_y(dz, x, y):
-  """Partial gradient of z = x @ y with respect to y, backend-dispatched."""
-  grad_fn = matmul_grad_ys.get(type(y))
-  if grad_fn is None:
-    raise NotImplementedError(
-        'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
-        'matmul function (e.g. x.matmul(y)) or register one with '
-        'tangent.utils.register_matmul_grad.' % type(y).__name__)
-  return grad_fn(dz, x, y)
+    """Partial gradient of z = x @ y with respect to y, backend-dispatched."""
+    grad_fn = matmul_grad_ys.get(type(y))
+    if grad_fn is None:
+        raise NotImplementedError(
+            'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
+            'matmul function (e.g. x.matmul(y)) or register one with '
+            'tangent.utils.register_matmul_grad.' % type(y).__name__
+        )
+    return grad_fn(dz, x, y)
 
 
 def array_shapes_match(a, b):
-  shape_a = numpy.shape(a)
-  shape_b = numpy.shape(b)
-  # A scalar (shape ()) broadcasts to any shape, so it is compatible with an
-  # array. In particular the default seed derivative 1.0 is accepted for an
-  # array-valued output, where it computes the gradient of the sum of the
-  # outputs (this already happens in optimized mode, where the shape assertion
-  # is elided). Genuinely mismatched array shapes are still rejected.
-  if shape_a == () or shape_b == ():
-    return True
-  return shape_a == shape_b
+    shape_a = numpy.shape(a)
+    shape_b = numpy.shape(b)
+    # A scalar (shape ()) broadcasts to any shape, so it is compatible with an
+    # array. In particular the default seed derivative 1.0 is accepted for an
+    # array-valued output, where it computes the gradient of the sum of the
+    # outputs (this already happens in optimized mode, where the shape assertion
+    # is elided). Genuinely mismatched array shapes are still rejected.
+    if shape_a == () or shape_b == ():
+        return True
+    return shape_a == shape_b
 
 
 shape_checkers = {}
 
 
 def register_shape_checker(left_type, right_type, shape_checker_function):
-  """Register a new shape checking function supporting given types.
+    """Register a new shape checking function supporting given types.
 
-  Shape checkers are primarily used to make sure that the seed derivatives
-  passed into generated autodiff functions match their corresponding
-  primal values.
+    Shape checkers are primarily used to make sure that the seed derivatives
+    passed into generated autodiff functions match their corresponding
+    primal values.
 
-  Args:
-    left_type: A Python type object. The data type of the left operand
-      supported by the adder.
-    right_type: A Python type object. The data type of the right operand
-      supported by the adder.
-    shape_checker_function: A binary function that takes two arguments, left and
-      right, of the types left_type and right_type respectively, and returns
-      a boolean indicating whether or not they match.
+    Args:
+      left_type: A Python type object. The data type of the left operand
+        supported by the adder.
+      right_type: A Python type object. The data type of the right operand
+        supported by the adder.
+      shape_checker_function: A binary function that takes two arguments, left and
+        right, of the types left_type and right_type respectively, and returns
+        a boolean indicating whether or not they match.
 
-  Raises:
-    ValueError: If the given type pair was already registered.
-  """
-  key = (left_type, right_type)
-  if key in shape_checkers:
-    raise ValueError('Types %s already mapped to %s' % (key,
-                                                        shape_checkers[key]))
-  shape_checkers[key] = shape_checker_function
+    Raises:
+      ValueError: If the given type pair was already registered.
+    """
+    key = (left_type, right_type)
+    if key in shape_checkers:
+        raise ValueError('Types %s already mapped to %s' % (key, shape_checkers[key]))
+    shape_checkers[key] = shape_checker_function
 
 
-def register_all_shape_checker(shape_checker_function,
-                               arg_types,
-                               exclude=(),
-                               ignore_existing=False):
-  """Register a gradient adder for all combinations of given types.
+def register_all_shape_checker(
+    shape_checker_function, arg_types, exclude=(), ignore_existing=False
+):
+    """Register a gradient adder for all combinations of given types.
 
-  This is a convenience shorthand for calling register_add_grad when registering
-  gradient adders for multiple types that can be interchanged for the purpose
-  of addition.
+    This is a convenience shorthand for calling register_add_grad when registering
+    gradient adders for multiple types that can be interchanged for the purpose
+    of addition.
 
-  Args:
-    shape_checker_function: A shape checker, see register_shape_checker.
-    arg_types: List of Python type objects. The shape checker will be
-      registered for all pairs of these types.
-    exclude: Optional list of type tuples to exclude.
-    ignore_existing: Boolean. Whether to silently skip argument pairs that were
-      already registered.
-  """
-  for t1 in arg_types:
-    for t2 in arg_types:
-      if (t1, t2) in exclude:
-        continue
-      if ignore_existing and (t1, t2) in shape_checkers:
-        continue
-      register_shape_checker(t1, t2, shape_checker_function)
+    Args:
+      shape_checker_function: A shape checker, see register_shape_checker.
+      arg_types: List of Python type objects. The shape checker will be
+        registered for all pairs of these types.
+      exclude: Optional list of type tuples to exclude.
+      ignore_existing: Boolean. Whether to silently skip argument pairs that were
+        already registered.
+    """
+    for t1 in arg_types:
+        for t2 in arg_types:
+            if (t1, t2) in exclude:
+                continue
+            if ignore_existing and (t1, t2) in shape_checkers:
+                continue
+            register_shape_checker(t1, t2, shape_checker_function)
 
 
 def shapes_match(a, b):
-  """Recursively check if shapes of object `a` and `b` match.
+    """Recursively check if shapes of object `a` and `b` match.
 
-  Will walk lists, tuples and dicts.
+    Will walk lists, tuples and dicts.
 
-  Args:
-    a: object of type (numpy.ndarray,tf.Tensor,list,tuple,dict)
-        to check for matching shapes against `b`.
-    b: object to check for matching shape against `a`.
+    Args:
+      a: object of type (numpy.ndarray,tf.Tensor,list,tuple,dict)
+          to check for matching shapes against `b`.
+      b: object to check for matching shape against `a`.
 
-  Returns:
-    A boolean indicating whether the shapes of `a` and `b` match.
-  """
-  if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
-    if len(a) != len(b):
-      return False
-    return all([shapes_match(ia, ib) for ia, ib in zip(a, b)])
-  elif isinstance(a, dict) and isinstance(b, dict):
-    if len(a) != len(b):
-      return False
-    match = True
-    for (ak, av), (bk, bv) in zip(a.items(), b.items()):
-      match = match and all([ak == bk and shapes_match(av, bv)])
-    return match
-  elif isinstance(a, (tuple, list, dict)) or isinstance(b, (tuple, list, dict)):
-    # A container on one side and a non-container (or a different container
-    # kind) on the other is a structure mismatch, not an unknown type pair:
-    # report it as a shape mismatch so callers (the generated seed assert) can
-    # produce a clean error instead of a KeyError from the checker registry.
-    return False
-  else:
-    shape_checker = shape_checkers[(type(a), type(b))]
-    return shape_checker(a, b)
+    Returns:
+      A boolean indicating whether the shapes of `a` and `b` match.
+    """
+    if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
+        if len(a) != len(b):
+            return False
+        return all([shapes_match(ia, ib) for ia, ib in zip(a, b)])
+    elif isinstance(a, dict) and isinstance(b, dict):
+        if len(a) != len(b):
+            return False
+        match = True
+        for (ak, av), (bk, bv) in zip(a.items(), b.items()):
+            match = match and all([ak == bk and shapes_match(av, bv)])
+        return match
+    elif isinstance(a, (tuple, list, dict)) or isinstance(b, (tuple, list, dict)):
+        # A container on one side and a non-container (or a different container
+        # kind) on the other is a structure mismatch, not an unknown type pair:
+        # report it as a shape mismatch so callers (the generated seed assert) can
+        # produce a clean error instead of a KeyError from the checker registry.
+        return False
+    else:
+        shape_checker = shape_checkers[(type(a), type(b))]
+        return shape_checker(a, b)
 
 
 def seed_pytree(x):
-  """Build a pytree of ones matching the structure of ``x``.
+    """Build a pytree of ones matching the structure of ``x``.
 
-  Arrays become ones_like, scalars become 1.0, and lists/tuples/dicts are
-  mapped recursively. This is the correct reverse-mode seed for a container
-  output: it computes the gradient of the sum of every leaf.
-  """
-  if isinstance(x, dict):
-    return {k: seed_pytree(v) for k, v in x.items()}
-  if isinstance(x, (list, tuple)):
-    seeds = [seed_pytree(v) for v in x]
-    return type(x)(seeds)
-  if isinstance(x, numpy.ndarray):
-    return numpy.ones_like(x)
-  return 1.0
+    Arrays become ones_like, scalars become 1.0, and lists/tuples/dicts are
+    mapped recursively. This is the correct reverse-mode seed for a container
+    output: it computes the gradient of the sum of every leaf.
+    """
+    if isinstance(x, dict):
+        return {k: seed_pytree(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        seeds = [seed_pytree(v) for v in x]
+        return type(x)(seeds)
+    if isinstance(x, numpy.ndarray):
+        return numpy.ones_like(x)
+    return 1.0
 
 
 def match_seed(primal, adjoint):
-  """Return a seed compatible with ``primal``.
+    """Return a seed compatible with ``primal``.
 
-  Reconciles the supplied seed with the structure and leaf shapes of the
-  return value so the backward pass can index it leaf by leaf:
+    Reconciles the supplied seed with the structure and leaf shapes of the
+    return value so the backward pass can index it leaf by leaf:
 
-  - a container primal with a matching container seed is reconciled
-    element-wise (recursively);
-  - a container primal with a scalar seed is expanded into a full pytree of
-    ones via ``seed_pytree``;
-  - an array leaf with a scalar seed is broadcast to the leaf's shape.
+    - a container primal with a matching container seed is reconciled
+      element-wise (recursively);
+    - a container primal with a scalar seed is expanded into a full pytree of
+      ones via ``seed_pytree``;
+    - an array leaf with a scalar seed is broadcast to the leaf's shape.
 
-  Scalars and already-matching seeds are returned unchanged, so ordinary
-  scalar-output functions are unaffected.
+    Scalars and already-matching seeds are returned unchanged, so ordinary
+    scalar-output functions are unaffected.
 
-  A caller-supplied *container* seed whose structure does not match the
-  return value (different dict keys, different length, or a container where
-  the output is a leaf) is rejected with a ValueError: silently replacing a
-  wrong seed with ones would compute a gradient the caller did not ask for.
-  """
-  if isinstance(primal, dict):
-    if isinstance(adjoint, dict):
-      if set(adjoint.keys()) != set(primal.keys()):
+    A caller-supplied *container* seed whose structure does not match the
+    return value (different dict keys, different length, or a container where
+    the output is a leaf) is rejected with a ValueError: silently replacing a
+    wrong seed with ones would compute a gradient the caller did not ask for.
+    """
+    if isinstance(primal, dict):
+        if isinstance(adjoint, dict):
+            if set(adjoint.keys()) != set(primal.keys()):
+                raise ValueError(
+                    'Seed derivative structure does not match the return value: '
+                    'seed has keys %s but the returned dict has keys %s.'
+                    % (sorted(map(str, adjoint.keys())), sorted(map(str, primal.keys())))
+                )
+            return {k: match_seed(primal[k], adjoint[k]) for k in primal}
+        if isinstance(adjoint, (Number, bool)):
+            return seed_pytree(primal)
         raise ValueError(
             'Seed derivative structure does not match the return value: '
-            'seed has keys %s but the returned dict has keys %s.' %
-            (sorted(map(str, adjoint.keys())),
-             sorted(map(str, primal.keys()))))
-      return {k: match_seed(primal[k], adjoint[k]) for k in primal}
-    if isinstance(adjoint, (Number, bool)):
-      return seed_pytree(primal)
-    raise ValueError(
-        'Seed derivative structure does not match the return value: '
-        'expected a dict (or a scalar to seed the sum of all leaves), '
-        'got %s.' % type(adjoint).__name__)
-  if isinstance(primal, (list, tuple)):
-    if isinstance(adjoint, (list, tuple)):
-      if len(adjoint) != len(primal):
+            'expected a dict (or a scalar to seed the sum of all leaves), '
+            'got %s.' % type(adjoint).__name__
+        )
+    if isinstance(primal, (list, tuple)):
+        if isinstance(adjoint, (list, tuple)):
+            if len(adjoint) != len(primal):
+                raise ValueError(
+                    'Seed derivative structure does not match the return value: '
+                    'seed has %d elements but the returned container has %d.'
+                    % (len(adjoint), len(primal))
+                )
+            return type(primal)([match_seed(p, a) for p, a in zip(primal, adjoint)])
+        if isinstance(adjoint, (Number, bool)):
+            return seed_pytree(primal)
         raise ValueError(
             'Seed derivative structure does not match the return value: '
-            'seed has %d elements but the returned container has %d.' %
-            (len(adjoint), len(primal)))
-      return type(primal)(
-          [match_seed(p, a) for p, a in zip(primal, adjoint)])
-    if isinstance(adjoint, (Number, bool)):
-      return seed_pytree(primal)
-    raise ValueError(
-        'Seed derivative structure does not match the return value: '
-        'expected a %s (or a scalar to seed the sum of all leaves), '
-        'got %s.' % (type(primal).__name__, type(adjoint).__name__))
-  if isinstance(adjoint, (dict, list, tuple)):
-    raise ValueError(
-        'Seed derivative structure does not match the return value: '
-        'the function returns a non-container value but the seed is a %s.' %
-        type(adjoint).__name__)
-  # Leaf. Expand a scalar seed to a non-scalar array leaf's shape; leave
-  # scalar/0-d outputs and already-shaped seeds untouched.
-  if (isinstance(primal, numpy.ndarray) and primal.shape and
-      isinstance(adjoint, (Number, bool))):
-    return adjoint * numpy.ones_like(primal)
-  return adjoint
+            'expected a %s (or a scalar to seed the sum of all leaves), '
+            'got %s.' % (type(primal).__name__, type(adjoint).__name__)
+        )
+    if isinstance(adjoint, (dict, list, tuple)):
+        raise ValueError(
+            'Seed derivative structure does not match the return value: '
+            'the function returns a non-container value but the seed is a %s.'
+            % type(adjoint).__name__
+        )
+    # Leaf. Expand a scalar seed to a non-scalar array leaf's shape; leave
+    # scalar/0-d outputs and already-shaped seeds untouched.
+    if isinstance(primal, numpy.ndarray) and primal.shape and isinstance(adjoint, (Number, bool)):
+        return adjoint * numpy.ones_like(primal)
+    return adjoint
 
 
 def match_seed_grad(seed, dz):
-  """Gradient of ``match_seed(primal, seed)`` with respect to ``seed``.
+    """Gradient of ``match_seed(primal, seed)`` with respect to ``seed``.
 
-  ``z = match_seed(primal, seed)`` is linear in ``seed``:
+    ``z = match_seed(primal, seed)`` is linear in ``seed``:
 
-  - when the seed already matches the output structure, ``z`` is (leaf-wise)
-    the seed itself, so the gradient passes through unchanged;
-  - when a scalar seed was broadcast against an array output
-    (``z = seed * ones_like(primal)``), the gradient is the sum of the
-    incoming cotangent;
-  - when a scalar seed was expanded against a *container* output, ``z`` is
-    ``seed_pytree(primal)`` - independent of the seed's value - so the
-    gradient is zero.
+    - when the seed already matches the output structure, ``z`` is (leaf-wise)
+      the seed itself, so the gradient passes through unchanged;
+    - when a scalar seed was broadcast against an array output
+      (``z = seed * ones_like(primal)``), the gradient is the sum of the
+      incoming cotangent;
+    - when a scalar seed was expanded against a *container* output, ``z`` is
+      ``seed_pytree(primal)`` - independent of the seed's value - so the
+      gradient is zero.
 
-  The case is recovered from the runtime types of ``seed`` and ``dz`` (the
-  cotangent of ``z``, which has the output's structure), so this helper is
-  correct wherever ``match_seed`` itself is defined. It backs the registered
-  adjoint of ``match_seed`` so higher-order reverse-mode AD can differentiate
-  through the seed reconciliation.
-  """
-  if isinstance(seed, (Number, bool)) and not isinstance(dz, (Number, bool)):
-    if isinstance(dz, (dict, list, tuple)):
-      return 0.0
-    # Sum the cotangent down to the scalar seed's shape. `unbroadcast` is
-    # type-dispatched, so backend tensors (torch/JAX/TF) reduce with their
-    # own sum rather than NumPy's.
-    return unbroadcast(dz, seed)
-  return dz
+    The case is recovered from the runtime types of ``seed`` and ``dz`` (the
+    cotangent of ``z``, which has the output's structure), so this helper is
+    correct wherever ``match_seed`` itself is defined. It backs the registered
+    adjoint of ``match_seed`` so higher-order reverse-mode AD can differentiate
+    through the seed reconciliation.
+    """
+    if isinstance(seed, (Number, bool)) and not isinstance(dz, (Number, bool)):
+        if isinstance(dz, (dict, list, tuple)):
+            return 0.0
+        # Sum the cotangent down to the scalar seed's shape. `unbroadcast` is
+        # type-dispatched, so backend tensors (torch/JAX/TF) reduce with their
+        # own sum rather than NumPy's.
+        return unbroadcast(dz, seed)
+    return dz
 
 
 register_all_shape_checker(
-    array_shapes_match, (numpy.ndarray, Number, float, int, bool,
-                         numpy.float32, numpy.float64, numpy.int32,
-                         numpy.int64),
-    ignore_existing=True)
+    array_shapes_match,
+    (
+        numpy.ndarray,
+        Number,
+        float,
+        int,
+        bool,
+        numpy.float32,
+        numpy.float64,
+        numpy.int32,
+        numpy.int64,
+    ),
+    ignore_existing=True,
+)
 
 
 def push(stack, x, op_id):
-  """Push a value onto the stack (i.e. record it on the tape).
+    """Push a value onto the stack (i.e. record it on the tape).
 
-  Args:
-    stack: The stack object, which must support appending values.
-    x: The value to append. If it is a mutable object like an array or list, it
-        will be copied before being added onto the stack.
-    op_id: A unique variable that is also passed into the corresponding pop.
-        Allows optimization passes to track pairs of pushes and pops.
-  """
-  if isinstance(x, numpy.ndarray):
-    x = x.copy()
-  elif isinstance(x, list):
-    x = x[:]
-  if __debug__:
-    stack.append((x, op_id))
-  else:
-    stack.append(x)
+    Args:
+      stack: The stack object, which must support appending values.
+      x: The value to append. If it is a mutable object like an array or list, it
+          will be copied before being added onto the stack.
+      op_id: A unique variable that is also passed into the corresponding pop.
+          Allows optimization passes to track pairs of pushes and pops.
+    """
+    if isinstance(x, numpy.ndarray):
+        x = x.copy()
+    elif isinstance(x, list):
+        x = x[:]
+    if __debug__:
+        stack.append((x, op_id))
+    else:
+        stack.append(x)
 
 
 def pop(stack, op_id):
-  """Pop a value from the stack (i.e. read it from the tape).
+    """Pop a value from the stack (i.e. read it from the tape).
 
-  Args:
-    stack: The stack to pop from.
-    op_id: A unique variable that is also passed into the matching push.
-        Allows optimization passes to track pairs of pushes and pops.
+    Args:
+      stack: The stack to pop from.
+      op_id: A unique variable that is also passed into the matching push.
+          Allows optimization passes to track pairs of pushes and pops.
 
-  Returns:
-    The last value.
-  """
-  if __debug__:
-    pushed_value, pushed_op_id = stack.pop()
-    assert pushed_op_id == op_id, 'Wanted %s, got %s' % (op_id, pushed_op_id)
-  else:
-    pushed_value = stack.pop()
-  return pushed_value
+    Returns:
+      The last value.
+    """
+    if __debug__:
+        pushed_value, pushed_op_id = stack.pop()
+        assert pushed_op_id == op_id, 'Wanted %s, got %s' % (op_id, pushed_op_id)
+    else:
+        pushed_value = stack.pop()
+    return pushed_value
 
 
 def pop_stack(stack, op_id):
-  """Proxy of pop, where we know we're popping a stack off of a stack.
+    """Proxy of pop, where we know we're popping a stack off of a stack.
 
-  We know that we don't need to differentiate through this.
-  See pop() for more.
+    We know that we don't need to differentiate through this.
+    See pop() for more.
 
-  Args:
-    stack: The stack to pop from.
-    op_id: A unique variable that is also passed into the matching push.
-        Allows optimization passes to track pairs of pushes and pops.
+    Args:
+      stack: The stack to pop from.
+      op_id: A unique variable that is also passed into the matching push.
+          Allows optimization passes to track pairs of pushes and pops.
 
-  Returns:
-    The last value.
-  """
-  if __debug__:
-    pushed_stack, pushed_op_id = stack.pop()
-    assert pushed_op_id == op_id, 'Wanted %s, got %s' % (op_id, pushed_op_id)
-  else:
-    pushed_stack = stack.pop()
-  return pushed_stack
+    Returns:
+      The last value.
+    """
+    if __debug__:
+        pushed_stack, pushed_op_id = stack.pop()
+        assert pushed_op_id == op_id, 'Wanted %s, got %s' % (op_id, pushed_op_id)
+    else:
+        pushed_stack = stack.pop()
+    return pushed_stack
 
 
 def push_stack(stack, substack, op_id):
-  """Proxy of push, where we know we're pushing a stack onto a stack.
+    """Proxy of push, where we know we're pushing a stack onto a stack.
 
-  Used when differentiating call trees,where sub-functions get their own stack.
-  See push() for more.
+    Used when differentiating call trees,where sub-functions get their own stack.
+    See push() for more.
 
-  Args:
-    stack: The stack object, which must support appending values.
-    substack: The stack to append.
-    op_id: A unique variable that is also passed into the corresponding pop.
-        Allows optimization passes to track pairs of pushes and pops.
+    Args:
+      stack: The stack object, which must support appending values.
+      substack: The stack to append.
+      op_id: A unique variable that is also passed into the corresponding pop.
+          Allows optimization passes to track pairs of pushes and pops.
 
-  Raises:
-    ValueError: If a non-stack value for `substack` is passed.
-  """
-  if substack is not None and not isinstance(substack, Stack):
-    raise ValueError(
-        'Substack should be type tangent.Stack or None, instead found %s' %
-        type(substack))
-  if __debug__:
-    stack.append((substack, op_id))
-  else:
-    stack.append(substack)
+    Raises:
+      ValueError: If a non-stack value for `substack` is passed.
+    """
+    if substack is not None and not isinstance(substack, Stack):
+        raise ValueError(
+            'Substack should be type tangent.Stack or None, instead found %s' % type(substack)
+        )
+    if __debug__:
+        stack.append((substack, op_id))
+    else:
+        stack.append(substack)
 
 
 def transpose_inverse_axes(axes):
-  """Inverse of a transpose `axes` permutation, or None if `axes` is None.
+    """Inverse of a transpose `axes` permutation, or None if `axes` is None.
 
-  Used by the adjoint of numpy.transpose: the gradient of transpose(x, axes)
-  is transpose(dy, inverse(axes)). Kept as a non-differentiable helper so the
-  inverse-permutation loop never appears in generated code (where it would be
-  mangled), mirroring the tinygrad permute adjoint.
-  """
-  if axes is None:
-    return None
-  axes = list(axes)
-  inverse = [0] * len(axes)
-  for i, ax in enumerate(axes):
-    inverse[ax] = i
-  return inverse
+    Used by the adjoint of numpy.transpose: the gradient of transpose(x, axes)
+    is transpose(dy, inverse(axes)). Kept as a non-differentiable helper so the
+    inverse-permutation loop never appears in generated code (where it would be
+    mangled), mirroring the tinygrad permute adjoint.
+    """
+    if axes is None:
+        return None
+    axes = list(axes)
+    inverse = [0] * len(axes)
+    for i, ax in enumerate(axes):
+        inverse[ax] = i
+    return inverse
 
 
 non_differentiable.register_non_differentiable_functions(
-    init_grad, array_size, Stack, transpose_inverse_axes)
+    init_grad, array_size, Stack, transpose_inverse_axes
+)
 
 
 def insert_grad_of(var):
-  """The context manager that allows insertion of arbitrary adjoint code.
+    """The context manager that allows insertion of arbitrary adjoint code.
 
-  This function can be used as a context manager e.g. `with insert_grad_of(x) as dx`
-  to write code that will be inserted in the adjoint while having access to the
-  gradients of certain variables.
+    This function can be used as a context manager e.g. `with insert_grad_of(x) as dx`
+    to write code that will be inserted in the adjoint while having access to the
+    gradients of certain variables.
 
-  This function is handled by reverse mode automatic differentiation, and
-  shouldn't actually ever be called. If the user wants to use a function
-  containing this context manager without taking the derivative, the `tangent`
-  decorator should be used to remove it from the code.
+    This function is handled by reverse mode automatic differentiation, and
+    shouldn't actually ever be called. If the user wants to use a function
+    containing this context manager without taking the derivative, the `tangent`
+    decorator should be used to remove it from the code.
 
-  Args:
-    var: The variable of which we want the gradient.
+    Args:
+      var: The variable of which we want the gradient.
 
-  Returns:
-    The gradient of this value.
+    Returns:
+      The gradient of this value.
 
-  Raises:
-    ValueError: If this context manager isn't removed using the `tangent`
-        decorator and the code is actually run.
-  """
-  raise ValueError('use the tangent decorator for functions containing '
-                   'the `with insert_grad_of` statement')
+    Raises:
+      ValueError: If this context manager isn't removed using the `tangent`
+          decorator and the code is actually run.
+    """
+    raise ValueError(
+        'use the tangent decorator for functions containing the `with insert_grad_of` statement'
+    )
 
 
 def grad_dot(dy, x1, x2):
-  """Gradient of NumPy dot product w.r.t. to the left hand side.
+    """Gradient of NumPy dot product w.r.t. to the left hand side.
 
-  Args:
-    dy: The gradient with respect to the output.
-    x1: The left hand side of the `numpy.dot` function.
-    x2: The right hand side
+    Args:
+      dy: The gradient with respect to the output.
+      x1: The left hand side of the `numpy.dot` function.
+      x2: The right hand side
 
-  Returns:
-    The gradient with respect to `x1` i.e. `x2.dot(dy.T)` with all the
-    broadcasting involved.
-  """
-  if len(numpy.shape(x1)) == 1 and len(numpy.shape(x2)) == 1:
-    # Vector dot product producing a scalar: d(x1) = dy * x2. The general
-    # matrix machinery below assumes at least one operand is 2-D and would
-    # produce misaligned shapes here.
-    return dy * x2
-  if len(numpy.shape(x1)) == 1:
-    dy = numpy.atleast_2d(dy)
-  elif len(numpy.shape(x2)) == 1:
-    dy = numpy.transpose(numpy.atleast_2d(dy))
-    x2 = numpy.transpose(numpy.atleast_2d(x2))
-  x2_t = numpy.transpose(numpy.atleast_2d(
-      numpy.sum(x2, axis=tuple(numpy.arange(numpy.ndim(x2) - 2)))))
-  dy_x2 = numpy.sum(dy, axis=tuple(-numpy.arange(numpy.ndim(x2) - 2) - 2))
-  return numpy.reshape(numpy.dot(dy_x2, x2_t), numpy.shape(x1))
+    Returns:
+      The gradient with respect to `x1` i.e. `x2.dot(dy.T)` with all the
+      broadcasting involved.
+    """
+    if len(numpy.shape(x1)) == 1 and len(numpy.shape(x2)) == 1:
+        # Vector dot product producing a scalar: d(x1) = dy * x2. The general
+        # matrix machinery below assumes at least one operand is 2-D and would
+        # produce misaligned shapes here.
+        return dy * x2
+    if len(numpy.shape(x1)) == 1:
+        dy = numpy.atleast_2d(dy)
+    elif len(numpy.shape(x2)) == 1:
+        dy = numpy.transpose(numpy.atleast_2d(dy))
+        x2 = numpy.transpose(numpy.atleast_2d(x2))
+    x2_t = numpy.transpose(
+        numpy.atleast_2d(numpy.sum(x2, axis=tuple(numpy.arange(numpy.ndim(x2) - 2))))
+    )
+    dy_x2 = numpy.sum(dy, axis=tuple(-numpy.arange(numpy.ndim(x2) - 2) - 2))
+    return numpy.reshape(numpy.dot(dy_x2, x2_t), numpy.shape(x1))
 
 
 def copy(source):
-  source_type = type(source)
-  # If gradient initializers are allowed, then the object is immutable and we
-  # don't need to deep copy it.
-  if source_type in grad_initializers:
-    _, allow_lazy_init_grad = grad_initializers[source_type]
-    if allow_lazy_init_grad:
-      return source
-  return native_copy(source)
+    source_type = type(source)
+    # If gradient initializers are allowed, then the object is immutable and we
+    # don't need to deep copy it.
+    if source_type in grad_initializers:
+        _, allow_lazy_init_grad = grad_initializers[source_type]
+        if allow_lazy_init_grad:
+            return source
+    return native_copy(source)
 
 
 def update_grad_at_index(grad_array, index, value):
-  """Update gradient array at index, handling both mutable and immutable types.
+    """Update gradient array at index, handling both mutable and immutable types.
 
-  This function provides a unified interface for updating gradient arrays that
-  works with NumPy (mutable), JAX (immutable), and TensorFlow (immutable).
+    This function provides a unified interface for updating gradient arrays that
+    works with NumPy (mutable), JAX (immutable), and TensorFlow (immutable).
 
-  Args:
-    grad_array: The gradient array to update (NumPy array, JAX array, or TF tensor)
-    index: The index or indices to update (can be int, slice, or tuple of indices)
-    value: The value to set at the given index
+    Args:
+      grad_array: The gradient array to update (NumPy array, JAX array, or TF tensor)
+      index: The index or indices to update (can be int, slice, or tuple of indices)
+      value: The value to set at the given index
 
-  Returns:
-    The updated gradient array. For mutable types (NumPy), this is the same object
-    with modified contents. For immutable types (JAX, TensorFlow), this is a new
-    object with the update applied.
+    Returns:
+      The updated gradient array. For mutable types (NumPy), this is the same object
+      with modified contents. For immutable types (JAX, TensorFlow), this is a new
+      object with the update applied.
 
-  Examples:
-    # NumPy (mutable - in-place update)
-    grad = np.zeros(3)
-    grad = update_grad_at_index(grad, 0, 1.0)  # Returns modified grad
+    Examples:
+      # NumPy (mutable - in-place update)
+      grad = np.zeros(3)
+      grad = update_grad_at_index(grad, 0, 1.0)  # Returns modified grad
 
-    # JAX (immutable - functional update)
-    grad = jnp.zeros(3)
-    grad = update_grad_at_index(grad, 0, 1.0)  # Returns new array
+      # JAX (immutable - functional update)
+      grad = jnp.zeros(3)
+      grad = update_grad_at_index(grad, 0, 1.0)  # Returns new array
 
-    # TensorFlow (immutable - functional update)
-    grad = tf.zeros([3])
-    grad = update_grad_at_index(grad, 0, 1.0)  # Returns new tensor
-  """
-  # Get the type name to detect backend
-  type_name = type(grad_array).__module__
+      # TensorFlow (immutable - functional update)
+      grad = tf.zeros([3])
+      grad = update_grad_at_index(grad, 0, 1.0)  # Returns new tensor
+    """
+    # Get the type name to detect backend
+    type_name = type(grad_array).__module__
 
-  # JAX arrays - use .at[].set() functional update
-  if 'jax' in type_name:
-    try:
-      # Convert index to tuple if it's not already
-      if not isinstance(index, tuple):
-        index = (index,)
-      # Use JAX's functional update syntax
-      return grad_array.at[index].set(value)
-    except Exception:
-      # Fallback: try without tuple wrapping
-      return grad_array.at[index].set(value)
+    # JAX arrays - use .at[].set() functional update
+    if 'jax' in type_name:
+        try:
+            # Convert index to tuple if it's not already
+            if not isinstance(index, tuple):
+                index = (index,)
+            # Use JAX's functional update syntax
+            return grad_array.at[index].set(value)
+        except Exception:
+            # Fallback: try without tuple wrapping
+            return grad_array.at[index].set(value)
 
-  # TensorFlow tensors - use tensor_scatter_nd_update
-  elif 'tensorflow' in type_name:
-    try:
-      import tensorflow as tf
-      # Convert index to the format TF expects: [[index]]
-      if isinstance(index, int):
-        indices = [[index]]
-      elif isinstance(index, tuple):
-        # For multi-dimensional indexing: (i, j) -> [[i, j]]
-        indices = [list(index)]
-      else:
-        # For slice objects, we need to handle differently
-        # For now, convert to list of indices
-        if isinstance(index, slice):
-          # This is complex - for now, raise an error
-          raise NotImplementedError(
-              "Slice updates for TensorFlow tensors not yet implemented. "
-              "Please use explicit integer indices."
-          )
-        indices = [[index]]
+    # TensorFlow tensors - use tensor_scatter_nd_update
+    elif 'tensorflow' in type_name:
+        try:
+            import tensorflow as tf
 
-      # Ensure value has correct shape
-      if not hasattr(value, 'shape'):
-        value = tf.constant(value)
-      if len(tf.shape(value)) == 0:
-        value = tf.expand_dims(value, 0)
+            # Convert index to the format TF expects: [[index]]
+            if isinstance(index, int):
+                indices = [[index]]
+            elif isinstance(index, tuple):
+                # For multi-dimensional indexing: (i, j) -> [[i, j]]
+                indices = [list(index)]
+            else:
+                # For slice objects, we need to handle differently
+                # For now, convert to list of indices
+                if isinstance(index, slice):
+                    # This is complex - for now, raise an error
+                    raise NotImplementedError(
+                        "Slice updates for TensorFlow tensors not yet implemented. "
+                        "Please use explicit integer indices."
+                    )
+                indices = [[index]]
 
-      return tf.tensor_scatter_nd_update(grad_array, indices, value)
-    except Exception as e:
-      # If TF update fails, provide helpful error
-      raise TypeError(
-          f"Failed to update TensorFlow tensor: {e}. "
-          "TensorFlow tensors are immutable and require special update syntax."
-      )
+            # Ensure value has correct shape
+            if not hasattr(value, 'shape'):
+                value = tf.constant(value)
+            if len(tf.shape(value)) == 0:
+                value = tf.expand_dims(value, 0)
 
-  # NumPy arrays (default - mutable in-place update)
-  else:
-    grad_array[index] = value
-    return grad_array
+            return tf.tensor_scatter_nd_update(grad_array, indices, value)
+        except Exception as e:
+            # If TF update fails, provide helpful error
+            raise TypeError(
+                f"Failed to update TensorFlow tensor: {e}. "
+                "TensorFlow tensors are immutable and require special update syntax."
+            )
+
+    # NumPy arrays (default - mutable in-place update)
+    else:
+        grad_array[index] = value
+        return grad_array
 
 
 def add_grad_at_index(grad_array, index, value):
-  """Accumulate a gradient contribution at an index of a container.
+    """Accumulate a gradient contribution at an index of a container.
 
-  This is the accumulating counterpart of `update_grad_at_index`. Reverse-mode
-  gradients must always accumulate, because the same element can be read more
-  than once (e.g. `a[0] * a[0]`, or a subscript read inside a loop). Overwriting
-  would silently keep only the last contribution.
+    This is the accumulating counterpart of `update_grad_at_index`. Reverse-mode
+    gradients must always accumulate, because the same element can be read more
+    than once (e.g. `a[0] * a[0]`, or a subscript read inside a loop). Overwriting
+    would silently keep only the last contribution.
 
-  Works with NumPy (mutable), JAX (immutable), TensorFlow (immutable), and plain
-  Python containers such as dicts and lists.
+    Works with NumPy (mutable), JAX (immutable), TensorFlow (immutable), and plain
+    Python containers such as dicts and lists.
 
-  Args:
-    grad_array: The gradient container to update (NumPy array, JAX array, TF
-        tensor, dict, or list).
-    index: The index or key to accumulate into.
-    value: The gradient contribution to add at the given index.
+    Args:
+      grad_array: The gradient container to update (NumPy array, JAX array, TF
+          tensor, dict, or list).
+      index: The index or key to accumulate into.
+      value: The gradient contribution to add at the given index.
 
-  Returns:
-    The updated gradient container. For mutable types this is the same object
-    with modified contents; for immutable types it is a new object.
-  """
-  type_name = type(grad_array).__module__
+    Returns:
+      The updated gradient container. For mutable types this is the same object
+      with modified contents; for immutable types it is a new object.
+    """
+    type_name = type(grad_array).__module__
 
-  # JAX arrays - use .at[].add() functional accumulation
-  if 'jax' in type_name:
-    if not isinstance(index, tuple):
-      index = (index,)
-    return grad_array.at[index].add(value)
+    # JAX arrays - use .at[].add() functional accumulation
+    if 'jax' in type_name:
+        if not isinstance(index, tuple):
+            index = (index,)
+        return grad_array.at[index].add(value)
 
-  # TensorFlow tensors - use tensor_scatter_nd_add
-  elif 'tensorflow' in type_name:
-    import tensorflow as tf
-    if isinstance(index, int):
-      indices = [[index]]
-    elif isinstance(index, tuple):
-      indices = [list(index)]
-    elif isinstance(index, slice):
-      raise NotImplementedError(
-          "Slice updates for TensorFlow tensors not yet implemented. "
-          "Please use explicit integer indices.")
+    # TensorFlow tensors - use tensor_scatter_nd_add
+    elif 'tensorflow' in type_name:
+        import tensorflow as tf
+
+        if isinstance(index, int):
+            indices = [[index]]
+        elif isinstance(index, tuple):
+            indices = [list(index)]
+        elif isinstance(index, slice):
+            raise NotImplementedError(
+                "Slice updates for TensorFlow tensors not yet implemented. "
+                "Please use explicit integer indices."
+            )
+        else:
+            indices = [[index]]
+        if not hasattr(value, 'shape'):
+            value = tf.constant(value)
+        if len(tf.shape(value)) == 0:
+            value = tf.expand_dims(value, 0)
+        return tf.tensor_scatter_nd_add(grad_array, indices, value)
+
+    # NumPy arrays and plain Python containers (dict, list) - accumulate in place.
     else:
-      indices = [[index]]
-    if not hasattr(value, 'shape'):
-      value = tf.constant(value)
-    if len(tf.shape(value)) == 0:
-      value = tf.expand_dims(value, 0)
-    return tf.tensor_scatter_nd_add(grad_array, indices, value)
-
-  # NumPy arrays and plain Python containers (dict, list) - accumulate in place.
-  else:
-    current = grad_array[index]
-    grad_array[index] = add_grad(current, value) if current is not None else value
-    return grad_array
+        current = grad_array[index]
+        grad_array[index] = add_grad(current, value) if current is not None else value
+        return grad_array

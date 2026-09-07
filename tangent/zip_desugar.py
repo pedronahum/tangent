@@ -31,6 +31,7 @@ The rewrite runs before call resolution, so the generated ``range``/``len``
 calls are resolved and annotated like any other, and each element read
 ``a = xs[i]`` flows through the existing subscript machinery.
 """
+
 from __future__ import absolute_import
 
 import copy
@@ -39,72 +40,83 @@ import gast
 
 
 def _name(name, ctx):
-  return gast.Name(id=name, ctx=ctx, annotation=None)
+    return gast.Name(id=name, ctx=ctx, annotation=None)
 
 
 def _assign(target, value):
-  return gast.Assign(targets=[target], value=value)
+    return gast.Assign(targets=[target], value=value)
 
 
 class ZipDesugarer(gast.NodeTransformer):
+    def __init__(self):
+        self._counter = 0
 
-  def __init__(self):
-    self._counter = 0
+    def _fresh(self):
+        name = '_zip%d' % self._counter
+        self._counter += 1
+        return name
 
-  def _fresh(self):
-    name = '_zip%d' % self._counter
-    self._counter += 1
-    return name
+    def visit_For(self, node):
+        self.generic_visit(node)
 
-  def visit_For(self, node):
-    self.generic_visit(node)
+        it = node.iter
+        if not (
+            isinstance(it, gast.Call)
+            and isinstance(it.func, gast.Name)
+            and it.func.id == 'zip'
+            and not it.keywords
+            and it.args
+            and not any(isinstance(a, gast.Starred) for a in it.args)
+            and isinstance(node.target, gast.Tuple)
+            and len(node.target.elts) == len(it.args)
+            and all(isinstance(t, gast.Name) for t in node.target.elts)
+        ):
+            return node
 
-    it = node.iter
-    if not (isinstance(it, gast.Call) and isinstance(it.func, gast.Name) and
-            it.func.id == 'zip' and not it.keywords and it.args and
-            not any(isinstance(a, gast.Starred) for a in it.args) and
-            isinstance(node.target, gast.Tuple) and
-            len(node.target.elts) == len(it.args) and
-            all(isinstance(t, gast.Name) for t in node.target.elts)):
-      return node
+        # Capture the loop targets before rewriting node.target.
+        targets = list(node.target.elts)
 
-    # Capture the loop targets before rewriting node.target.
-    targets = list(node.target.elts)
+        # Evaluate each sequence once (a plain name can be referenced directly).
+        prelude = []
+        seq_refs = []
+        for seq in it.args:
+            if isinstance(seq, gast.Name):
+                seq_refs.append(seq)
+            else:
+                tmp = self._fresh()
+                prelude.append(_assign(_name(tmp, gast.Store()), seq))
+                seq_refs.append(_name(tmp, gast.Load()))
 
-    # Evaluate each sequence once (a plain name can be referenced directly).
-    prelude = []
-    seq_refs = []
-    for seq in it.args:
-      if isinstance(seq, gast.Name):
-        seq_refs.append(seq)
-      else:
-        tmp = self._fresh()
-        prelude.append(_assign(_name(tmp, gast.Store()), seq))
-        seq_refs.append(_name(tmp, gast.Load()))
+        index = self._fresh()
+        node.target = _name(index, gast.Store())
+        node.iter = gast.Call(
+            func=_name('range', gast.Load()),
+            args=[
+                gast.Call(
+                    func=_name('len', gast.Load()), args=[copy.deepcopy(seq_refs[0])], keywords=[]
+                )
+            ],
+            keywords=[],
+        )
 
-    index = self._fresh()
-    node.target = _name(index, gast.Store())
-    node.iter = gast.Call(
-        func=_name('range', gast.Load()),
-        args=[gast.Call(func=_name('len', gast.Load()),
-                        args=[copy.deepcopy(seq_refs[0])], keywords=[])],
-        keywords=[])
+        element_reads = [
+            _assign(
+                _name(target.id, gast.Store()),
+                gast.Subscript(
+                    value=copy.deepcopy(ref), slice=_name(index, gast.Load()), ctx=gast.Load()
+                ),
+            )
+            for target, ref in zip(targets, seq_refs)
+        ]
+        node.body = element_reads + node.body
 
-    element_reads = [
-        _assign(_name(target.id, gast.Store()),
-                gast.Subscript(value=copy.deepcopy(ref),
-                               slice=_name(index, gast.Load()),
-                               ctx=gast.Load()))
-        for target, ref in zip(targets, seq_refs)]
-    node.body = element_reads + node.body
-
-    if prelude:
-      return prelude + [node]
-    return node
+        if prelude:
+            return prelude + [node]
+        return node
 
 
 def desugar_zip(node):
-  """Rewrite tuple-target zip loops into indexed range loops."""
-  node = ZipDesugarer().visit(node)
-  gast.fix_missing_locations(node)
-  return node
+    """Rewrite tuple-target zip loops into indexed range loops."""
+    node = ZipDesugarer().visit(node)
+    gast.fix_missing_locations(node)
+    return node

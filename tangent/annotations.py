@@ -12,68 +12,84 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Handling annotations on AST nodes."""
+
 from __future__ import absolute_import
 
 import gast
 
 ANNOTATION_FIELD = '_tangent'
 # These annotation's won't be cleared between passes
-FIXED_ANNOTATIONS = set(['pop', 'push', 'add_grad', 'init_grad', 'pri', 'adj',
-                         'push_func', 'pop_func', 'adjoint_var',
-                         'temp_adjoint_var', 'temp_var', 'pri_call',
-                         'adj_call', 'comment', 'pre_anf',
-                         # Number of elements the differentiated function
-                         # returns (None for a non-tuple return). Recorded by
-                         # reverse-mode AD on the primal FunctionDef and
-                         # threaded through the motion pass to `_create_joint`,
-                         # which uses it to build the default gradient seed.
-                         'output_arity',
-                         # Statements the DCE must never eliminate (e.g. the
-                         # varargs pack/template-body/unpack statements).
-                         'tangent_keep'])
+FIXED_ANNOTATIONS = set(
+    [
+        'pop',
+        'push',
+        'add_grad',
+        'init_grad',
+        'pri',
+        'adj',
+        'push_func',
+        'pop_func',
+        'adjoint_var',
+        'temp_adjoint_var',
+        'temp_var',
+        'pri_call',
+        'adj_call',
+        'comment',
+        'pre_anf',
+        # Number of elements the differentiated function
+        # returns (None for a non-tuple return). Recorded by
+        # reverse-mode AD on the primal FunctionDef and
+        # threaded through the motion pass to `_create_joint`,
+        # which uses it to build the default gradient seed.
+        'output_arity',
+        # Statements the DCE must never eliminate (e.g. the
+        # varargs pack/template-body/unpack statements).
+        'tangent_keep',
+    ]
+)
 
 
 def setanno(node, key, value, safe=True):
-  annotations = getattr(node, ANNOTATION_FIELD, {})
-  setattr(node, ANNOTATION_FIELD, annotations)
-  if safe and hasanno(node, key):
-    raise ValueError('annotation already present')
-  annotations[key] = value
+    annotations = getattr(node, ANNOTATION_FIELD, {})
+    setattr(node, ANNOTATION_FIELD, annotations)
+    if safe and hasanno(node, key):
+        raise ValueError('annotation already present')
+    annotations[key] = value
 
-  # So that the annotations survive gast_to_ast() and ast_to_gast()
-  if ANNOTATION_FIELD not in node._fields:
-    node._fields += (ANNOTATION_FIELD,)
+    # So that the annotations survive gast_to_ast() and ast_to_gast()
+    if ANNOTATION_FIELD not in node._fields:
+        node._fields += (ANNOTATION_FIELD,)
 
 
 def hasanno(node, key):
-  annotations = getattr(node, ANNOTATION_FIELD, {})
-  return key in annotations
+    annotations = getattr(node, ANNOTATION_FIELD, {})
+    return key in annotations
 
 
 def setdefaultanno(node, key, value=None):
-  if not hasanno(node, key):
-    setanno(node, key, value)
-  return getanno(node, key)
+    if not hasanno(node, key):
+        setanno(node, key, value)
+    return getanno(node, key)
 
 
 def clearanno(node):
-  for succ in gast.walk(node):
-    if hasattr(succ, ANNOTATION_FIELD):
-      new = {}
-      for anno in FIXED_ANNOTATIONS:
-        if hasanno(succ, anno):
-          new[anno] = getanno(succ, anno)
-      setattr(succ, ANNOTATION_FIELD, new)
-  return node
+    for succ in gast.walk(node):
+        if hasattr(succ, ANNOTATION_FIELD):
+            new = {}
+            for anno in FIXED_ANNOTATIONS:
+                if hasanno(succ, anno):
+                    new[anno] = getanno(succ, anno)
+            setattr(succ, ANNOTATION_FIELD, new)
+    return node
 
 
 def getanno(node, key, default=None):
-  annotations = getattr(node, ANNOTATION_FIELD, {})
-  if key not in annotations and default is None:
-    raise KeyError('Node "%s" has no annotation "%s"' % (node, key))
-  return annotations.get(key, default)
+    annotations = getattr(node, ANNOTATION_FIELD, {})
+    if key not in annotations and default is None:
+        raise KeyError('Node "%s" has no annotation "%s"' % (node, key))
+    return annotations.get(key, default)
 
 
 def delanno(node, key):
-  annotations = getattr(node, ANNOTATION_FIELD, {})
-  del annotations[key]
+    annotations = getattr(node, ANNOTATION_FIELD, {})
+    del annotations[key]

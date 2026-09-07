@@ -18,6 +18,7 @@ normal condition and must not produce warnings or stdout noise at import time.
 They are logged at DEBUG level on the 'tangent' logger instead, and their
 status is available via tangent.backend_status().
 """
+
 import logging
 import subprocess
 import sys
@@ -26,43 +27,50 @@ import tangent
 
 
 def test_import_tangent_emits_no_warnings_and_no_stdout():
-  """A bare `import tangent` must print nothing and warn nothing."""
-  result = subprocess.run(
-      [sys.executable, '-W', 'error::UserWarning', '-c', 'import tangent'],
-      capture_output=True, text=True, timeout=300)
-  assert result.returncode == 0, (
-      'import tangent raised a UserWarning (or failed):\n%s' % result.stderr)
-  assert result.stdout == '', (
-      'import tangent wrote to stdout:\n%s' % result.stdout)
-  # Optional third-party packages may write their own chatter to stderr, but
-  # no warning may originate from tangent itself.
-  tangent_warning_lines = [
-      line for line in result.stderr.splitlines()
-      if 'tangent' in line and 'Warning' in line
-  ]
-  assert not tangent_warning_lines, (
-      'import tangent emitted warnings:\n%s' % '\n'.join(tangent_warning_lines))
+    """A bare `import tangent` must print nothing and warn nothing."""
+    result = subprocess.run(
+        [sys.executable, '-W', 'error::UserWarning', '-c', 'import tangent'],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, (
+        'import tangent raised a UserWarning (or failed):\n%s' % result.stderr
+    )
+    assert result.stdout == '', 'import tangent wrote to stdout:\n%s' % result.stdout
+    # Optional third-party packages may write their own chatter to stderr, but
+    # no warning may originate from tangent itself.
+    tangent_warning_lines = [
+        line for line in result.stderr.splitlines() if 'tangent' in line and 'Warning' in line
+    ]
+    assert not tangent_warning_lines, 'import tangent emitted warnings:\n%s' % '\n'.join(
+        tangent_warning_lines
+    )
 
 
 def test_missing_backends_are_logged_at_debug_level():
-  """The missing-backend details remain discoverable via the tangent logger."""
-  result = subprocess.run(
-      [sys.executable, '-c',
-       'import logging; logging.basicConfig(level=logging.DEBUG); '
-       'import tangent'],
-      capture_output=True, text=True, timeout=300)
-  assert result.returncode == 0, result.stderr
+    """The missing-backend details remain discoverable via the tangent logger."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'import logging; logging.basicConfig(level=logging.DEBUG); import tangent',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_backend_status_helper():
-  status = tangent.backend_status()
-  assert status['numpy'] == 'available'
-  for backend in ('tensorflow', 'jax', 'torch', 'keras', 'tinygrad',
-                  'visualization'):
-    assert backend in status
-    assert (status[backend] in ('available', 'not installed') or
-            status[backend].startswith('broken:')), (
-                'unexpected status for %s: %r' % (backend, status[backend]))
-  # The helper returns a copy, not the internal dict.
-  status['numpy'] = 'mutated'
-  assert tangent.backend_status()['numpy'] == 'available'
+    status = tangent.backend_status()
+    assert status['numpy'] == 'available'
+    for backend in ('tensorflow', 'jax', 'torch', 'keras', 'tinygrad', 'visualization'):
+        assert backend in status
+        assert status[backend] in ('available', 'not installed') or status[backend].startswith(
+            'broken:'
+        ), 'unexpected status for %s: %r' % (backend, status[backend])
+    # The helper returns a copy, not the internal dict.
+    status['numpy'] = 'mutated'
+    assert tangent.backend_status()['numpy'] == 'available'

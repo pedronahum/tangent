@@ -1,6 +1,7 @@
 """
 Tests for DCE with control flow (if/for/while).
 """
+
 import unittest
 import tangent
 
@@ -10,6 +11,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_if_statement_with_unused_branch(self):
         """Test that DCE handles if statements correctly."""
+
         def f(x, y, flag):
             if flag > 0:
                 a = x * x
@@ -29,6 +31,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_for_loop_with_accumulation(self):
         """Test DCE with for loops."""
+
         def f(x, y):
             result = 0.0
             for i in [1.0, 2.0, 3.0]:
@@ -47,6 +50,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_while_loop(self):
         """Test DCE with while loops."""
+
         def f(x, y):
             result = x
             counter = 0.0
@@ -68,6 +72,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_nested_if(self):
         """Test DCE with nested if statements."""
+
         def f(x, y, z):
             if x > 0:
                 if y > 0:
@@ -90,6 +95,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_for_loop_with_conditional(self):
         """Test DCE with loop containing conditional."""
+
         def f(x, y):
             result = 0.0
             for i in [1.0, 2.0, 3.0]:
@@ -114,6 +120,7 @@ class TestControlFlowDCE(unittest.TestCase):
 
     def test_conditional_eliminates_unused_vars(self):
         """Test that variables only used in dead branches are eliminated."""
+
         def f(x, y, z):
             # Compute many things
             a = x * x
@@ -140,6 +147,7 @@ class TestControlFlowCorrectness(unittest.TestCase):
 
     def test_loop_correctness(self):
         """Ensure loop gradients are correct with DCE."""
+
         def f(x):
             result = 0.0
             for i in [1.0, 2.0, 3.0, 4.0, 5.0]:
@@ -163,6 +171,7 @@ class TestControlFlowCorrectness(unittest.TestCase):
 
     def test_conditional_correctness(self):
         """Ensure conditional gradients are correct with DCE."""
+
         def f(x, flag):
             if flag > 0.5:
                 result = x * x * x

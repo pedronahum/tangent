@@ -19,11 +19,13 @@ adjoints distribute the gradient back to each input array. Both optimized and
 unoptimized modes are exercised because the varargs pack/unpack statements
 must survive dead code elimination.
 """
+
 import numpy as np
 import pytest
 
 try:
     import jax.numpy as jnp
+
     HAS_JAX = True
 except ImportError:
     HAS_JAX = False
@@ -66,6 +68,7 @@ def test_stack_gradient(optimized):
 
 def test_concatenate_weighted(optimized):
     """Gradient flows correctly when the concatenated result is transformed."""
+
     def f(a, b):
         joined = jnp.concatenate([a, b], axis=0)
         return jnp.sum(joined * joined)
@@ -82,6 +85,7 @@ def test_concatenate_weighted(optimized):
 def test_concatenate_variable_list(optimized):
     """A list bound to a variable that is assigned exactly once to a literal
     and never mutated is inlined, so it differentiates like the literal form."""
+
     def f(a, b):
         parts = [a, b]
         return jnp.sum(jnp.concatenate(parts, axis=0))
@@ -106,6 +110,7 @@ def test_stack_variable_list(optimized):
 def test_concatenate_reassigned_list_raises():
     """A list that is reassigned is not statically known and must raise a
     clear NotImplementedError rather than generate broken code."""
+
     def f(a, b):
         parts = [a]
         parts = [a, b]
@@ -118,6 +123,7 @@ def test_concatenate_reassigned_list_raises():
 def test_concatenate_mutated_list_raises():
     """A list that is modified in place (subscript assignment) is not
     statically known and must raise a clear NotImplementedError."""
+
     def f(a, b):
         parts = [a, a]
         parts[1] = b

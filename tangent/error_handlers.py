@@ -19,6 +19,7 @@ This module provides rich error messages that include:
 - Helpful suggestions for common issues
 - Links to documentation
 """
+
 from __future__ import absolute_import
 
 import inspect
@@ -27,8 +28,9 @@ import inspect
 class TangentError(Exception):
     """Base class for all Tangent errors with enhanced formatting."""
 
-    def __init__(self, message, func=None, node=None, suggestion=None,
-                 doc_link=None, original_error=None):
+    def __init__(
+        self, message, func=None, node=None, suggestion=None, doc_link=None, original_error=None
+    ):
         """Create a Tangent error with rich context.
 
         Args:
@@ -145,7 +147,10 @@ class TangentError(Exception):
                 # Add column marker if available
                 if hasattr(self.node, 'col_offset'):
                     col = self.node.col_offset
-                    formatted_lines.append(" " * (len(marker) + 7 + col) + "^" * max(1, getattr(self.node, 'end_col_offset', col + 1) - col))
+                    formatted_lines.append(
+                        " " * (len(marker) + 7 + col)
+                        + "^" * max(1, getattr(self.node, 'end_col_offset', col + 1) - col)
+                    )
             else:
                 formatted_lines.append(f"    {line_num:4d} | {line}")
 
@@ -167,16 +172,18 @@ class UnsupportedSyntaxError(TangentError):
             'with': 'Some context managers may not be supported. Try simplifying your code.',
         }
 
-        suggestion = suggestions.get(syntax_feature,
-                                    'This Python feature is not yet supported in Tangent. '
-                                    'Try rewriting your code without this feature.')
+        suggestion = suggestions.get(
+            syntax_feature,
+            'This Python feature is not yet supported in Tangent. '
+            'Try rewriting your code without this feature.',
+        )
 
         super(UnsupportedSyntaxError, self).__init__(
             message=message,
             func=func,
             node=node,
             suggestion=suggestion,
-            doc_link='https://github.com/google/tangent#limitations'
+            doc_link='https://github.com/google/tangent#limitations',
         )
 
 
@@ -208,7 +215,7 @@ For more details, see the custom gradients documentation.'''
             func=func,
             node=node,
             suggestion=suggestion,
-            doc_link='https://github.com/google/tangent#custom-gradients'
+            doc_link='https://github.com/google/tangent#custom-gradients',
         )
 
 
@@ -234,9 +241,7 @@ Common causes:
    → Ensure source .py files are available'''
 
         super(SourceCodeNotAvailableError, self).__init__(
-            message=message,
-            func=func,
-            suggestion=suggestion
+            message=message, func=func, suggestion=suggestion
         )
 
 
@@ -272,9 +277,7 @@ For non-scalar outputs, you have several options:
    d_loss = tangent.grad(loss)'''
 
         super(NonScalarOutputError, self).__init__(
-            message=message,
-            func=func,
-            suggestion=suggestion
+            message=message, func=func, suggestion=suggestion
         )
 
 
@@ -295,10 +298,7 @@ Common fixes:
 Context: {context}'''
 
         super(TypeMismatchError, self).__init__(
-            message=message,
-            func=func,
-            node=node,
-            suggestion=suggestion
+            message=message, func=func, node=node, suggestion=suggestion
         )
 
 
@@ -323,10 +323,7 @@ Create new arrays:
 Variable: {variable_name}'''
 
         super(InplaceModificationError, self).__init__(
-            message=message,
-            func=func,
-            node=node,
-            suggestion=suggestion
+            message=message, func=func, node=node, suggestion=suggestion
         )
 
 
@@ -348,8 +345,7 @@ def format_error_with_context(error, func=None, node=None):
     if isinstance(error, ValueError):
         if 'could not get source code' in error_msg:
             return SourceCodeNotAvailableError(
-                func_name=func.__name__ if func else 'unknown',
-                func=func
+                func_name=func.__name__ if func else 'unknown', func=func
             )
 
     elif isinstance(error, TypeError):
@@ -359,15 +355,12 @@ def format_error_with_context(error, func=None, node=None):
                 actual_type='mixed',
                 context='arithmetic operation',
                 func=func,
-                node=node
+                node=node,
             )
 
     # Generic wrapper for other errors
     return TangentError(
-        message=f"{error_type}: {error_msg}",
-        func=func,
-        node=node,
-        original_error=error
+        message=f"{error_type}: {error_msg}", func=func, node=node, original_error=error
     )
 
 

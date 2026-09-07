@@ -7,12 +7,14 @@ Note: This test suite covers the currently supported TensorFlow operations.
 Some advanced TensorFlow operations (tf.sqrt, tf.pow, tf.nn.*, tf.linalg.matvec, etc.)
 are not yet supported and will be added in future releases.
 """
+
 import pytest
 import numpy as np
 
 # Check if TensorFlow is available
 try:
     import tensorflow as tf
+
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
@@ -28,6 +30,7 @@ class TestBasicOperations:
 
     def test_square(self):
         """Test gradient of x^2."""
+
         def f(x):
             return x * x
 
@@ -40,6 +43,7 @@ class TestBasicOperations:
 
     def test_polynomial(self):
         """Test gradient of polynomial: 3x^2 + 2x + 1."""
+
         def f(x):
             return 3.0 * x * x + 2.0 * x + 1.0
 
@@ -52,6 +56,7 @@ class TestBasicOperations:
 
     def test_add(self):
         """Test gradient of addition."""
+
         def f(x, y):
             return tf.reduce_sum(x + y)
 
@@ -73,6 +78,7 @@ class TestBasicOperations:
 
     def test_multiply(self):
         """Test gradient of multiplication."""
+
         def f(x, y):
             return tf.reduce_sum(x * y)
 
@@ -91,6 +97,7 @@ class TestBasicOperations:
 
     def test_divide(self):
         """Test gradient of division."""
+
         def f(x, y):
             return tf.reduce_sum(x / y)
 
@@ -113,6 +120,7 @@ class TestMathFunctions:
 
     def test_exp(self):
         """Test gradient of exponential function."""
+
         def f(x):
             return tf.reduce_sum(tf.exp(x))
 
@@ -128,6 +136,7 @@ class TestMathFunctions:
 
     def test_log(self):
         """Test gradient of logarithm."""
+
         def f(x):
             return tf.reduce_sum(tf.math.log(x))
 
@@ -143,6 +152,7 @@ class TestMathFunctions:
 
     def test_tanh(self):
         """Test gradient of hyperbolic tangent."""
+
         def f(x):
             return tf.reduce_sum(tf.tanh(x))
 
@@ -162,6 +172,7 @@ class TestLinearAlgebra:
 
     def test_matmul(self):
         """Test gradient of matrix multiplication."""
+
         def f(x):
             return tf.reduce_sum(tf.matmul(x, x))
 
@@ -182,6 +193,7 @@ class TestReductions:
 
     def test_reduce_sum(self):
         """Test gradient of reduce_sum."""
+
         def f(x):
             return tf.reduce_sum(x * x)
 
@@ -197,6 +209,7 @@ class TestReductions:
 
     def test_reduce_mean(self):
         """Test gradient of reduce_mean."""
+
         def f(x):
             return tf.reduce_mean(x * x)
 
@@ -212,6 +225,7 @@ class TestReductions:
 
     def test_reduce_max(self):
         """Test gradient of reduce_max."""
+
         def f(x):
             return tf.reduce_max(x * x + x)
 
@@ -232,6 +246,7 @@ class TestElementwise:
 
     def test_maximum(self):
         """Test gradient of maximum."""
+
         def f(x, y):
             return tf.reduce_sum(tf.maximum(x, y))
 
@@ -254,6 +269,7 @@ class TestBroadcasting:
 
     def test_broadcast_multiply(self):
         """Test gradient with broadcasted multiplication."""
+
         def f(x, y):
             return tf.reduce_sum(x * y)
 
@@ -276,6 +292,7 @@ class TestComposedOperations:
 
     def test_polynomial_composition(self):
         """Test gradient of composed polynomial."""
+
         def f(x):
             y = x * x
             z = y * y
@@ -286,7 +303,7 @@ class TestComposedOperations:
         result = df(x)
 
         # d/dx(x^4) = 4x^3
-        expected = (4.0 * x ** 3).numpy()
+        expected = (4.0 * x**3).numpy()
 
         # Result may be numpy array or tensor
         result_array = result.numpy() if hasattr(result, 'numpy') else np.array(result)
@@ -295,6 +312,7 @@ class TestComposedOperations:
 
     def test_complex_expression(self):
         """Test gradient of complex expression."""
+
         def f(x):
             y = x * 2.0
             z = y + 3.0
@@ -318,6 +336,7 @@ class TestMultipleGradients:
 
     def test_multiple_wrt(self):
         """Test gradient with respect to multiple arguments."""
+
         def f(x, y):
             return tf.reduce_sum(x * y)
 
@@ -342,6 +361,7 @@ class TestPreserveResult:
 
     def test_preserve_result_true(self):
         """Test gradient computation with result preservation."""
+
         def f(x):
             return tf.reduce_sum(x * x)
 
@@ -365,6 +385,7 @@ class TestCaching:
 
     def test_cache_hit(self):
         """Test that gradient functions are cached."""
+
         def f(x):
             return x * x
 
@@ -392,6 +413,7 @@ class TestEdgeCases:
 
     def test_scalar_input(self):
         """Test gradient with scalar input."""
+
         def f(x):
             return x * x * x
 
@@ -407,13 +429,14 @@ class TestEdgeCases:
 
     def test_vector_input(self):
         """Test gradient with vector input."""
+
         def f(x):
             return tf.reduce_sum(x * x * x)
 
         df = tangent.grad(f)
         x = tf.constant([1.0, 2.0, 3.0])
         result = df(x)
-        expected = (3.0 * x ** 2).numpy()
+        expected = (3.0 * x**2).numpy()
 
         # Result may be numpy array or tensor
         result_array = result.numpy() if hasattr(result, 'numpy') else np.array(result)
@@ -422,6 +445,7 @@ class TestEdgeCases:
 
     def test_matrix_input(self):
         """Test gradient with matrix input."""
+
         def f(x):
             return tf.reduce_sum(x * x)
 

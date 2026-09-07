@@ -19,6 +19,7 @@ forward-mode directional derivative against a central finite-difference
 oracle along a fixed direction, so newly added tangents are auto-verified
 without a manual derivation.
 """
+
 import numpy as np
 import pytest
 
@@ -54,45 +55,53 @@ def check(f, x=None, v=None, ref=None, tol=1e-4):
 
 # --- Elementwise -----------------------------------------------------------
 
+
 def test_absolute_tangent():
     def f(x):
         return np.sum(np.absolute(x) ** 2)
+
     check(f)
 
 
 def test_reciprocal_tangent():
     def f(x):
         return np.sum(np.reciprocal(x))
+
     check(f, x=X_POS)
 
 
 def test_log10_tangent():
     def f(x):
         return np.sum(np.log10(x))
+
     check(f, x=X_POS)
 
 
 def test_log2_tangent():
     def f(x):
         return np.sum(np.log2(x))
+
     check(f, x=X_POS)
 
 
 def test_log1p_tangent():
     def f(x):
         return np.sum(np.log1p(x))
+
     check(f, x=X_POS)
 
 
 def test_expm1_tangent():
     def f(x):
         return np.sum(np.expm1(x))
+
     check(f)
 
 
 def test_sign_tangent():
     def f(x):
         return np.sum(np.sign(x) * x * x)
+
     # d/dx along v of sum(sign(x) * x^2): sign is piecewise constant.
     check(f)
 
@@ -100,6 +109,7 @@ def test_sign_tangent():
 def test_floor_ceil_tangent():
     def f(x):
         return np.sum(np.floor(x) + np.ceil(x))
+
     got = fwd(f, X + 0.3, V)
     assert np.allclose(got, 0.0)
 
@@ -107,6 +117,7 @@ def test_floor_ceil_tangent():
 def test_clip_tangent():
     def f(x):
         return np.sum(np.clip(x, -0.5, 0.5) ** 2)
+
     check(f)
 
 
@@ -118,76 +129,90 @@ def test_where_tangent():
 
     def f(x):
         return np.sum(np.where(c, x * x, 2.0 * x))
+
     check(f)
 
 
 # --- Reductions ------------------------------------------------------------
 
+
 def test_min_tangent():
     def f(x):
         return np.min(x)
+
     check(f)
 
 
 def test_max_tangent():
     def f(x):
         return np.max(x)
+
     check(f)
 
 
 def test_min_axis_tangent():
     def f(x):
         return np.sum(np.min(x, axis=0) ** 2)
+
     check(f)
 
 
 def test_max_axis_tangent():
     def f(x):
         return np.sum(np.max(x, axis=1) ** 2)
+
     check(f)
 
 
 def test_prod_tangent():
     def f(x):
         return np.prod(x)
+
     check(f, x=X_POS)
 
 
 def test_prod_axis_tangent():
     def f(x):
         return np.sum(np.prod(x, axis=0))
+
     check(f, x=X_POS)
 
 
 def test_var_tangent():
     def f(x):
         return np.var(x)
+
     check(f)
 
 
 def test_var_axis_tangent():
     def f(x):
         return np.sum(np.var(x, axis=1))
+
     check(f)
 
 
 def test_std_tangent():
     def f(x):
         return np.std(x)
+
     check(f)
 
 
 def test_std_axis_tangent():
     def f(x):
         return np.sum(np.std(x, axis=0))
+
     check(f)
 
 
 # --- Linear algebra --------------------------------------------------------
 
+
 def test_matmul_tangent():
     def f(x):
         return np.sum(np.matmul(x, np.transpose(x)))
+
     check(f)
 
 
@@ -211,6 +236,7 @@ def test_inv_tangent():
 
     def f(x):
         return np.sum(np.linalg.inv(x))
+
     check(f, x=a, v=va)
 
 
@@ -234,10 +260,12 @@ def test_trace_tangent():
 
     def f(x):
         return np.trace(x) ** 2
+
     check(f, x=a, v=va)
 
 
 # --- Shape manipulation ----------------------------------------------------
+
 
 def test_squeeze_tangent():
     a = RS.randn(1, 3, 1)
@@ -245,6 +273,7 @@ def test_squeeze_tangent():
 
     def f(x):
         return np.sum(np.squeeze(x) ** 2)
+
     check(f, x=a, v=va)
 
 
@@ -254,6 +283,7 @@ def test_expand_dims_tangent():
 
     def f(x):
         return np.sum(np.expand_dims(x, 0) ** 2)
+
     check(f, x=xv, v=vv)
 
 

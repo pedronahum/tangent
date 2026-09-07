@@ -11,6 +11,7 @@ See the git history for the concrete miscomputations these guards prevent (e.g.
 a `break` after three accumulating iterations returned the two-iteration
 gradient).
 """
+
 import pytest
 
 import tangent

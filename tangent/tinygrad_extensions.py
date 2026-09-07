@@ -39,6 +39,7 @@ Example:
     df = tangent.grad(f)
     gradient = df(x)
 """
+
 from __future__ import absolute_import
 
 
@@ -66,6 +67,7 @@ TensorType = Tensor
 # ============================================================================
 # Runtime helpers
 # ============================================================================
+
 
 def tg_shape(x):
     """Shape of a tinygrad tensor as a list."""
@@ -149,8 +151,7 @@ def tg_broadcast_axis(x, param, axis):
     its dims on the normalized axes and 1s elsewhere (e.g. ``(1, C, 1, 1)``).
     """
     ndim = len(x.shape)
-    axes = tuple(a % ndim for a in
-                 ((axis,) if isinstance(axis, int) else tuple(axis)))
+    axes = tuple(a % ndim for a in ((axis,) if isinstance(axis, int) else tuple(axis)))
     shape = [1] * ndim
     pshape = tuple(param.shape)
     for i, a in enumerate(sorted(axes)):
@@ -167,8 +168,7 @@ def tg_reduce_except(x, axis):
     assumes trailing alignment) cannot compute this reduction.
     """
     ndim = len(x.shape)
-    axes = set(a % ndim for a in
-               ((axis,) if isinstance(axis, int) else tuple(axis)))
+    axes = set(a % ndim for a in ((axis,) if isinstance(axis, int) else tuple(axis)))
     reduce_axes = tuple(a for a in range(ndim) if a not in axes)
     if not reduce_axes:
         return x
@@ -191,7 +191,8 @@ def _tg_spatial_tuples(x, stride, dilation, padding):
         if len(pads) != n:
             raise NotImplementedError(
                 'tangent tinygrad: only int or per-axis symmetric padding is '
-                'supported for conv2d/pool gradients, got %r' % (padding,))
+                'supported for conv2d/pool gradients, got %r' % (padding,)
+            )
     return stride, dilation, pads
 
 
@@ -200,13 +201,23 @@ def tg_conv2d_grad_input(dz, weight, x, stride, dilation, padding, groups=1):
     stride, dilation, pads = _tg_spatial_tuples(x, stride, dilation, padding)
     n = len(x.shape) - 2
     output_padding = tuple(
-        x.shape[2 + i] - ((dz.shape[2 + i] - 1) * stride[i]
-                          + (weight.shape[2 + i] - 1) * dilation[i] + 1
-                          - 2 * pads[i])
-        for i in range(n))
-    return dz.conv_transpose2d(weight, stride=stride, dilation=dilation,
-                               padding=pads, output_padding=output_padding,
-                               groups=groups)
+        x.shape[2 + i]
+        - (
+            (dz.shape[2 + i] - 1) * stride[i]
+            + (weight.shape[2 + i] - 1) * dilation[i]
+            + 1
+            - 2 * pads[i]
+        )
+        for i in range(n)
+    )
+    return dz.conv_transpose2d(
+        weight,
+        stride=stride,
+        dilation=dilation,
+        padding=pads,
+        output_padding=output_padding,
+        groups=groups,
+    )
 
 
 def tg_conv2d_grad_weight(x, dz, weight, stride, dilation, padding, groups):
@@ -219,21 +230,24 @@ def tg_conv2d_grad_weight(x, dz, weight, stride, dilation, padding, groups):
     """
     if groups != 1:
         raise NotImplementedError(
-            'tangent tinygrad: conv2d weight gradient with groups != 1 is not '
-            'supported')
+            'tangent tinygrad: conv2d weight gradient with groups != 1 is not supported'
+        )
     stride, dilation, pads = _tg_spatial_tuples(x, stride, dilation, padding)
     k = tuple(weight.shape[2:])
-    grad_conv = Tensor.conv2d(x.transpose(1, 0), dz.transpose(1, 0),
-                              stride=dilation, dilation=stride, padding=pads)
-    if any((x.shape[2 + i] + 2 * pads[i] - dilation[i] * (k[i] - 1) - 1)
-           % stride[i] // dilation[i] for i in range(len(k))):
-        grad_conv = grad_conv[(slice(None),) * 2 + tuple(slice(None, ki)
-                                                         for ki in k)]
+    grad_conv = Tensor.conv2d(
+        x.transpose(1, 0), dz.transpose(1, 0), stride=dilation, dilation=stride, padding=pads
+    )
+    if any(
+        (x.shape[2 + i] + 2 * pads[i] - dilation[i] * (k[i] - 1) - 1) % stride[i] // dilation[i]
+        for i in range(len(k))
+    ):
+        grad_conv = grad_conv[(slice(None),) * 2 + tuple(slice(None, ki) for ki in k)]
     return grad_conv.transpose(0, 1)
 
 
-def tg_avg_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
-                             ceil_mode, count_include_pad):
+def tg_avg_pool2d_grad_input(
+    dz, x, kernel_size, stride, dilation, padding, ceil_mode, count_include_pad
+):
     """Input gradient of avg_pool2d (default count_include_pad, no ceil_mode).
 
     Average pooling equals a depthwise conv with a uniform 1/k^2 kernel, so its
@@ -241,26 +255,27 @@ def tg_avg_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
     """
     if ceil_mode:
         raise NotImplementedError(
-            'tangent tinygrad: avg_pool2d gradient with ceil_mode=True is not '
-            'supported')
+            'tangent tinygrad: avg_pool2d gradient with ceil_mode=True is not supported'
+        )
     if not count_include_pad:
         raise NotImplementedError(
-            'tangent tinygrad: avg_pool2d gradient with count_include_pad='
-            'False is not supported')
+            'tangent tinygrad: avg_pool2d gradient with count_include_pad=False is not supported'
+        )
     k = (kernel_size,) * 2 if isinstance(kernel_size, int) else tuple(kernel_size)
-    if any(ki != 1 for ki in ((dilation,) * 2 if isinstance(dilation, int)
-                              else tuple(dilation))):
+    if any(ki != 1 for ki in ((dilation,) * 2 if isinstance(dilation, int) else tuple(dilation))):
         raise NotImplementedError(
-            'tangent tinygrad: avg_pool2d gradient with dilation > 1 is not '
-            'supported')
+            'tangent tinygrad: avg_pool2d gradient with dilation > 1 is not supported'
+        )
     channels = x.shape[1]
     weight = Tensor.ones((channels, 1) + k, dtype=x.dtype) / float(k[0] * k[1])
-    return tg_conv2d_grad_input(dz, weight, x, stride if stride is not None else k,
-                                1, padding, groups=channels)
+    return tg_conv2d_grad_input(
+        dz, weight, x, stride if stride is not None else k, 1, padding, groups=channels
+    )
 
 
-def tg_max_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
-                             ceil_mode, return_indices):
+def tg_max_pool2d_grad_input(
+    dz, x, kernel_size, stride, dilation, padding, ceil_mode, return_indices
+):
     """Input gradient of max_pool2d.
 
     The incoming gradient of each window goes to the window's maximum element
@@ -273,31 +288,28 @@ def tg_max_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
     """
     if ceil_mode:
         raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient with ceil_mode=True is not '
-            'supported')
+            'tangent tinygrad: max_pool2d gradient with ceil_mode=True is not supported'
+        )
     if return_indices:
         raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient with return_indices=True is '
-            'not supported')
+            'tangent tinygrad: max_pool2d gradient with return_indices=True is not supported'
+        )
     k = (kernel_size,) * 2 if isinstance(kernel_size, int) else tuple(kernel_size)
     if len(k) != 2:
-        raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient supports 2-D kernels only')
+        raise NotImplementedError('tangent tinygrad: max_pool2d gradient supports 2-D kernels only')
     d = (dilation,) * 2 if isinstance(dilation, int) else tuple(dilation)
     if any(di != 1 for di in d):
         raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient with dilation > 1 is not '
-            'supported')
-    s = k if stride is None else ((stride,) * 2 if isinstance(stride, int)
-                                  else tuple(stride))
+            'tangent tinygrad: max_pool2d gradient with dilation > 1 is not supported'
+        )
+    s = k if stride is None else ((stride,) * 2 if isinstance(stride, int) else tuple(stride))
     p = (padding,) * 2 if isinstance(padding, int) else tuple(padding)
     if len(p) != 2:
         raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient supports int or 2-tuple '
-            'symmetric padding only')
+            'tangent tinygrad: max_pool2d gradient supports int or 2-tuple symmetric padding only'
+        )
     if x.ndim not in (3, 4):
-        raise NotImplementedError(
-            'tangent tinygrad: max_pool2d gradient supports 3-D/4-D inputs')
+        raise NotImplementedError('tangent tinygrad: max_pool2d gradient supports 3-D/4-D inputs')
     channels = x.shape[1] if x.ndim == 4 else x.shape[0]
     # Work in 4-D; unfold appends the window dimension last, so two chained
     # unfolds yield (N, C, Ho, Wo, kh, kw).
@@ -308,9 +320,8 @@ def tg_max_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
     mask = xw == xw.max(axis=(4, 5), keepdim=True)
     ties = mask.sum(axis=(4, 5), keepdim=True)
     n, _, ho, wo = dz4.shape
-    dye = dz4.reshape((n, channels, ho, wo, 1, 1)).expand(
-        (n, channels, ho, wo, k[0], k[1]))
-    dxw = dye * mask / ties                   # (N, C, Ho, Wo, kh, kw)
+    dye = dz4.reshape((n, channels, ho, wo, 1, 1)).expand((n, channels, ho, wo, k[0], k[1]))
+    dxw = dye * mask / ties  # (N, C, Ho, Wo, kh, kw)
     padded_h, padded_w = xp.shape[2], xp.shape[3]
     if s == k and ho * k[0] == padded_h and wo * k[1] == padded_w:
         # Non-overlapping windows tile the padded input exactly, so folding
@@ -318,21 +329,23 @@ def tg_max_pool2d_grad_input(dz, x, kernel_size, stride, dilation, padding,
         # The delta-kernel transposed convs below cost a dedicated strided
         # scatter kernel (~2.5 ms on an 8x16x56x56 pool); this form stays a
         # view that the tinygrad scheduler fuses into the elementwise kernel.
-        total = dxw.permute(0, 1, 2, 4, 3, 5).reshape(
-            (n, channels, padded_h, padded_w))
+        total = dxw.permute(0, 1, 2, 4, 3, 5).reshape((n, channels, padded_h, padded_w))
     else:
-        dxwp = dxw.permute(4, 5, 0, 1, 2, 3)      # (kh, kw, N, C, Ho, Wo)
+        dxwp = dxw.permute(4, 5, 0, 1, 2, 3)  # (kh, kw, N, C, Ho, Wo)
         eye = Tensor.eye(k[0] * k[1], dtype=x.dtype)
         total = None
         for pi in range(k[0]):
             for qi in range(k[1]):
-                kernel = eye[pi * k[1] + qi].reshape(1, 1, k[0], k[1]).expand(
-                    channels, 1, k[0], k[1])
-                output_padding = (padded_h - ((ho - 1) * s[0] + k[0]),
-                                  padded_w - ((wo - 1) * s[1] + k[1]))
+                kernel = (
+                    eye[pi * k[1] + qi].reshape(1, 1, k[0], k[1]).expand(channels, 1, k[0], k[1])
+                )
+                output_padding = (
+                    padded_h - ((ho - 1) * s[0] + k[0]),
+                    padded_w - ((wo - 1) * s[1] + k[1]),
+                )
                 contrib = dxwp[pi, qi].conv_transpose2d(
-                    kernel, stride=s, padding=0, output_padding=output_padding,
-                    groups=channels)
+                    kernel, stride=s, padding=0, output_padding=output_padding, groups=channels
+                )
                 total = contrib if total is None else total + contrib
     if any(p):
         total = total.pad(((0, 0), (0, 0), (-p[0], -p[0]), (-p[1], -p[1])))
@@ -377,14 +390,30 @@ register_shape_function(TensorType, tg_shape)
 register_init_grad(TensorType, Tensor.zeros_like)
 
 non_differentiable.register_non_differentiable_functions(
-    Tensor.zeros, Tensor.ones, Tensor.full,
-    Tensor.zeros_like, Tensor.ones_like, Tensor.full_like,
-    Tensor.rand, Tensor.randn, Tensor.randint,
-    Tensor.arange, Tensor.linspace, Tensor.eye,
-    Tensor.argmax, Tensor.argmin,
-    tg_shape, tg_size, tg_inv_perm, tg_clip_mask, tg_broadcast_axis,
-    tg_reduce_except, tg_conv2d_grad_input, tg_conv2d_grad_weight,
-    tg_avg_pool2d_grad_input, tg_max_pool2d_grad_input,
+    Tensor.zeros,
+    Tensor.ones,
+    Tensor.full,
+    Tensor.zeros_like,
+    Tensor.ones_like,
+    Tensor.full_like,
+    Tensor.rand,
+    Tensor.randn,
+    Tensor.randint,
+    Tensor.arange,
+    Tensor.linspace,
+    Tensor.eye,
+    Tensor.argmax,
+    Tensor.argmin,
+    tg_shape,
+    tg_size,
+    tg_inv_perm,
+    tg_clip_mask,
+    tg_broadcast_axis,
+    tg_reduce_except,
+    tg_conv2d_grad_input,
+    tg_conv2d_grad_weight,
+    tg_avg_pool2d_grad_input,
+    tg_max_pool2d_grad_input,
 )
 
 
@@ -559,17 +588,21 @@ def _tg_base_node(namespace):
             return gast.Name(id=name, ctx=gast.Load(), annotation=None)
     return gast.Attribute(
         value=gast.Name(id='tinygrad', ctx=gast.Load(), annotation=None),
-        attr='Tensor', ctx=gast.Load())
+        attr='Tensor',
+        ctx=gast.Load(),
+    )
 
 
-utils.register_method_resolver(utils.MethodResolver(
-    methods=_TG_METHODS,
-    uses_backend=_tg_uses_backend,
-    base_node=_tg_base_node,
-    # These take (shape_or_order, *args); pack multiple positional args into a
-    # single tuple so the adjoint template gets one bindable parameter.
-    tuple_arg_methods=('reshape', 'permute', 'expand', 'flip'),
-))
+utils.register_method_resolver(
+    utils.MethodResolver(
+        methods=_TG_METHODS,
+        uses_backend=_tg_uses_backend,
+        base_node=_tg_base_node,
+        # These take (shape_or_order, *args); pack multiple positional args into a
+        # single tuple so the adjoint template gets one bindable parameter.
+        tuple_arg_methods=('reshape', 'permute', 'expand', 'flip'),
+    )
+)
 
 
 # ============================================================================
@@ -655,6 +688,7 @@ def adjoint_softsign(y, x):
 
 # --- Elementwise binary ---
 
+
 @adjoint(Tensor.add)
 def adjoint_add(z, x, y):
     dz = tangent.tg_seed(d[z], x)
@@ -721,6 +755,7 @@ def adjoint_clamp(y, x, min_=None, max_=None):
 
 # --- Reductions ---
 
+
 @adjoint(Tensor.sum)
 def adjoint_sum(y, x, axis=None, keepdim=False):
     d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
@@ -739,7 +774,11 @@ def adjoint_max(y, x, axis=None, keepdim=False):
     max_val = x.max(axis=axis, keepdim=True)
     mask = x == max_val
     num_max = mask.sum(axis=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * mask / num_max
+    d[x] = (
+        tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
+        * mask
+        / num_max
+    )
 
 
 @adjoint(Tensor.min)
@@ -747,33 +786,51 @@ def adjoint_min(y, x, axis=None, keepdim=False):
     min_val = x.min(axis=axis, keepdim=True)
     mask = x == min_val
     num_min = mask.sum(axis=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * mask / num_min
+    d[x] = (
+        tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
+        * mask
+        / num_min
+    )
 
 
 @adjoint(Tensor.var)
 def adjoint_var(y, x, axis=None, keepdim=False, correction=1):
     n = tangent.tg_size(x, axis)
     mean = x.mean(axis=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * 2.0 * (x - mean) / (n - correction)
+    d[x] = (
+        tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
+        * 2.0
+        * (x - mean)
+        / (n - correction)
+    )
 
 
 @adjoint(Tensor.std)
 def adjoint_std(y, x, axis=None, keepdim=False, correction=1):
     n = tangent.tg_size(x, axis)
     mean = x.mean(axis=axis, keepdim=True)
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * (x - mean) / (y * (n - correction))
+    d[x] = (
+        tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
+        * (x - mean)
+        / (y * (n - correction))
+    )
 
 
 @adjoint(Tensor.logsumexp)
 def adjoint_logsumexp(y, x, axis=None, keepdim=False):
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * (x - y).exp()
+    d[x] = (
+        tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
+        * (x - y).exp()
+    )
 
 
 @adjoint(Tensor.prod)
 def adjoint_prod(y, x, axis=None, keepdim=False):
     # d/dx_i prod(x) = prod(x) / x_i; the keepdim product broadcasts back over
     # the reduced axes. Unstable where x contains zeros (matches tinygrad).
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * (x.prod(axis=axis, keepdim=True) / x)
+    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) * (
+        x.prod(axis=axis, keepdim=True) / x
+    )
 
 
 @adjoint(Tensor.cumsum)
@@ -783,6 +840,7 @@ def adjoint_cumsum(y, x, axis=0):
 
 
 # --- Linear algebra / NN ---
+
 
 @adjoint(Tensor.matmul)
 def adjoint_matmul(z, x, y):
@@ -855,21 +913,58 @@ def adjoint_conv2d(z, x, weight, bias=None, groups=1, stride=1, dilation=1, padd
 
 
 @adjoint(Tensor.avg_pool2d)
-def adjoint_avg_pool2d(y, x, kernel_size=(2, 2), stride=None, dilation=1, padding=0, ceil_mode=False, count_include_pad=True):
+def adjoint_avg_pool2d(
+    y,
+    x,
+    kernel_size=(2, 2),
+    stride=None,
+    dilation=1,
+    padding=0,
+    ceil_mode=False,
+    count_include_pad=True,
+):
     # Supported for the defaults: no ceil_mode, count_include_pad=True (the
     # helper raises otherwise).
-    d[x] = tangent.tg_avg_pool2d_grad_input(tangent.tg_seed(d[y], x), x, kernel_size, stride, dilation, padding, ceil_mode, count_include_pad)
+    d[x] = tangent.tg_avg_pool2d_grad_input(
+        tangent.tg_seed(d[y], x),
+        x,
+        kernel_size,
+        stride,
+        dilation,
+        padding,
+        ceil_mode,
+        count_include_pad,
+    )
 
 
 @adjoint(Tensor.max_pool2d)
-def adjoint_max_pool2d(y, x, kernel_size=(2, 2), stride=None, dilation=1, padding=0, ceil_mode=False, return_indices=False):
+def adjoint_max_pool2d(
+    y,
+    x,
+    kernel_size=(2, 2),
+    stride=None,
+    dilation=1,
+    padding=0,
+    ceil_mode=False,
+    return_indices=False,
+):
     # Window-argmax scatter via unfold + delta-kernel transposed convs; the
     # helper raises NotImplementedError for unsupported configurations
     # (dilation > 1, ceil_mode, return_indices, non-symmetric padding).
-    d[x] = tangent.tg_max_pool2d_grad_input(tangent.tg_seed(d[y], x), x, kernel_size, stride, dilation, padding, ceil_mode, return_indices)
+    d[x] = tangent.tg_max_pool2d_grad_input(
+        tangent.tg_seed(d[y], x),
+        x,
+        kernel_size,
+        stride,
+        dilation,
+        padding,
+        ceil_mode,
+        return_indices,
+    )
 
 
 # --- Shape manipulation ---
+
 
 @adjoint(Tensor.reshape)
 def adjoint_reshape(y, x, shape):
@@ -909,6 +1004,7 @@ def adjoint_flip(y, x, axis):
 # ============================================================================
 # Forward-mode (tangent) definitions
 # ============================================================================
+
 
 @tangent_(Tensor.add)
 def tangent_add(z, x, y):
@@ -972,4 +1068,5 @@ def tangent_transpose(y, x, dim0=1, dim1=0):
 
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug('tinygrad extensions loaded successfully')

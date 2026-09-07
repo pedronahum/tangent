@@ -12,6 +12,7 @@ The additions focus on:
 5. Comparison operations (minimum, clip_by_value)
 6. Neural network activations (relu, sigmoid, softmax)
 """
+
 from __future__ import absolute_import
 
 
@@ -23,6 +24,7 @@ try:
     from tangent.elementwise_rules import register_elementwise
     from tangent.grads import adjoint
     from tangent.tangents import tangent_
+
     # Side-effect import: registers the base TF adjoints/tangents that this
     # module extends.
     from tangent import tf_extensions  # noqa: F401
@@ -44,8 +46,7 @@ register_elementwise(
         'abs': tf.abs,
         'square': tf.square,
         'sqrt': tf.sqrt,
-        'reciprocal': (getattr(tf, 'reciprocal', None),
-                       getattr(tf.math, 'reciprocal', None)),
+        'reciprocal': (getattr(tf, 'reciprocal', None), getattr(tf.math, 'reciprocal', None)),
         'expm1': getattr(tf.math, 'expm1', None),
         'log2': getattr(tf.math, 'log2', None),
         'log10': getattr(tf.math, 'log10', None),
@@ -87,15 +88,14 @@ def clip_by_value(y, x, clip_value_min, clip_value_max):
 def where(z, condition, x, y):
     """Adjoint for tf.where(condition, x, y): gradient flows to x where the
     condition is true and to y where it is false."""
-    d[x] = tangent.unbroadcast_tensor(
-        tf.where(condition, d[z], tf.zeros_like(d[z])), x)
-    d[y] = tangent.unbroadcast_tensor(
-        tf.where(condition, tf.zeros_like(d[z]), d[z]), y)
+    d[x] = tangent.unbroadcast_tensor(tf.where(condition, d[z], tf.zeros_like(d[z])), x)
+    d[y] = tangent.unbroadcast_tensor(tf.where(condition, tf.zeros_like(d[z]), d[z]), y)
 
 
 # ============================================================================
 # Reduction Operations
 # ============================================================================
+
 
 @adjoint(tf.reduce_min)
 def reduce_min(y, x, axis=None, keep_dims=False):
@@ -129,6 +129,7 @@ def reduce_prod(y, x, axis=None, keep_dims=False):
 # Neural Network Activations
 # ============================================================================
 
+
 @adjoint(tf.nn.softmax)
 def softmax(y, x, axis=-1):
     """Adjoint for tf.nn.softmax: ∂L/∂x_i = softmax(x)·(∂L/∂z - Σ(∂L/∂z·softmax(x)))"""
@@ -161,6 +162,7 @@ def tangent_log_softmax(y, x, axis=-1):
 # ============================================================================
 
 try:
+
     @adjoint(tf.linalg.inv)
     def linalg_inv(y, x):
         """Adjoint for tf.linalg.inv (matrix inverse).
@@ -176,6 +178,7 @@ except AttributeError:
 
 
 try:
+
     @adjoint(tf.linalg.trace)
     def linalg_trace(y, x):
         """Adjoint for tf.linalg.trace: ∂L/∂X_ij = ∂L/∂y if i==j else 0"""
@@ -207,6 +210,7 @@ def transpose(y, x, perm=None):
 # the varargs helpers below (mirroring the JAX concat_seq/stack_seq
 # machinery), whose varargs adjoints split the gradient back per input.
 
+
 def tf_concat_seq(axis, *tensors):
     """Runtime helper: concatenate a varargs sequence of tensors."""
     return tf.concat(list(tensors), axis=axis)
@@ -228,8 +232,7 @@ def tf_stack_grads(dz, tensors, axis):
     return tuple(tf.unstack(dz, axis=axis))
 
 
-non_differentiable.register_non_differentiable_functions(
-    tf_concat_grads, tf_stack_grads)
+non_differentiable.register_non_differentiable_functions(tf_concat_grads, tf_stack_grads)
 
 
 @adjoint(tf_concat_seq)
@@ -267,7 +270,8 @@ def concat(dz, values, axis):
     raise NotImplementedError(
         'tangent can only differentiate tf.concat/tf.stack when the list of '
         'tensors is a literal. Bind the list to a variable assigned once '
-        'from a literal, or pass a list literal directly.')
+        'from a literal, or pass a list literal directly.'
+    )
 
 
 @adjoint(tf.stack)
@@ -276,7 +280,8 @@ def stack(dz, values, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate tf.concat/tf.stack when the list of '
         'tensors is a literal. Bind the list to a variable assigned once '
-        'from a literal, or pass a list literal directly.')
+        'from a literal, or pass a list literal directly.'
+    )
 
 
 # ============================================================================
@@ -287,6 +292,7 @@ def stack(dz, values, axis=0):
 # tangents exercised by tests/test_forward_extended.py and the backend
 # coverage suite.
 # ============================================================================
+
 
 @tangent_(tf.minimum)
 def tangent_minimum(z, x, y):
@@ -320,13 +326,12 @@ def tangent_reduce_min(y, x, axis=None, keep_dims=False):
 @tangent_(tf.reduce_prod)
 def tangent_reduce_prod(y, x, axis=None, keep_dims=False):
     """Forward mode for tf.reduce_prod: dy = sum(dx * prod(x) / x_i)."""
-    y_unreduced = tangent.unreduce(y, tangent.shape_as_list(x), axis,
-                                   keep_dims)
-    d[y] = tf.reduce_sum(d[x] * y_unreduced / x, axis=axis,
-                         keepdims=keep_dims)
+    y_unreduced = tangent.unreduce(y, tangent.shape_as_list(x), axis, keep_dims)
+    d[y] = tf.reduce_sum(d[x] * y_unreduced / x, axis=axis, keepdims=keep_dims)
 
 
 try:
+
     @tangent_(tf.linalg.inv)
     def tangent_linalg_inv(y, x):
         """Forward mode for tf.linalg.inv: dy = -y @ dx @ y."""
@@ -352,12 +357,28 @@ def tangent_transpose(y, x, perm=None):
 
 # List of functions we registered
 _our_functions = [
-    tf.abs, tf.square, tf.sqrt, tf.sign, tf.floor, tf.round,
-    tf.minimum, tf.clip_by_value, tf.where,
-    tf.sin, tf.cos, tf.tan, tf.atan,
-    tf.nn.relu, tf.nn.sigmoid, tf.nn.softmax, tf.nn.log_softmax,
-    tf.transpose, tf.concat, tf.stack,
-    tf.reduce_min, tf.reduce_prod,
+    tf.abs,
+    tf.square,
+    tf.sqrt,
+    tf.sign,
+    tf.floor,
+    tf.round,
+    tf.minimum,
+    tf.clip_by_value,
+    tf.where,
+    tf.sin,
+    tf.cos,
+    tf.tan,
+    tf.atan,
+    tf.nn.relu,
+    tf.nn.sigmoid,
+    tf.nn.softmax,
+    tf.nn.log_softmax,
+    tf.transpose,
+    tf.concat,
+    tf.stack,
+    tf.reduce_min,
+    tf.reduce_prod,
 ]
 
 # Add ceil based on TF version
@@ -368,8 +389,9 @@ elif hasattr(tf, 'ceil'):
 
 # Add optional functions if they exist
 try:
-    _our_functions.extend([tf.reciprocal, tf.math.log10, tf.math.log2,
-                          tf.math.log1p, tf.math.expm1])
+    _our_functions.extend(
+        [tf.reciprocal, tf.math.log10, tf.math.log2, tf.math.log1p, tf.math.expm1]
+    )
 except AttributeError:
     pass
 
@@ -386,6 +408,7 @@ except AttributeError:
 # Remove from UNIMPLEMENTED_ADJOINTS if it exists
 try:
     from tangent import grads as _grads_module
+
     for func in _our_functions:
         _grads_module.UNIMPLEMENTED_ADJOINTS.discard(func)
 except (ImportError, AttributeError):
@@ -395,20 +418,33 @@ except (ImportError, AttributeError):
 # module function without a tangent at its import time, which runs before
 # this module registers tangents for the ops above.
 _our_tangent_functions = [
-    tf.abs, tf.square, tf.sqrt, tf.sign, tf.floor, tf.round,
-    tf.minimum, tf.clip_by_value, tf.where,
-    tf.sin, tf.cos, tf.tan, tf.atan,
-    tf.nn.relu, tf.nn.sigmoid, tf.nn.softmax, tf.nn.log_softmax,
+    tf.abs,
+    tf.square,
+    tf.sqrt,
+    tf.sign,
+    tf.floor,
+    tf.round,
+    tf.minimum,
+    tf.clip_by_value,
+    tf.where,
+    tf.sin,
+    tf.cos,
+    tf.tan,
+    tf.atan,
+    tf.nn.relu,
+    tf.nn.sigmoid,
+    tf.nn.softmax,
+    tf.nn.log_softmax,
     tf.transpose,
-    tf.reduce_min, tf.reduce_prod,
+    tf.reduce_min,
+    tf.reduce_prod,
 ]
 
 if hasattr(tf.math, 'ceil'):
     _our_tangent_functions.append(tf.math.ceil)
 
 try:
-    _our_tangent_functions.extend([tf.math.log10, tf.math.log2,
-                                   tf.math.log1p, tf.math.expm1])
+    _our_tangent_functions.extend([tf.math.log10, tf.math.log2, tf.math.log1p, tf.math.expm1])
 except AttributeError:
     pass
 
@@ -424,12 +460,15 @@ except AttributeError:
 
 try:
     from tangent import tangents as _tangents_module
+
     for func in _our_tangent_functions:
         _tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)
 except (ImportError, AttributeError):
     pass
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug(
-    'Extended TensorFlow gradients loaded successfully (%d new gradient '
-    'definitions)', len(_our_functions))
+    'Extended TensorFlow gradients loaded successfully (%d new gradient definitions)',
+    len(_our_functions),
+)

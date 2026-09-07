@@ -1,6 +1,7 @@
 """
 Unit tests for Algebraic Simplification.
 """
+
 import unittest
 import ast
 
@@ -14,7 +15,7 @@ from tangent.optimizations.algebraic_simplification import (
     ASTToSymPyConverter,
     SymPyToASTConverter,
     AlgebraicSimplifier,
-    apply_algebraic_simplification
+    apply_algebraic_simplification,
 )
 import sympy as sp
 

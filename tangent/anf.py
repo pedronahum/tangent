@@ -36,6 +36,7 @@ The value of the return statement is reduced to either a single variable, or a
 tuple of variables (nested tuples are expanded).
 
 """
+
 from __future__ import absolute_import
 import copy
 
@@ -49,208 +50,210 @@ from tangent import transformers
 
 
 class ANF(transformers.TreeTransformer):
-  """Transform a tree to an ANF-like form."""
+    """Transform a tree to an ANF-like form."""
 
-  def __init__(self):
-    super(ANF, self).__init__()
-    # Whether the current statement in question must be trivialized
-    self.trivializing = False
-    # The original line that is transformed, which is kept as an annotation
-    self.src = ''
+    def __init__(self):
+        super(ANF, self).__init__()
+        # Whether the current statement in question must be trivialized
+        self.trivializing = False
+        # The original line that is transformed, which is kept as an annotation
+        self.src = ''
 
-  def mark(self, node):
-    if not anno.hasanno(node, 'pre_anf') and self.src:
-      anno.setanno(node, 'pre_anf', self.src)
+    def mark(self, node):
+        if not anno.hasanno(node, 'pre_anf') and self.src:
+            anno.setanno(node, 'pre_anf', self.src)
 
-  def trivialize(self, node):
-    if isinstance(node, (gast.Name, type(None)) + grammar.LITERALS):
-      return node
-    # FIX: Handle Slice nodes specially to avoid generating invalid code like "colon = :"
-    # Slices need to be converted to slice() calls, not assigned directly
-    if isinstance(node, gast.Slice):
-      return self.trivialize_slice(node)
-    name = self.namer.name(node)
-    stmt = gast.Assign(
-        targets=[gast.Name(annotation=None, id=name, ctx=gast.Store())],
-        value=None)
-    self.mark(stmt)
-    self.prepend(stmt)
-    stmt.value = self.visit(node)
-    return gast.Name(annotation=None, id=name, ctx=gast.Load())
-
-  def visit_Call(self, node):
-    if self.trivializing:
-      # Trivialize arguments
-      for i, arg in enumerate(node.args):
-        node.args[i] = self.trivialize(arg)
-      for keyword in node.keywords:
-        keyword.value = self.trivialize(keyword.value)
-
-      # Trivialize method calls: obj.method() should trivialize obj
-      # This handles cases like arr[1:3].sum() where arr[1:3] needs extraction
-      if isinstance(node.func, gast.Attribute):
-        node.func.value = self.trivialize(node.func.value)
-
-    return node
-
-  def visit_FunctionDef(self, node):
-    self.namer = naming.Namer.build(node)
-    return self.generic_visit(node)
-
-  def visit_BinOp(self, node):
-    if self.trivializing:
-      node.left = self.trivialize(node.left)
-      node.right = self.trivialize(node.right)
-    return node
-
-  def visit_UnaryOp(self, node):
-    if self.trivializing:
-      node.operand = self.trivialize(node.operand)
-    return node
-
-  def visit_Return(self, node):
-    self.trivializing = True
-    self.namer.target = node
-    node.value = self.trivialize(node.value)
-    self.trivializing = False
-    self.namer.target = None
-    return node
-
-  def trivialize_slice(self, node):
-    if isinstance(node, gast.Slice):
-      name = self.namer.name(node)
-      target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
-      stmt = gast.Assign(targets=[target], value=None)
-      self.prepend(stmt)
-      stmt.value = gast.Call(
-          func=gast.Name(id='slice', ctx=gast.Load(), annotation=None),
-          args=[
-              self.trivialize(arg) if arg else
-              gast.Name(id='None', ctx=gast.Load(), annotation=None)
-              for arg in [node.lower, node.upper,
-                          node.step]],
-          keywords=[])
-      return gast.Name(id=name, ctx=gast.Load(), annotation=None)
-    # gast.ExtSlice removed in Python 3.9+ - check if it exists for backwards compat
-    elif hasattr(gast, 'ExtSlice') and isinstance(node, gast.ExtSlice):
-      name = self.namer.name(node)
-      target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
-      stmt = gast.Assign(targets=[target], value=None)
-      self.prepend(stmt)
-      dim_names = [self.trivialize_slice(s).id for s in node.dims]
-      stmt.value = gast.Tuple(elts=[
-          gast.Name(id=n, ctx=gast.Load(), annotation=None)
-          for n in dim_names], ctx=gast.Load())
-      return gast.Name(id=name, ctx=gast.Load(), annotation=None)
-    # gast.Index removed in Python 3.9+ - check if it exists for backwards compat
-    elif hasattr(gast, 'Index') and isinstance(node, gast.Index):
-      return self.trivialize(node.value)
-    # In Python 3.9+, slice values can be any expression (Constant, Name, Call, etc.)
-    # Just trivialize whatever we get
-    else:
-      return self.trivialize(node)
-
-  def visit_Subscript(self, node):
-    if self.trivializing:
-      node.value = self.trivialize(node.value)
-      # In Python 3.9+, gast.Index was removed - slice is used directly
-      trivialized_slice = self.trivialize_slice(node.slice)
-      if hasattr(gast, 'Index'):
-        node.slice = gast.Index(value=trivialized_slice)
-      else:
-        node.slice = trivialized_slice
-    return node
-
-  def visit_Tuple(self, node):
-    if self.trivializing:
-      node.elts = [self.trivialize(elt) for elt in node.elts]
-    return node
-
-  def visit_List(self, node):
-    if self.trivializing:
-      node.elts = [self.trivialize(elt) for elt in node.elts]
-    return node
-
-  def visit_Dict(self, node):
-    if self.trivializing:
-      # Trivialize ALL dict values (including nested dicts and complex expressions)
-      # This ensures each value is a simple Name after ANF transformation
-      node.values = [self.trivialize(val) for val in node.values]
-    return node
-
-  def visit_AugAssign(self, node):
-    self.src = quoting.unquote(node)
-    self.trivializing = True
-    self.namer.target = node.target
-
-    if isinstance(node.target, gast.Subscript):
-      # `a[i] += x` must expand to `a[i] = a[i] + x`, keeping the subscript as
-      # the write target and reading it back on the RHS. Trivializing the target
-      # (the generic path below) would bind it to a fresh temporary and drop the
-      # write-back to `a[i]`, silently corrupting both value and gradient. Route
-      # the expanded form through the subscript-assignment path, whose scatter
-      # adjoint reduces the gathered gradient to the RHS shape.
-      read = copy.deepcopy(node.target)
-      read.ctx = gast.Load()
-      assign = gast.Assign(
-          targets=[node.target],
-          value=gast.BinOp(left=read, op=node.op, right=node.value))
-      gast.copy_location(assign, node)
-      self.mark(assign)
-      self.trivializing = False
-      result = self.visit_Assign(assign)
-      self.namer.target = None
-      return result
-
-    right = self.trivialize(node.value)
-    target = self.trivialize(node.target)
-    left = gast.Name(id=target.id, ctx=gast.Load(), annotation=None)
-    node = gast.Assign(targets=[target],
-                       value=gast.BinOp(
-                        left=left, op=node.op, right=right))
-    self.mark(node)
-    node = self.generic_visit(node)
-    self.namer.target = None
-    self.trivializing = False
-    return node
-
-  def visit_Assign(self, node):
-    self.src = quoting.unquote(node)
-    self.mark(node)
-    self.trivializing = True
-    self.namer.target = node.targets[0]
-    if isinstance(node.targets[0], (gast.Subscript, gast.Attribute)):
-      node.value = self.trivialize(node.value)
-      node.targets[0] = self.visit(node.targets[0])
-    elif isinstance(node.targets[0], gast.Tuple):
-      node.value = self.visit(node.value)
-      name = self.namer.name(node.targets[0])
-      target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
-      for i, elt in enumerate(node.targets[0].elts):
-        # In Python 3.9+, gast.Index was removed - slice is used directly
-        slice_node = gast.Constant(value=i, kind=None)
-        if hasattr(gast, 'Index'):
-          slice_node = gast.Index(value=slice_node)
-
+    def trivialize(self, node):
+        if isinstance(node, (gast.Name, type(None)) + grammar.LITERALS):
+            return node
+        # FIX: Handle Slice nodes specially to avoid generating invalid code like "colon = :"
+        # Slices need to be converted to slice() calls, not assigned directly
+        if isinstance(node, gast.Slice):
+            return self.trivialize_slice(node)
+        name = self.namer.name(node)
         stmt = gast.Assign(
-            targets=[elt],
-            value=gast.Subscript(
-                value=gast.Name(id=name, ctx=gast.Load(),
-                                annotation=None),
-                slice=slice_node,
-                ctx=gast.Load()))
+            targets=[gast.Name(annotation=None, id=name, ctx=gast.Store())], value=None
+        )
         self.mark(stmt)
-        self.append(stmt)
-      node.targets[0] = target
-    elif not isinstance(node.targets[0], gast.Name):
-      raise ValueError('Cannot Assign to %s' % type(node.target))
-    node = self.generic_visit(node)
-    self.namer.target = None
-    self.trivializing = False
-    return node
+        self.prepend(stmt)
+        stmt.value = self.visit(node)
+        return gast.Name(annotation=None, id=name, ctx=gast.Load())
+
+    def visit_Call(self, node):
+        if self.trivializing:
+            # Trivialize arguments
+            for i, arg in enumerate(node.args):
+                node.args[i] = self.trivialize(arg)
+            for keyword in node.keywords:
+                keyword.value = self.trivialize(keyword.value)
+
+            # Trivialize method calls: obj.method() should trivialize obj
+            # This handles cases like arr[1:3].sum() where arr[1:3] needs extraction
+            if isinstance(node.func, gast.Attribute):
+                node.func.value = self.trivialize(node.func.value)
+
+        return node
+
+    def visit_FunctionDef(self, node):
+        self.namer = naming.Namer.build(node)
+        return self.generic_visit(node)
+
+    def visit_BinOp(self, node):
+        if self.trivializing:
+            node.left = self.trivialize(node.left)
+            node.right = self.trivialize(node.right)
+        return node
+
+    def visit_UnaryOp(self, node):
+        if self.trivializing:
+            node.operand = self.trivialize(node.operand)
+        return node
+
+    def visit_Return(self, node):
+        self.trivializing = True
+        self.namer.target = node
+        node.value = self.trivialize(node.value)
+        self.trivializing = False
+        self.namer.target = None
+        return node
+
+    def trivialize_slice(self, node):
+        if isinstance(node, gast.Slice):
+            name = self.namer.name(node)
+            target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
+            stmt = gast.Assign(targets=[target], value=None)
+            self.prepend(stmt)
+            stmt.value = gast.Call(
+                func=gast.Name(id='slice', ctx=gast.Load(), annotation=None),
+                args=[
+                    self.trivialize(arg)
+                    if arg
+                    else gast.Name(id='None', ctx=gast.Load(), annotation=None)
+                    for arg in [node.lower, node.upper, node.step]
+                ],
+                keywords=[],
+            )
+            return gast.Name(id=name, ctx=gast.Load(), annotation=None)
+        # gast.ExtSlice removed in Python 3.9+ - check if it exists for backwards compat
+        elif hasattr(gast, 'ExtSlice') and isinstance(node, gast.ExtSlice):
+            name = self.namer.name(node)
+            target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
+            stmt = gast.Assign(targets=[target], value=None)
+            self.prepend(stmt)
+            dim_names = [self.trivialize_slice(s).id for s in node.dims]
+            stmt.value = gast.Tuple(
+                elts=[gast.Name(id=n, ctx=gast.Load(), annotation=None) for n in dim_names],
+                ctx=gast.Load(),
+            )
+            return gast.Name(id=name, ctx=gast.Load(), annotation=None)
+        # gast.Index removed in Python 3.9+ - check if it exists for backwards compat
+        elif hasattr(gast, 'Index') and isinstance(node, gast.Index):
+            return self.trivialize(node.value)
+        # In Python 3.9+, slice values can be any expression (Constant, Name, Call, etc.)
+        # Just trivialize whatever we get
+        else:
+            return self.trivialize(node)
+
+    def visit_Subscript(self, node):
+        if self.trivializing:
+            node.value = self.trivialize(node.value)
+            # In Python 3.9+, gast.Index was removed - slice is used directly
+            trivialized_slice = self.trivialize_slice(node.slice)
+            if hasattr(gast, 'Index'):
+                node.slice = gast.Index(value=trivialized_slice)
+            else:
+                node.slice = trivialized_slice
+        return node
+
+    def visit_Tuple(self, node):
+        if self.trivializing:
+            node.elts = [self.trivialize(elt) for elt in node.elts]
+        return node
+
+    def visit_List(self, node):
+        if self.trivializing:
+            node.elts = [self.trivialize(elt) for elt in node.elts]
+        return node
+
+    def visit_Dict(self, node):
+        if self.trivializing:
+            # Trivialize ALL dict values (including nested dicts and complex expressions)
+            # This ensures each value is a simple Name after ANF transformation
+            node.values = [self.trivialize(val) for val in node.values]
+        return node
+
+    def visit_AugAssign(self, node):
+        self.src = quoting.unquote(node)
+        self.trivializing = True
+        self.namer.target = node.target
+
+        if isinstance(node.target, gast.Subscript):
+            # `a[i] += x` must expand to `a[i] = a[i] + x`, keeping the subscript as
+            # the write target and reading it back on the RHS. Trivializing the target
+            # (the generic path below) would bind it to a fresh temporary and drop the
+            # write-back to `a[i]`, silently corrupting both value and gradient. Route
+            # the expanded form through the subscript-assignment path, whose scatter
+            # adjoint reduces the gathered gradient to the RHS shape.
+            read = copy.deepcopy(node.target)
+            read.ctx = gast.Load()
+            assign = gast.Assign(
+                targets=[node.target], value=gast.BinOp(left=read, op=node.op, right=node.value)
+            )
+            gast.copy_location(assign, node)
+            self.mark(assign)
+            self.trivializing = False
+            result = self.visit_Assign(assign)
+            self.namer.target = None
+            return result
+
+        right = self.trivialize(node.value)
+        target = self.trivialize(node.target)
+        left = gast.Name(id=target.id, ctx=gast.Load(), annotation=None)
+        node = gast.Assign(targets=[target], value=gast.BinOp(left=left, op=node.op, right=right))
+        self.mark(node)
+        node = self.generic_visit(node)
+        self.namer.target = None
+        self.trivializing = False
+        return node
+
+    def visit_Assign(self, node):
+        self.src = quoting.unquote(node)
+        self.mark(node)
+        self.trivializing = True
+        self.namer.target = node.targets[0]
+        if isinstance(node.targets[0], (gast.Subscript, gast.Attribute)):
+            node.value = self.trivialize(node.value)
+            node.targets[0] = self.visit(node.targets[0])
+        elif isinstance(node.targets[0], gast.Tuple):
+            node.value = self.visit(node.value)
+            name = self.namer.name(node.targets[0])
+            target = gast.Name(id=name, ctx=gast.Store(), annotation=None)
+            for i, elt in enumerate(node.targets[0].elts):
+                # In Python 3.9+, gast.Index was removed - slice is used directly
+                slice_node = gast.Constant(value=i, kind=None)
+                if hasattr(gast, 'Index'):
+                    slice_node = gast.Index(value=slice_node)
+
+                stmt = gast.Assign(
+                    targets=[elt],
+                    value=gast.Subscript(
+                        value=gast.Name(id=name, ctx=gast.Load(), annotation=None),
+                        slice=slice_node,
+                        ctx=gast.Load(),
+                    ),
+                )
+                self.mark(stmt)
+                self.append(stmt)
+            node.targets[0] = target
+        elif not isinstance(node.targets[0], gast.Name):
+            raise ValueError('Cannot Assign to %s' % type(node.target))
+        node = self.generic_visit(node)
+        self.namer.target = None
+        self.trivializing = False
+        return node
 
 
 def anf(node):
-  """Turn an AST into ANF-like form."""
-  ANF().visit(node)
-  return node
+    """Turn an AST into ANF-like form."""
+    ANF().visit(node)
+    return node

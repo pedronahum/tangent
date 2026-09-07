@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Tests for the frontend pass registry (tangent/passes.py)."""
+
 import pytest
 
 import tangent
@@ -43,60 +44,59 @@ EXPECTED_REVERSE = [
 
 # Forward mode additionally lowers ternaries, after all other desugarings
 # and before call resolution.
-EXPECTED_FORWARD = (
-    EXPECTED_REVERSE[:10] + ['ifexp_desugar'] + EXPECTED_REVERSE[10:])
+EXPECTED_FORWARD = EXPECTED_REVERSE[:10] + ['ifexp_desugar'] + EXPECTED_REVERSE[10:]
 
 
 def test_reverse_pass_order():
-  assert [p.name for p in passes.get_passes('reverse')] == EXPECTED_REVERSE
+    assert [p.name for p in passes.get_passes('reverse')] == EXPECTED_REVERSE
 
 
 def test_forward_pass_order():
-  assert [p.name for p in passes.get_passes('forward')] == EXPECTED_FORWARD
+    assert [p.name for p in passes.get_passes('forward')] == EXPECTED_FORWARD
 
 
 def test_ifexp_is_forward_only():
-  ifexp, = [p for p in passes.get_passes('forward') if p.name == 'ifexp_desugar']
-  assert ifexp.modes == frozenset(('forward',))
+    (ifexp,) = [p for p in passes.get_passes('forward') if p.name == 'ifexp_desugar']
+    assert ifexp.modes == frozenset(('forward',))
 
 
 def _noop(node, ctx):
-  """A do-nothing extension pass."""
-  assert ctx.func is not None
-  return node
+    """A do-nothing extension pass."""
+    assert ctx.func is not None
+    return node
 
 
 def test_register_before_and_after():
-  passes.register_pass(passes.Pass('ext_before', _noop), before='anf')
-  passes.register_pass(passes.Pass('ext_after', _noop), after='sentinel_rename')
-  try:
-    names = [p.name for p in passes.get_passes('reverse')]
-    assert names.index('ext_before') == names.index('anf') - 1
-    assert names.index('ext_after') == names.index('sentinel_rename') + 1
+    passes.register_pass(passes.Pass('ext_before', _noop), before='anf')
+    passes.register_pass(passes.Pass('ext_after', _noop), after='sentinel_rename')
+    try:
+        names = [p.name for p in passes.get_passes('reverse')]
+        assert names.index('ext_before') == names.index('anf') - 1
+        assert names.index('ext_after') == names.index('sentinel_rename') + 1
 
-    # The extended pipeline still produces correct gradients.
-    def f(x):
-      return x * x
+        # The extended pipeline still produces correct gradients.
+        def f(x):
+            return x * x
 
-    df = tangent.grad(f)
-    assert df(3.0) == 6.0
-  finally:
-    passes.unregister_pass('ext_before')
-    passes.unregister_pass('ext_after')
-  assert [p.name for p in passes.get_passes('reverse')] == EXPECTED_REVERSE
+        df = tangent.grad(f)
+        assert df(3.0) == 6.0
+    finally:
+        passes.unregister_pass('ext_before')
+        passes.unregister_pass('ext_after')
+    assert [p.name for p in passes.get_passes('reverse')] == EXPECTED_REVERSE
 
 
 def test_register_pass_validates_arguments():
-  extra = passes.Pass('ext', _noop)
-  with pytest.raises(ValueError):
-    passes.register_pass(extra)  # neither anchor
-  with pytest.raises(ValueError):
-    passes.register_pass(extra, before='anf', after='fence')  # both anchors
-  with pytest.raises(ValueError):
-    passes.register_pass(extra, before='no_such_pass')
-  with pytest.raises(ValueError):
-    passes.register_pass(passes.Pass('anf', _noop), after='fence')  # collision
+    extra = passes.Pass('ext', _noop)
+    with pytest.raises(ValueError):
+        passes.register_pass(extra)  # neither anchor
+    with pytest.raises(ValueError):
+        passes.register_pass(extra, before='anf', after='fence')  # both anchors
+    with pytest.raises(ValueError):
+        passes.register_pass(extra, before='no_such_pass')
+    with pytest.raises(ValueError):
+        passes.register_pass(passes.Pass('anf', _noop), after='fence')  # collision
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

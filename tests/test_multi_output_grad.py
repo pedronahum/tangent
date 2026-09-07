@@ -1,4 +1,5 @@
 """Test multiple output gradient functionality."""
+
 import numpy as np
 import tangent
 from tangent import grad
@@ -9,7 +10,7 @@ def test_output_index_first():
     """Test getting gradient of first output only."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     # Gradient of first output only
     df = grad(f, output_index=0)
@@ -23,7 +24,7 @@ def test_output_index_second():
     """Test getting gradient of second output only."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     # Gradient of second output only
     df = grad(f, output_index=1)
@@ -37,7 +38,7 @@ def test_output_weights():
     """Test custom output weights."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     # Weighted combination: 0.5*out1 + 2.0*out2
     df = grad(f, output_weights=(0.5, 2.0))
@@ -52,7 +53,7 @@ def test_three_outputs():
     """Test with three outputs."""
 
     def f(x):
-        return x, x ** 2, x ** 3
+        return x, x**2, x**3
 
     # Gradient of second output
     df = grad(f, output_index=1)
@@ -66,7 +67,7 @@ def test_with_preserve_result():
     """Test output_index with preserve_result=True."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     # Gradient of first output, preserve both outputs
     df = grad(f, output_index=0, preserve_result=True)
@@ -86,7 +87,7 @@ def test_loss_and_accuracy_example():
 
     def loss_and_accuracy(params):
         # Simulated: compute loss and accuracy
-        loss = params ** 2  # MSE-like
+        loss = params**2  # MSE-like
         accuracy = 1.0 / (1.0 + abs(params))  # Accuracy metric
         return loss, accuracy
 
@@ -110,8 +111,8 @@ def test_regularized_loss_example():
     """Multi-task learning with weighted outputs."""
 
     def model_with_reg(params):
-        pred_loss = params ** 2
-        reg_loss = 0.01 * params ** 2
+        pred_loss = params**2
+        reg_loss = 0.01 * params**2
         return pred_loss, reg_loss
 
     # Weighted combination: total_loss = pred_loss + 0.01*reg_loss
@@ -137,7 +138,7 @@ def test_multi_output_check_dims_false():
     """
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     df = grad(f, check_dims=False)
     # Default seed: gradient of the sum of outputs, d/dx(x^2 + 3x) = 2x + 3
@@ -149,7 +150,7 @@ def test_multi_output_check_dims_false_unoptimized():
     """Same regression with the optimizer disabled."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     df = grad(f, check_dims=False, optimized=False)
     assert np.isclose(df(2.0), 7.0)
@@ -160,7 +161,7 @@ def test_multi_output_optimized():
     """Multi-output seed must survive optimization (DCE etc.)."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     df = grad(f, optimized=True)
     assert np.isclose(df(2.0), 7.0)
@@ -172,7 +173,7 @@ def test_output_index_check_dims_false():
     """output_index must build the one-hot seed even with check_dims=False."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     df0 = grad(f, output_index=0, check_dims=False)
     df1 = grad(f, output_index=1, check_dims=False)
@@ -196,7 +197,7 @@ def test_single_output_check_dims_false_still_scalar_seed():
     """A single-output function must keep its scalar 1.0 default seed."""
 
     def f(x):
-        return x ** 2
+        return x**2
 
     df = grad(f, check_dims=False)
     assert np.isclose(df(3.0), 6.0)
@@ -208,15 +209,21 @@ def test_output_arity_annotation_recorded():
     from tangent import grad_util
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     def g(x):
-        return x ** 2
+        return x**2
 
     for fn, expected in ((f, 2), (g, None)):
         node, _ = grad_util.autodiff_ast(
-            fn, wrt=(0,), motion='joint', mode='reverse',
-            preserve_result=False, check_dims=False, verbose=0)
+            fn,
+            wrt=(0,),
+            motion='joint',
+            mode='reverse',
+            preserve_result=False,
+            check_dims=False,
+            verbose=0,
+        )
         fwdbwd = node.body[0]
         assert anno.hasanno(fwdbwd, 'output_arity')
         assert anno.getanno(fwdbwd, 'output_arity') == expected
@@ -226,7 +233,7 @@ def test_error_both_params():
     """Test that providing both output_index and output_weights raises error."""
 
     def f(x):
-        return x ** 2, x * 3
+        return x**2, x * 3
 
     with pytest.raises(ValueError, match="Cannot specify both"):
         grad(f, output_index=0, output_weights=(1.0, 1.0))

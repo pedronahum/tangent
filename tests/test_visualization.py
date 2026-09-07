@@ -2,6 +2,7 @@
 
 This module tests Tangent's visualization and debugging features.
 """
+
 import pytest
 import numpy as np
 import io
@@ -10,9 +11,11 @@ import sys
 # Check if visualization dependencies are available
 try:
     import matplotlib
+
     matplotlib.use('Agg')  # Non-interactive backend for testing
     import matplotlib.pyplot as plt
     import networkx as nx
+
     VIZ_AVAILABLE = True
 except ImportError:
     VIZ_AVAILABLE = False
@@ -24,12 +27,11 @@ if VIZ_AVAILABLE:
         GradientFlowVisualizer,
         visualize,
         compare_gradients,
-        show_gradient_code
+        show_gradient_code,
     )
 
 pytestmark = pytest.mark.skipif(
-    not VIZ_AVAILABLE,
-    reason="Visualization requires matplotlib and networkx"
+    not VIZ_AVAILABLE, reason="Visualization requires matplotlib and networkx"
 )
 
 
@@ -38,6 +40,7 @@ class TestComputationGraphVisualizer:
 
     def test_visualizer_creation(self):
         """Test creating visualizer instance."""
+
         def f(x):
             return x * x
 
@@ -48,6 +51,7 @@ class TestComputationGraphVisualizer:
 
     def test_parse_simple_function(self):
         """Test parsing a simple function."""
+
         def f(x):
             y = x * x
             return y
@@ -61,6 +65,7 @@ class TestComputationGraphVisualizer:
 
     def test_parse_complex_function(self):
         """Test parsing a more complex function."""
+
         def f(x):
             y = x * x
             z = y + x
@@ -75,6 +80,7 @@ class TestComputationGraphVisualizer:
 
     def test_visualize_creates_figure(self):
         """Test that visualize creates a matplotlib figure."""
+
         def f(x):
             return x * x
 
@@ -91,6 +97,7 @@ class TestGradientFlowVisualizer:
 
     def test_visualizer_creation(self):
         """Test creating gradient flow visualizer."""
+
         def f(x):
             return x * x
 
@@ -100,6 +107,7 @@ class TestGradientFlowVisualizer:
 
     def test_trace_execution(self):
         """Test tracing function execution."""
+
         def f(x):
             return x * x
 
@@ -112,6 +120,7 @@ class TestGradientFlowVisualizer:
 
     def test_visualize_flow_scalar(self):
         """Test visualizing gradient flow for scalar input."""
+
         def f(x):
             return x * x
 
@@ -124,6 +133,7 @@ class TestGradientFlowVisualizer:
 
     def test_visualize_flow_vector(self):
         """Test visualizing gradient flow for vector input."""
+
         def f(x):
             return np.sum(x * x)
 
@@ -137,6 +147,7 @@ class TestGradientFlowVisualizer:
 
     def test_visualize_flow_multivariate(self):
         """Test visualizing gradient flow for multiple inputs."""
+
         def f(x, y):
             return x * y
 
@@ -153,6 +164,7 @@ class TestVisualizeFunction:
 
     def test_visualize_graph_mode(self):
         """Test visualize in graph mode."""
+
         def f(x):
             y = x * x
             return y
@@ -164,6 +176,7 @@ class TestVisualizeFunction:
 
     def test_visualize_flow_mode(self):
         """Test visualize in flow mode."""
+
         def f(x):
             return x * x
 
@@ -174,6 +187,7 @@ class TestVisualizeFunction:
 
     def test_visualize_invalid_mode(self):
         """Test visualize with invalid mode."""
+
         def f(x):
             return x * x
 
@@ -182,6 +196,7 @@ class TestVisualizeFunction:
 
     def test_visualize_flow_without_inputs(self):
         """Test visualize flow mode without inputs raises error."""
+
         def f(x):
             return x * x
 
@@ -190,6 +205,7 @@ class TestVisualizeFunction:
 
     def test_visualize_custom_figsize(self):
         """Test visualize with custom figure size."""
+
         def f(x):
             return x * x
 
@@ -205,6 +221,7 @@ class TestCompareGradients:
 
     def test_compare_scalar_function(self):
         """Test comparing gradients for scalar function."""
+
         def f(x):
             return x * x
 
@@ -215,8 +232,9 @@ class TestCompareGradients:
 
     def test_compare_vector_function(self):
         """Test comparing gradients for vector function."""
+
         def f(x):
-            return np.sum(x ** 2)
+            return np.sum(x**2)
 
         x = np.array([1.0, 2.0, 3.0])
         fig = compare_gradients(f, (x,))
@@ -227,6 +245,7 @@ class TestCompareGradients:
 
     def test_compare_multivariate(self):
         """Test comparing gradients for multivariate function."""
+
         def f(x, y):
             return x * y
 
@@ -238,8 +257,9 @@ class TestCompareGradients:
 
     def test_compare_polynomial(self):
         """Test gradient comparison for polynomial."""
+
         def f(x):
-            return np.sum(x**3 - 2*x**2 + x)
+            return np.sum(x**3 - 2 * x**2 + x)
 
         x = np.array([1.0, 2.0, 3.0])
         fig = compare_gradients(f, (x,), eps=1e-7)
@@ -250,6 +270,7 @@ class TestCompareGradients:
 
     def test_compare_custom_figsize(self):
         """Test gradient comparison with custom figure size."""
+
         def f(x):
             return x * x
 
@@ -266,6 +287,7 @@ class TestShowGradientCode:
 
     def test_show_gradient_code_basic(self):
         """Test showing gradient code for basic function."""
+
         def f(x):
             return x * x
 
@@ -288,6 +310,7 @@ class TestShowGradientCode:
 
     def test_show_gradient_code_multivar(self):
         """Test showing gradient code for multivariate function."""
+
         def f(x, y):
             return x * y
 
@@ -307,6 +330,7 @@ class TestShowGradientCode:
 
     def test_show_gradient_code_complex(self):
         """Test showing gradient code for complex function."""
+
         def f(x):
             y = x * x
             z = y + x
@@ -333,6 +357,7 @@ class TestEdgeCases:
     @pytest.mark.skip(reason="Constant functions are an edge case in Tangent core")
     def test_constant_function(self):
         """Test gradient of constant function."""
+
         def f(x):
             return 5.0
 
@@ -343,6 +368,7 @@ class TestEdgeCases:
 
     def test_linear_function(self):
         """Test gradient of linear function."""
+
         def f(x):
             return 2.0 * x
 
@@ -352,6 +378,7 @@ class TestEdgeCases:
 
     def test_nested_operations(self):
         """Test function with nested operations."""
+
         def f(x):
             y = x * x
             z = y * y
@@ -363,6 +390,7 @@ class TestEdgeCases:
 
     def test_multiple_returns_intermediate(self):
         """Test function with multiple intermediate values."""
+
         def f(x):
             a = x + 1
             b = a * 2
@@ -379,8 +407,9 @@ class TestIntegration:
 
     def test_full_workflow_scalar(self):
         """Test complete workflow for scalar function."""
+
         def f(x):
-            return x ** 3
+            return x**3
 
         # Graph visualization
         fig1 = visualize(f, mode='graph')
@@ -399,8 +428,9 @@ class TestIntegration:
 
     def test_full_workflow_vector(self):
         """Test complete workflow for vector function."""
+
         def f(x):
-            return np.sum(x ** 2)
+            return np.sum(x**2)
 
         x = np.array([1.0, 2.0, 3.0])
 
@@ -421,6 +451,7 @@ class TestIntegration:
 
     def test_educational_example(self):
         """Test a typical educational example."""
+
         def neural_layer(x):
             """Simple neural layer computation."""
             z = x * x + x

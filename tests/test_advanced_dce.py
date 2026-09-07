@@ -26,6 +26,7 @@ suite exercises only indirectly:
 4. Statements kept for their side effects (subscript/attribute writes) pull
    the variables they use into the slice.
 """
+
 import textwrap
 
 import gast
@@ -36,43 +37,47 @@ from tangent.optimizations.dce import apply_dce
 
 
 def _parse_function(source):
-  return gast.parse(textwrap.dedent(source)).body[0]
+    return gast.parse(textwrap.dedent(source)).body[0]
 
 
 def _defined_names(func):
-  """All names assigned anywhere in the function (including nested bodies)."""
-  names = set()
-  for node in gast.walk(func):
-    if isinstance(node, gast.Assign):
-      for target in node.targets:
-        if isinstance(target, gast.Name):
-          names.add(target.id)
-  return names
+    """All names assigned anywhere in the function (including nested bodies)."""
+    names = set()
+    for node in gast.walk(func):
+        if isinstance(node, gast.Assign):
+            for target in node.targets:
+                if isinstance(target, gast.Name):
+                    names.add(target.id)
+    return names
 
 
 def _is_tape_call(stmt, op_name):
-  """True if stmt is `tangent.<op_name>(...)` as an expression statement."""
-  if not isinstance(stmt, gast.Expr):
-    return False
-  call = stmt.value
-  return (isinstance(call, gast.Call) and
-          isinstance(call.func, gast.Attribute) and
-          call.func.attr == op_name)
+    """True if stmt is `tangent.<op_name>(...)` as an expression statement."""
+    if not isinstance(stmt, gast.Expr):
+        return False
+    call = stmt.value
+    return (
+        isinstance(call, gast.Call)
+        and isinstance(call.func, gast.Attribute)
+        and call.func.attr == op_name
+    )
 
 
 def _uses_tape_call(stmt, op_name):
-  """True if stmt contains a call to tangent.<op_name> anywhere."""
-  for node in gast.walk(stmt):
-    if (isinstance(node, gast.Call) and
-        isinstance(node.func, gast.Attribute) and
-        node.func.attr == op_name):
-      return True
-  return False
+    """True if stmt contains a call to tangent.<op_name> anywhere."""
+    for node in gast.walk(stmt):
+        if (
+            isinstance(node, gast.Call)
+            and isinstance(node.func, gast.Attribute)
+            and node.func.attr == op_name
+        ):
+            return True
+    return False
 
 
 def test_tape_operations_and_dead_code():
-  """Pushes/pops survive; genuinely dead computations do not."""
-  func = _parse_function("""
+    """Pushes/pops survive; genuinely dead computations do not."""
+    func = _parse_function("""
       def _dfdx(x, bx_seed):
           _stack = tangent.Stack()
           y = x * x
@@ -83,25 +88,26 @@ def test_tape_operations_and_dead_code():
           return by
   """)
 
-  result = apply_dce(func, ['x'])
+    result = apply_dce(func, ['x'])
 
-  defined = _defined_names(result)
+    defined = _defined_names(result)
 
-  # The dead computation is gone...
-  assert 'dead' not in defined
-  # ...but the tape operations, the stack and every value they need remain.
-  assert any(_is_tape_call(stmt, 'push') for stmt in result.body)
-  assert any(_uses_tape_call(stmt, 'pop') for stmt in result.body)
-  assert '_stack' in defined
-  assert 'y' in defined
-  assert 'y2' in defined
-  assert 'by' in defined
+    # The dead computation is gone...
+    assert 'dead' not in defined
+    # ...but the tape operations, the stack and every value they need remain.
+    assert any(_is_tape_call(stmt, 'push') for stmt in result.body)
+    assert any(_uses_tape_call(stmt, 'pop') for stmt in result.body)
+    assert '_stack' in defined
+    assert 'y' in defined
+    assert 'y2' in defined
+    assert 'by' in defined
 
 
 def test_targets_gradient_function_not_primal():
-  """Split-motion modules hold [forward, backward]; the DCE must hit the
-  backward function and leave the primal's tape pushes alone."""
-  module = gast.parse(textwrap.dedent("""
+    """Split-motion modules hold [forward, backward]; the DCE must hit the
+    backward function and leave the primal's tape pushes alone."""
+    module = gast.parse(
+        textwrap.dedent("""
       def fwd(x):
           _stack = tangent.Stack()
           y = x * x
@@ -113,28 +119,29 @@ def test_targets_gradient_function_not_primal():
           bx = by * y
           dead = bx + 99.0
           return bx
-  """))
+  """)
+    )
 
-  result = optimization.optimize_with_advanced_dce(module, ['x'])
+    result = optimization.optimize_with_advanced_dce(module, ['x'])
 
-  fwd, bwd = result.body[0], result.body[-1]
-  assert fwd.name == 'fwd'
-  assert bwd.name == 'bwd'
+    fwd, bwd = result.body[0], result.body[-1]
+    assert fwd.name == 'fwd'
+    assert bwd.name == 'bwd'
 
-  # The primal keeps its tape push and its computation...
-  assert any(_is_tape_call(stmt, 'push') for stmt in fwd.body)
-  assert 'y' in _defined_names(fwd)
+    # The primal keeps its tape push and its computation...
+    assert any(_is_tape_call(stmt, 'push') for stmt in fwd.body)
+    assert 'y' in _defined_names(fwd)
 
-  # ...while the adjoint loses dead code but keeps its pop.
-  assert 'dead' not in _defined_names(bwd)
-  assert any(_uses_tape_call(stmt, 'pop') for stmt in bwd.body)
-  assert 'bx' in _defined_names(bwd)
+    # ...while the adjoint loses dead code but keeps its pop.
+    assert 'dead' not in _defined_names(bwd)
+    assert any(_uses_tape_call(stmt, 'pop') for stmt in bwd.body)
+    assert 'bx' in _defined_names(bwd)
 
 
 def test_if_condition_survives_control_flow_analysis():
-  """A condition whose branches define the requested gradient must not be
-  eliminated (regression: nested def/use maps used to clobber it)."""
-  func = _parse_function("""
+    """A condition whose branches define the requested gradient must not be
+    eliminated (regression: nested def/use maps used to clobber it)."""
+    func = _parse_function("""
       def _dfdx(bx_seed):
           cond = bx_seed > 0.0
           if cond:
@@ -144,18 +151,18 @@ def test_if_condition_survives_control_flow_analysis():
           return bx
   """)
 
-  result = apply_dce(func, ['x'])
+    result = apply_dce(func, ['x'])
 
-  defined = _defined_names(result)
-  assert 'cond' in defined
-  assert 'bx' in defined
-  assert any(isinstance(stmt, gast.If) for stmt in result.body)
+    defined = _defined_names(result)
+    assert 'cond' in defined
+    assert 'bx' in defined
+    assert any(isinstance(stmt, gast.If) for stmt in result.body)
 
 
 def test_subscript_write_keeps_its_operands():
-  """x[i] = expr writes are side-effecting and kept unconditionally, so the
-  definition of expr must survive the slice as well."""
-  func = _parse_function("""
+    """x[i] = expr writes are side-effecting and kept unconditionally, so the
+    definition of expr must survive the slice as well."""
+    func = _parse_function("""
       def _dfdx(x, bx_seed):
           a_times_b = x * 2.0
           x[0] = a_times_b
@@ -163,16 +170,16 @@ def test_subscript_write_keeps_its_operands():
           return bx
   """)
 
-  result = apply_dce(func, ['x'])
+    result = apply_dce(func, ['x'])
 
-  defined = _defined_names(result)
-  assert 'a_times_b' in defined
-  assert any(
-      isinstance(stmt, gast.Assign) and
-      isinstance(stmt.targets[0], gast.Subscript)
-      for stmt in result.body)
-  assert 'bx' in defined
+    defined = _defined_names(result)
+    assert 'a_times_b' in defined
+    assert any(
+        isinstance(stmt, gast.Assign) and isinstance(stmt.targets[0], gast.Subscript)
+        for stmt in result.body
+    )
+    assert 'bx' in defined
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

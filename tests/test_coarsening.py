@@ -19,6 +19,7 @@ product directly.  These tests check the generated adjoint numerically against
 central finite differences of the primal, and check that non-straight-line
 inputs are rejected (return None) rather than miscompiled.
 """
+
 import math
 import unittest
 
@@ -43,422 +44,433 @@ import tangent
 # Module-level primal for the end-to-end check: Tangent needs real source via
 # inspect.getsource, so it cannot be defined inside a test or exec'd string.
 def _primal_np(x, y):
-  a = x * y
-  b = np.sin(a)
-  c = b + x
-  return c
+    a = x * y
+    b = np.sin(a)
+    c = b + x
+    return c
 
 
 # Inverse-trig primal whose derivative reintroduces the inverse functions, so
 # it exercises the asin/atan lowering.
 def _inverse_trig_primal(x):
-  return np.arcsin(x) * x + np.arctan(x)
+    return np.arcsin(x) * x + np.arctan(x)
 
 
 # Longer straight-line primal used to demonstrate the size/tape benefits of
 # coarsening. Module-level for the same inspect.getsource reason.
 def _benefit_primal(a, b, c):
-  t1 = a * b
-  t2 = np.sin(t1)
-  t3 = t2 + c
-  t4 = np.exp(t3)
-  t5 = t4 * a
-  t6 = np.cos(t5)
-  return t6 * b
+    t1 = a * b
+    t2 = np.sin(t1)
+    t3 = t2 + c
+    t4 = np.exp(t3)
+    t5 = t4 * a
+    t6 = np.cos(t5)
+    return t6 * b
 
 
 def _count_statements_and_tape(func_ast):
-  """Return (top-level statement count, tape-op count) for a function AST."""
-  tape_ops = ('push', 'pop', 'push_stack', 'pop_stack')
-  tape = 0
-  for node in gast.walk(func_ast):
-    if isinstance(node, gast.Call):
-      name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
-      if name in tape_ops:
-        tape += 1
-  return len(func_ast.body), tape
+    """Return (top-level statement count, tape-op count) for a function AST."""
+    tape_ops = ('push', 'pop', 'push_stack', 'pop_stack')
+    tape = 0
+    for node in gast.walk(func_ast):
+        if isinstance(node, gast.Call):
+            name = getattr(node.func, 'attr', None) or getattr(node.func, 'id', None)
+            if name in tape_ops:
+                tape += 1
+    return len(func_ast.body), tape
 
 
 # Namespace used to execute both the primal and the generated adjoint.  The
 # coarsened adjoint references elementwise primitives by bare name, so they
 # must be present here.
 MATHNS = {
-    'sin': math.sin, 'cos': math.cos, 'tan': math.tan,
-    'exp': math.exp, 'log': math.log, 'sqrt': math.sqrt,
+    'sin': math.sin,
+    'cos': math.cos,
+    'tan': math.tan,
+    'exp': math.exp,
+    'log': math.log,
+    'sqrt': math.sqrt,
     'abs': abs,
-    'sinh': math.sinh, 'cosh': math.cosh, 'tanh': math.tanh,
-    'asin': math.asin, 'acos': math.acos, 'atan': math.atan,
+    'sinh': math.sinh,
+    'cosh': math.cosh,
+    'tanh': math.tanh,
+    'asin': math.asin,
+    'acos': math.acos,
+    'atan': math.atan,
 }
 
 
 def _build(primal_src):
-  """Coarsen `primal_src` and return (primal_callable, adjoint_callable)."""
-  func = gast.parse(primal_src).body[0]
-  adj = apply_coarsening(func)
-  assert adj is not None, 'expected %r to be coarsenable' % primal_src
-  ns = dict(MATHNS)
-  ns['np'] = np  # allow attribute callees such as np.sin in the primal
-  exec(primal_src, ns)
-  exec(gast.unparse(adj), ns)
-  return ns[func.name], ns[adj.name]
+    """Coarsen `primal_src` and return (primal_callable, adjoint_callable)."""
+    func = gast.parse(primal_src).body[0]
+    adj = apply_coarsening(func)
+    assert adj is not None, 'expected %r to be coarsenable' % primal_src
+    ns = dict(MATHNS)
+    ns['np'] = np  # allow attribute callees such as np.sin in the primal
+    exec(primal_src, ns)
+    exec(gast.unparse(adj), ns)
+    return ns[func.name], ns[adj.name]
 
 
 def _fd_grad_i(f, point, i, h=1e-6):
-  """Central finite-difference partial derivative of f at point w.r.t. arg i."""
-  fwd = list(point)
-  bwd = list(point)
-  fwd[i] += h
-  bwd[i] -= h
-  return (f(*fwd) - f(*bwd)) / (2.0 * h)
+    """Central finite-difference partial derivative of f at point w.r.t. arg i."""
+    fwd = list(point)
+    bwd = list(point)
+    fwd[i] += h
+    bwd[i] -= h
+    return (f(*fwd) - f(*bwd)) / (2.0 * h)
 
 
 def _check_gradients(primal_src, point, seed=1.0, tol=1e-5):
-  """Assert the coarsened adjoint matches finite differences at `point`."""
-  f, df = _build(primal_src)
-  adjoints = df(*point, seed)
-  if not isinstance(adjoints, tuple):
-    adjoints = (adjoints,)
-  assert len(adjoints) == len(point)
-  for i in range(len(point)):
-    expected = seed * _fd_grad_i(f, point, i)
-    assert math.isclose(adjoints[i], expected, rel_tol=tol, abs_tol=1e-6), (
-        'arg %d: adjoint %r != finite-difference %r'
-        % (i, adjoints[i], expected))
-  return adjoints
+    """Assert the coarsened adjoint matches finite differences at `point`."""
+    f, df = _build(primal_src)
+    adjoints = df(*point, seed)
+    if not isinstance(adjoints, tuple):
+        adjoints = (adjoints,)
+    assert len(adjoints) == len(point)
+    for i in range(len(point)):
+        expected = seed * _fd_grad_i(f, point, i)
+        assert math.isclose(adjoints[i], expected, rel_tol=tol, abs_tol=1e-6), (
+            'arg %d: adjoint %r != finite-difference %r' % (i, adjoints[i], expected)
+        )
+    return adjoints
 
 
 class TestCoarseningGradients(unittest.TestCase):
-  """Numerical correctness of the coarsened adjoint vs finite differences."""
+    """Numerical correctness of the coarsened adjoint vs finite differences."""
 
-  def test_single_sin(self):
-    _check_gradients('def f(x):\n    return sin(x)', (0.7,))
+    def test_single_sin(self):
+        _check_gradients('def f(x):\n    return sin(x)', (0.7,))
 
-  def test_product_rule(self):
-    # d/dx [exp(x) * x] = exp(x) * (x + 1)
-    _check_gradients('def f(x):\n    return exp(x) * x', (0.5,))
+    def test_product_rule(self):
+        # d/dx [exp(x) * x] = exp(x) * (x + 1)
+        _check_gradients('def f(x):\n    return exp(x) * x', (0.5,))
 
-  def test_two_inputs(self):
-    _check_gradients('def f(x, y):\n    return x * y + sin(x)', (0.7, 1.3))
+    def test_two_inputs(self):
+        _check_gradients('def f(x, y):\n    return x * y + sin(x)', (0.7, 1.3))
 
-  def test_log(self):
-    # Positive point keeps 1/x on the real branch.
-    _check_gradients('def f(x):\n    return log(x)', (2.0,))
+    def test_log(self):
+        # Positive point keeps 1/x on the real branch.
+        _check_gradients('def f(x):\n    return log(x)', (2.0,))
 
-  def test_sqrt(self):
-    _check_gradients('def f(x):\n    return sqrt(x)', (4.0,))
+    def test_sqrt(self):
+        _check_gradients('def f(x):\n    return sqrt(x)', (4.0,))
 
-  def test_tan(self):
-    _check_gradients('def f(x):\n    return tan(x)', (0.4,))
+    def test_tan(self):
+        _check_gradients('def f(x):\n    return tan(x)', (0.4,))
 
-  def test_attribute_callee(self):
-    # np.sin is an Attribute call target; it must be coarsenable and correct.
-    _check_gradients('def f(x):\n    return np.sin(x)', (0.7,))
+    def test_attribute_callee(self):
+        # np.sin is an Attribute call target; it must be coarsenable and correct.
+        _check_gradients('def f(x):\n    return np.sin(x)', (0.7,))
 
-  def test_multi_statement_inlining(self):
-    # Exercises inlining across several intermediate assignments.
-    src = ('def f(x, y):\n'
-           '    a = x * y\n'
-           '    b = sin(a)\n'
-           '    c = b + x\n'
-           '    return c\n')
-    _check_gradients(src, (0.5, 1.5))
+    def test_multi_statement_inlining(self):
+        # Exercises inlining across several intermediate assignments.
+        src = 'def f(x, y):\n    a = x * y\n    b = sin(a)\n    c = b + x\n    return c\n'
+        _check_gradients(src, (0.5, 1.5))
 
-  def test_unused_input_is_zero(self):
-    # y does not influence the output, so its adjoint must be 0.
-    adjoints = _check_gradients('def f(x, y):\n    return sin(x)', (0.7, 2.0))
-    assert adjoints[1] == 0.0
+    def test_unused_input_is_zero(self):
+        # y does not influence the output, so its adjoint must be 0.
+        adjoints = _check_gradients('def f(x, y):\n    return sin(x)', (0.7, 2.0))
+        assert adjoints[1] == 0.0
 
-  def test_seed_scales_adjoint(self):
-    # A seed of 3 must scale every adjoint by 3 (linearity of the VJP).
-    src = 'def f(x, y):\n    return x * y + sin(x)'
-    point = (0.7, 1.3)
-    base = _check_gradients(src, point, seed=1.0)
-    scaled = _check_gradients(src, point, seed=3.0)
-    for b, s in zip(base, scaled):
-      assert math.isclose(s, 3.0 * b, rel_tol=1e-9, abs_tol=1e-9)
+    def test_seed_scales_adjoint(self):
+        # A seed of 3 must scale every adjoint by 3 (linearity of the VJP).
+        src = 'def f(x, y):\n    return x * y + sin(x)'
+        point = (0.7, 1.3)
+        base = _check_gradients(src, point, seed=1.0)
+        scaled = _check_gradients(src, point, seed=3.0)
+        for b, s in zip(base, scaled):
+            assert math.isclose(s, 3.0 * b, rel_tol=1e-9, abs_tol=1e-9)
 
 
 class TestCoarseningSimplification(unittest.TestCase):
-  """Coarsening should expose cross-operation symbolic simplification."""
+    """Coarsening should expose cross-operation symbolic simplification."""
 
-  def test_trig_identity_collapses_to_zero(self):
-    # sin(x)^2 + cos(x)^2 == 1, so the derivative is exactly 0.  Without
-    # symbolic simplification the naive per-op adjoint would carry the
-    # 2*sin*cos - 2*cos*sin terms.
-    src = 'def f(x):\n    return sin(x) ** 2 + cos(x) ** 2'
-    adjoints = _check_gradients(src, (0.9,))
-    assert adjoints[0] == 0.0
+    def test_trig_identity_collapses_to_zero(self):
+        # sin(x)^2 + cos(x)^2 == 1, so the derivative is exactly 0.  Without
+        # symbolic simplification the naive per-op adjoint would carry the
+        # 2*sin*cos - 2*cos*sin terms.
+        src = 'def f(x):\n    return sin(x) ** 2 + cos(x) ** 2'
+        adjoints = _check_gradients(src, (0.9,))
+        assert adjoints[0] == 0.0
 
-  def test_log_exp_cancellation(self):
-    # log(exp(x)) == x, so the derivative simplifies to exactly 1.
-    src = 'def f(x):\n    return log(exp(x))'
-    adjoints = _check_gradients(src, (0.3,))
-    assert math.isclose(adjoints[0], 1.0, rel_tol=1e-9, abs_tol=1e-9)
+    def test_log_exp_cancellation(self):
+        # log(exp(x)) == x, so the derivative simplifies to exactly 1.
+        src = 'def f(x):\n    return log(exp(x))'
+        adjoints = _check_gradients(src, (0.3,))
+        assert math.isclose(adjoints[0], 1.0, rel_tol=1e-9, abs_tol=1e-9)
 
 
 class TestCoarseningRejection(unittest.TestCase):
-  """Non-straight-line inputs must be rejected (return None), never miscompiled."""
+    """Non-straight-line inputs must be rejected (return None), never miscompiled."""
 
-  def _assert_rejected(self, src):
-    func = gast.parse(src).body[0]
-    self.assertIsNone(apply_coarsening(func))
+    def _assert_rejected(self, src):
+        func = gast.parse(src).body[0]
+        self.assertIsNone(apply_coarsening(func))
 
-  def test_control_flow(self):
-    self._assert_rejected(
-        'def g(x):\n    if x > 0:\n        return x\n    return -x\n')
+    def test_control_flow(self):
+        self._assert_rejected('def g(x):\n    if x > 0:\n        return x\n    return -x\n')
 
-  def test_loops(self):
-    self._assert_rejected(
-        'def g(x):\n    s = x\n    for i in range(3):\n        s = s * x\n'
-        '    return s\n')
+    def test_loops(self):
+        self._assert_rejected(
+            'def g(x):\n    s = x\n    for i in range(3):\n        s = s * x\n    return s\n'
+        )
 
-  def test_unsupported_call(self):
-    self._assert_rejected('def h(x):\n    return unknown_op(x)\n')
+    def test_unsupported_call(self):
+        self._assert_rejected('def h(x):\n    return unknown_op(x)\n')
 
-  def test_augmented_assignment(self):
-    self._assert_rejected('def h(x):\n    y = x\n    y += x\n    return y\n')
+    def test_augmented_assignment(self):
+        self._assert_rejected('def h(x):\n    y = x\n    y += x\n    return y\n')
 
-  def test_subscript_target(self):
-    self._assert_rejected(
-        'def h(x):\n    out = x\n    out[0] = x\n    return out\n')
+    def test_subscript_target(self):
+        self._assert_rejected('def h(x):\n    out = x\n    out[0] = x\n    return out\n')
 
-  def test_attribute_data_access(self):
-    # Attribute used as data (not as a call target) must be rejected.
-    self._assert_rejected('def h(x):\n    return x.real\n')
+    def test_attribute_data_access(self):
+        # Attribute used as data (not as a call target) must be rejected.
+        self._assert_rejected('def h(x):\n    return x.real\n')
 
-  def test_no_return(self):
-    self._assert_rejected('def h(x):\n    y = x\n')
+    def test_no_return(self):
+        self._assert_rejected('def h(x):\n    y = x\n')
 
-  def test_empty_return(self):
-    self._assert_rejected('def h(x):\n    y = x\n    return\n')
+    def test_empty_return(self):
+        self._assert_rejected('def h(x):\n    y = x\n    return\n')
 
-  def test_varargs(self):
-    self._assert_rejected('def h(*xs):\n    return xs\n')
+    def test_varargs(self):
+        self._assert_rejected('def h(*xs):\n    return xs\n')
 
 
 class TestCoarsenerAPI(unittest.TestCase):
-  """Exercise the StraightLineCoarsener object and configuration options."""
+    """Exercise the StraightLineCoarsener object and configuration options."""
 
-  def test_diagnostics(self):
-    src = 'def f(x, y):\n    return x * y'
-    func = gast.parse(src).body[0]
-    coarsener = StraightLineCoarsener()
-    adj = coarsener.coarsen(func)
-    self.assertIsNotNone(adj)
-    self.assertEqual(coarsener.inputs, ['x', 'y'])
-    self.assertIsNotNone(coarsener.output_expr)
+    def test_diagnostics(self):
+        src = 'def f(x, y):\n    return x * y'
+        func = gast.parse(src).body[0]
+        coarsener = StraightLineCoarsener()
+        adj = coarsener.coarsen(func)
+        self.assertIsNotNone(adj)
+        self.assertEqual(coarsener.inputs, ['x', 'y'])
+        self.assertIsNotNone(coarsener.output_expr)
 
-  def test_custom_seed_name(self):
-    src = 'def f(x):\n    return sin(x)'
-    func = gast.parse(src).body[0]
-    adj = apply_coarsening(func, config={'seed_name': 'g_out'})
-    param_names = [getattr(a, 'id', None) or getattr(a, 'arg', None)
-                   for a in adj.args.args]
-    self.assertEqual(param_names, ['x', 'g_out'])
+    def test_custom_seed_name(self):
+        src = 'def f(x):\n    return sin(x)'
+        func = gast.parse(src).body[0]
+        adj = apply_coarsening(func, config={'seed_name': 'g_out'})
+        param_names = [getattr(a, 'id', None) or getattr(a, 'arg', None) for a in adj.args.args]
+        self.assertEqual(param_names, ['x', 'g_out'])
 
-  def test_simplify_toggle(self):
-    # With simplification disabled the result must still be a valid adjoint.
-    src = 'def f(x):\n    return sin(x) ** 2 + cos(x) ** 2'
-    func = gast.parse(src).body[0]
-    adj = apply_coarsening(func, config={'simplify': False})
-    self.assertIsNotNone(adj)
+    def test_simplify_toggle(self):
+        # With simplification disabled the result must still be a valid adjoint.
+        src = 'def f(x):\n    return sin(x) ** 2 + cos(x) ** 2'
+        func = gast.parse(src).body[0]
+        adj = apply_coarsening(func, config={'simplify': False})
+        self.assertIsNotNone(adj)
 
 
 class TestCoarseningVsTangent(unittest.TestCase):
-  """End-to-end: the coarsened adjoint must agree with tangent.grad."""
+    """End-to-end: the coarsened adjoint must agree with tangent.grad."""
 
-  def test_matches_tangent_grad(self):
-    tangent = pytest.importorskip('tangent')
-    import inspect
+    def test_matches_tangent_grad(self):
+        tangent = pytest.importorskip('tangent')
+        import inspect
 
-    gf = tangent.grad(_primal_np, wrt=(0, 1))
-    x, y = 0.5, 1.5
-    tx, ty = gf(x, y)
-    tx, ty = float(np.asarray(tx)), float(np.asarray(ty))
+        gf = tangent.grad(_primal_np, wrt=(0, 1))
+        x, y = 0.5, 1.5
+        tx, ty = gf(x, y)
+        tx, ty = float(np.asarray(tx)), float(np.asarray(ty))
 
-    src = inspect.getsource(_primal_np)
-    func = gast.parse(src).body[0]
-    adj = apply_coarsening(func)
-    self.assertIsNotNone(adj)
+        src = inspect.getsource(_primal_np)
+        func = gast.parse(src).body[0]
+        adj = apply_coarsening(func)
+        self.assertIsNotNone(adj)
 
-    # The primal used np.sin; the lowered adjoint refers to bare sin/cos.
-    ns = {'sin': math.sin, 'cos': math.cos}
-    exec(gast.unparse(adj), ns)
-    cx, cy = ns[adj.name](x, y, 1.0)
+        # The primal used np.sin; the lowered adjoint refers to bare sin/cos.
+        ns = {'sin': math.sin, 'cos': math.cos}
+        exec(gast.unparse(adj), ns)
+        cx, cy = ns[adj.name](x, y, 1.0)
 
-    assert math.isclose(tx, cx, rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(ty, cy, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(tx, cx, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(ty, cy, rel_tol=1e-6, abs_tol=1e-9)
 
 
 class TestCoarseningGradIntegration(unittest.TestCase):
-  """End-to-end tests of the opt-in optimizations={'coarsening': True} path
-  through tangent.grad. The coarsened gradient must agree with both the
-  analytic gradient and the standard (non-coarsened) pipeline, and anything
-  not coarsenable must transparently fall back to the standard pipeline."""
+    """End-to-end tests of the opt-in optimizations={'coarsening': True} path
+    through tangent.grad. The coarsened gradient must agree with both the
+    analytic gradient and the standard (non-coarsened) pipeline, and anything
+    not coarsenable must transparently fall back to the standard pipeline."""
 
-  def test_coarsened_grad_matches_analytic_and_standard(self):
-    def f(x, y):
-      z = x * y
-      return np.sin(z) + x * x
+    def test_coarsened_grad_matches_analytic_and_standard(self):
+        def f(x, y):
+            z = x * y
+            return np.sin(z) + x * x
 
-    x, y = 0.5, 1.1
-    z = x * y
-    ex_gx = np.cos(z) * y + 2 * x
-    ex_gy = np.cos(z) * x
+        x, y = 0.5, 1.1
+        z = x * y
+        ex_gx = np.cos(z) * y + 2 * x
+        ex_gy = np.cos(z) * x
 
-    df_std = tangent.grad(f, wrt=(0, 1))
-    gx_s, gy_s = df_std(x, y)
-    df_c = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
-    gx_c, gy_c = df_c(x, y)
+        df_std = tangent.grad(f, wrt=(0, 1))
+        gx_s, gy_s = df_std(x, y)
+        df_c = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
+        gx_c, gy_c = df_c(x, y)
 
-    assert math.isclose(float(gx_c), ex_gx, rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(float(gy_c), ex_gy, rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(float(gx_c), float(gx_s), rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(float(gy_c), float(gy_s), rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(gx_c), ex_gx, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(gy_c), ex_gy, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(gx_c), float(gx_s), rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(gy_c), float(gy_s), rel_tol=1e-6, abs_tol=1e-9)
 
-  def test_coarsened_grad_single_wrt(self):
-    def f(x, y):
-      return np.exp(x) * y
+    def test_coarsened_grad_single_wrt(self):
+        def f(x, y):
+            return np.exp(x) * y
 
-    x, y = 0.4, 2.0
-    df = tangent.grad(f, wrt=(0,), optimizations={'coarsening': True})
-    # d/dx [exp(x) * y] = exp(x) * y
-    assert math.isclose(float(df(x, y)), np.exp(x) * y,
-                        rel_tol=1e-6, abs_tol=1e-9)
+        x, y = 0.4, 2.0
+        df = tangent.grad(f, wrt=(0,), optimizations={'coarsening': True})
+        # d/dx [exp(x) * y] = exp(x) * y
+        assert math.isclose(float(df(x, y)), np.exp(x) * y, rel_tol=1e-6, abs_tol=1e-9)
 
-  def test_coarsened_grad_array_inputs(self):
-    def f(x, y):
-      return np.sum(np.sin(x * y) + x * x)
+    def test_coarsened_grad_array_inputs(self):
+        def f(x, y):
+            return np.sum(np.sin(x * y) + x * x)
 
-    x = np.array([0.5, 1.1], dtype='float32')
-    y = np.array([0.7, -0.3], dtype='float32')
-    z = x * y
-    ex_gx = np.cos(z) * y + 2 * x
-    ex_gy = np.cos(z) * x
+        x = np.array([0.5, 1.1], dtype='float32')
+        y = np.array([0.7, -0.3], dtype='float32')
+        z = x * y
+        ex_gx = np.cos(z) * y + 2 * x
+        ex_gy = np.cos(z) * x
 
-    # np.sum is not coarsenable, so this exercises the fallback; the result
-    # must still be correct.
-    df = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
-    gx, gy = df(x, y)
-    assert np.allclose(np.asarray(gx), ex_gx, atol=1e-5)
-    assert np.allclose(np.asarray(gy), ex_gy, atol=1e-5)
+        # np.sum is not coarsenable, so this exercises the fallback; the result
+        # must still be correct.
+        df = tangent.grad(f, wrt=(0, 1), optimizations={'coarsening': True})
+        gx, gy = df(x, y)
+        assert np.allclose(np.asarray(gx), ex_gx, atol=1e-5)
+        assert np.allclose(np.asarray(gy), ex_gy, atol=1e-5)
 
-  def test_fallback_for_control_flow(self):
-    def g(a):
-      if a > 0:
-        return a * a
-      return -a
+    def test_fallback_for_control_flow(self):
+        def g(a):
+            if a > 0:
+                return a * a
+            return -a
 
-    dg = tangent.grad(g, optimizations={'coarsening': True})
-    assert math.isclose(float(dg(2.0)), 4.0, rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(float(dg(-3.0)), -1.0, rel_tol=1e-6, abs_tol=1e-9)
+        dg = tangent.grad(g, optimizations={'coarsening': True})
+        assert math.isclose(float(dg(2.0)), 4.0, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(dg(-3.0)), -1.0, rel_tol=1e-6, abs_tol=1e-9)
 
-  def test_cache_does_not_collide_with_standard(self):
-    # Calling with and without coarsening on the same function must both give
-    # correct results (the cache is bypassed for the coarsened variant).
-    def f(x):
-      return np.cos(x) * x
+    def test_cache_does_not_collide_with_standard(self):
+        # Calling with and without coarsening on the same function must both give
+        # correct results (the cache is bypassed for the coarsened variant).
+        def f(x):
+            return np.cos(x) * x
 
-    x = 0.9
-    expected = -np.sin(x) * x + np.cos(x)
-    df_std = tangent.grad(f)
-    df_c = tangent.grad(f, optimizations={'coarsening': True})
-    assert math.isclose(float(df_std(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
-    assert math.isclose(float(df_c(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
-    # Repeat to exercise the cache for the standard variant.
-    assert math.isclose(float(tangent.grad(f)(x)), expected,
-                        rel_tol=1e-6, abs_tol=1e-9)
+        x = 0.9
+        expected = -np.sin(x) * x + np.cos(x)
+        df_std = tangent.grad(f)
+        df_c = tangent.grad(f, optimizations={'coarsening': True})
+        assert math.isclose(float(df_std(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
+        assert math.isclose(float(df_c(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
+        # Repeat to exercise the cache for the standard variant.
+        assert math.isclose(float(tangent.grad(f)(x)), expected, rel_tol=1e-6, abs_tol=1e-9)
 
-  def test_inverse_trig_coarsens_and_matches(self):
-    import inspect
+    def test_inverse_trig_coarsens_and_matches(self):
+        import inspect
 
-    # Confirm it is genuinely coarsened, not silently falling back.
-    func_ast = gast.parse(inspect.getsource(_inverse_trig_primal)).body[0]
-    assert apply_coarsening(func_ast) is not None
+        # Confirm it is genuinely coarsened, not silently falling back.
+        func_ast = gast.parse(inspect.getsource(_inverse_trig_primal)).body[0]
+        assert apply_coarsening(func_ast) is not None
 
-    df_std = tangent.grad(_inverse_trig_primal)
-    df_c = tangent.grad(_inverse_trig_primal,
-                        optimizations={'coarsening': True})
-    # Scalar input: the coarsening uses a scalar symbolic model, so it is
-    # exact here (for array inputs it returns a scalar gradient and the
-    # standard pipeline is the one to use).
-    x = 0.5
-    assert math.isclose(float(df_c(x)), float(df_std(x)),
-                        rel_tol=1e-6, abs_tol=1e-9)
+        df_std = tangent.grad(_inverse_trig_primal)
+        df_c = tangent.grad(_inverse_trig_primal, optimizations={'coarsening': True})
+        # Scalar input: the coarsening uses a scalar symbolic model, so it is
+        # exact here (for array inputs it returns a scalar gradient and the
+        # standard pipeline is the one to use).
+        x = 0.5
+        assert math.isclose(float(df_c(x)), float(df_std(x)), rel_tol=1e-6, abs_tol=1e-9)
 
 
 class TestCoarseningBenefits(unittest.TestCase):
-  """Coarsening should produce a materially smaller gradient than the
-  per-op pipeline: fewer statements and no tape traffic, because the whole
-  straight-line segment is differentiated symbolically in one shot."""
+    """Coarsening should produce a materially smaller gradient than the
+    per-op pipeline: fewer statements and no tape traffic, because the whole
+    straight-line segment is differentiated symbolically in one shot."""
 
-  def test_fewer_statements_than_optimized_standard_grad(self):
-    import inspect
-    # The fair baseline is the *optimized* standard gradient (what users
-    # would normally run), not the raw unoptimized expansion.
-    df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=True)
-    std_ast = gast.parse(inspect.getsource(df_std)).body[0]
-    std_stmts, _ = _count_statements_and_tape(std_ast)
+    def test_fewer_statements_than_optimized_standard_grad(self):
+        import inspect
 
-    adj = apply_coarsening(
-        gast.parse(inspect.getsource(_benefit_primal)).body[0])
-    self.assertIsNotNone(adj)
-    c_stmts, _ = _count_statements_and_tape(adj)
+        # The fair baseline is the *optimized* standard gradient (what users
+        # would normally run), not the raw unoptimized expansion.
+        df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=True)
+        std_ast = gast.parse(inspect.getsource(df_std)).body[0]
+        std_stmts, _ = _count_statements_and_tape(std_ast)
 
-    self.assertLess(c_stmts, std_stmts)
+        adj = apply_coarsening(gast.parse(inspect.getsource(_benefit_primal)).body[0])
+        self.assertIsNotNone(adj)
+        c_stmts, _ = _count_statements_and_tape(adj)
 
-  def test_coarsened_adjoint_is_tape_free(self):
-    import inspect
-    # The unoptimized standard gradient emits tape push/pop pairs for the
-    # intermediates; the coarsened adjoint inlines them and emits none.
-    df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=False)
-    std_ast = gast.parse(inspect.getsource(df_std)).body[0]
-    _, std_tape = _count_statements_and_tape(std_ast)
+        self.assertLess(c_stmts, std_stmts)
 
-    adj = apply_coarsening(
-        gast.parse(inspect.getsource(_benefit_primal)).body[0])
-    self.assertIsNotNone(adj)
-    _, c_tape = _count_statements_and_tape(adj)
+    def test_coarsened_adjoint_is_tape_free(self):
+        import inspect
 
-    self.assertGreater(std_tape, 0)
-    self.assertEqual(c_tape, 0)
+        # The unoptimized standard gradient emits tape push/pop pairs for the
+        # intermediates; the coarsened adjoint inlines them and emits none.
+        df_std = tangent.grad(_benefit_primal, wrt=(0, 1, 2), optimized=False)
+        std_ast = gast.parse(inspect.getsource(df_std)).body[0]
+        _, std_tape = _count_statements_and_tape(std_ast)
 
-  def test_coarsened_body_is_one_statement_per_input_plus_return(self):
-    import inspect
-    adj = apply_coarsening(
-        gast.parse(inspect.getsource(_benefit_primal)).body[0])
-    self.assertIsNotNone(adj)
-    # Args are the primal inputs plus the seed; the body is one adjoint
-    # assignment per input plus the return, regardless of how many
-    # intermediate ops the primal had.
-    n_inputs = len(adj.args.args) - 1
-    self.assertEqual(len(adj.body), n_inputs + 1)
+        adj = apply_coarsening(gast.parse(inspect.getsource(_benefit_primal)).body[0])
+        self.assertIsNotNone(adj)
+        _, c_tape = _count_statements_and_tape(adj)
+
+        self.assertGreater(std_tape, 0)
+        self.assertEqual(c_tape, 0)
+
+    def test_coarsened_body_is_one_statement_per_input_plus_return(self):
+        import inspect
+
+        adj = apply_coarsening(gast.parse(inspect.getsource(_benefit_primal)).body[0])
+        self.assertIsNotNone(adj)
+        # Args are the primal inputs plus the seed; the body is one adjoint
+        # assignment per input plus the return, regardless of how many
+        # intermediate ops the primal had.
+        n_inputs = len(adj.args.args) - 1
+        self.assertEqual(len(adj.body), n_inputs + 1)
 
 
 def test_elementwise_support_set_is_exact():
-  """The coarsening support set must exactly match the ops that coarsen
-  end-to-end: every op in _SUPPORTED_ELEMENTWISE coarsens, and every other
-  elementwise op falls back. This catches drift if the SymPy converters gain
-  or lose support (e.g. a newly lowerable derivative)."""
-  from tangent.optimizations.coarsening import _SUPPORTED_ELEMENTWISE
+    """The coarsening support set must exactly match the ops that coarsen
+    end-to-end: every op in _SUPPORTED_ELEMENTWISE coarsens, and every other
+    elementwise op falls back. This catches drift if the SymPy converters gain
+    or lose support (e.g. a newly lowerable derivative)."""
+    from tangent.optimizations.coarsening import _SUPPORTED_ELEMENTWISE
 
-  # coarsening op name -> numpy attribute name
-  np_name = {'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}
-  candidates = ['sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
-                'abs', 'sinh', 'cosh', 'tanh', 'asin', 'acos', 'atan']
+    # coarsening op name -> numpy attribute name
+    np_name = {'asin': 'arcsin', 'acos': 'arccos', 'atan': 'arctan'}
+    candidates = [
+        'sin',
+        'cos',
+        'tan',
+        'exp',
+        'log',
+        'sqrt',
+        'abs',
+        'sinh',
+        'cosh',
+        'tanh',
+        'asin',
+        'acos',
+        'atan',
+    ]
 
-  coarsenable = set()
-  for op in candidates:
-    src = 'def f(x):\n    return np.%s(x)' % np_name.get(op, op)
-    if apply_coarsening(gast.parse(src).body[0]) is not None:
-      # Record the callee name as it appears in the AST (the numpy spelling),
-      # which is what _SUPPORTED_ELEMENTWISE is matched against.
-      coarsenable.add(np_name.get(op, op))
+    coarsenable = set()
+    for op in candidates:
+        src = 'def f(x):\n    return np.%s(x)' % np_name.get(op, op)
+        if apply_coarsening(gast.parse(src).body[0]) is not None:
+            # Record the callee name as it appears in the AST (the numpy spelling),
+            # which is what _SUPPORTED_ELEMENTWISE is matched against.
+            coarsenable.add(np_name.get(op, op))
 
-  assert coarsenable == set(_SUPPORTED_ELEMENTWISE), (
-      'coarsenable=%s supported=%s' % (sorted(coarsenable),
-                                       sorted(_SUPPORTED_ELEMENTWISE)))
+    assert coarsenable == set(_SUPPORTED_ELEMENTWISE), 'coarsenable=%s supported=%s' % (
+        sorted(coarsenable),
+        sorted(_SUPPORTED_ELEMENTWISE),
+    )
 
 
 if __name__ == '__main__':
-  unittest.main(verbosity=2)
+    unittest.main(verbosity=2)

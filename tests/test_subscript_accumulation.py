@@ -10,6 +10,7 @@ producing gradients that were too small.
 The adjoint now accumulates (``add_grad_at_index``), matching how Tangent
 accumulates every other gradient.
 """
+
 import numpy as np
 import pytest
 
@@ -52,6 +53,7 @@ class TestArrayElementAccumulation:
 
     def test_element_read_once_unchanged(self):
         """Single reads must still be correct (regression guard)."""
+
         def f(a):
             return a[1] * 3.0
 
@@ -66,7 +68,7 @@ class TestDictValueAccumulation:
     def test_dict_value_in_loop(self):
         def f(x):
             total = 0.0
-            d = {'w': x ** 2}
+            d = {'w': x**2}
             for i in range(3):
                 total = total + d['w']
             return total
@@ -87,7 +89,7 @@ class TestDictValueAccumulation:
     def test_multi_key_dict_in_loop(self):
         def f(x):
             total = 0.0
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             for i in range(2):
                 total = total + d['a'] + d['b']
             return total

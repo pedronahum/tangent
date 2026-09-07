@@ -39,6 +39,7 @@ After transformation:
         # calc = Calculator() removed
         return x ** 2  # Method body inlined
 """
+
 from __future__ import absolute_import
 
 import copy
@@ -71,9 +72,13 @@ class ClassMethodInliner(gast.NodeTransformer):
         # both, mirroring annotate.ResolveCalls.
         self.namespace = dict(func.__globals__)
         if func.__closure__:
-            self.namespace.update(dict(zip(
-                func.__code__.co_freevars,
-                (cell.cell_contents for cell in func.__closure__))))
+            self.namespace.update(
+                dict(
+                    zip(
+                        func.__code__.co_freevars, (cell.cell_contents for cell in func.__closure__)
+                    )
+                )
+            )
 
         # Map variable name -> class info
         # e.g., 'calc' -> {'class': Calculator, 'init_args': [...]}
@@ -93,11 +98,12 @@ class ClassMethodInliner(gast.NodeTransformer):
             Modified node or None (if we remove the assignment)
         """
         # Check for pattern: var = ClassName(args)
-        if (isinstance(node.value, gast.Call) and
-            isinstance(node.value.func, gast.Name) and
-            len(node.targets) == 1 and
-            isinstance(node.targets[0], gast.Name)):
-
+        if (
+            isinstance(node.value, gast.Call)
+            and isinstance(node.value.func, gast.Name)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], gast.Name)
+        ):
             class_name = node.value.func.id
             var_name = node.targets[0].id
 
@@ -112,14 +118,14 @@ class ClassMethodInliner(gast.NodeTransformer):
                     self.instance_vars[var_name] = {
                         'class': potential_class,
                         'init_args': node.value.args,
-                        'init_keywords': node.value.keywords
+                        'init_keywords': node.value.keywords,
                     }
 
                     # Parse __init__ to extract instance attributes
                     if hasattr(potential_class, '__init__'):
-                        self._extract_instance_attrs(var_name, potential_class,
-                                                     node.value.args,
-                                                     node.value.keywords)
+                        self._extract_instance_attrs(
+                            var_name, potential_class, node.value.args, node.value.keywords
+                        )
 
                     # Remove the instantiation - we'll inline methods instead
                     return None
@@ -186,12 +192,13 @@ class ClassMethodInliner(gast.NodeTransformer):
 
         # Now process current class's attribute assignments
         for stmt in init_ast.body:
-            if (isinstance(stmt, gast.Assign) and
-                len(stmt.targets) == 1 and
-                isinstance(stmt.targets[0], gast.Attribute) and
-                isinstance(stmt.targets[0].value, gast.Name) and
-                stmt.targets[0].value.id == 'self'):
-
+            if (
+                isinstance(stmt, gast.Assign)
+                and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], gast.Attribute)
+                and isinstance(stmt.targets[0].value, gast.Name)
+                and stmt.targets[0].value.id == 'self'
+            ):
                 attr_name = stmt.targets[0].attr
 
                 # Substitute parameters in the RHS
@@ -220,21 +227,21 @@ class ClassMethodInliner(gast.NodeTransformer):
 
         if isinstance(stmt, gast.Expr) and isinstance(stmt.value, gast.Call):
             call_node = stmt.value
-        elif (isinstance(stmt, gast.Assign) and
-              isinstance(stmt.value, gast.Call)):
+        elif isinstance(stmt, gast.Assign) and isinstance(stmt.value, gast.Call):
             call_node = stmt.value
 
         if call_node is None:
             return {}
 
         # Check if this is super().__init__(...)
-        if not (isinstance(call_node.func, gast.Attribute) and
-                call_node.func.attr == '__init__'):
+        if not (isinstance(call_node.func, gast.Attribute) and call_node.func.attr == '__init__'):
             return {}
 
-        if not (isinstance(call_node.func.value, gast.Call) and
-                isinstance(call_node.func.value.func, gast.Name) and
-                call_node.func.value.func.id == 'super'):
+        if not (
+            isinstance(call_node.func.value, gast.Call)
+            and isinstance(call_node.func.value.func, gast.Name)
+            and call_node.func.value.func.id == 'super'
+        ):
             return {}
 
         # Found super().__init__() call!
@@ -254,10 +261,7 @@ class ClassMethodInliner(gast.NodeTransformer):
         super_keywords = []
         for kw in call_node.keywords:
             super_keywords.append(
-                gast.keyword(
-                    arg=kw.arg,
-                    value=self._substitute_params(kw.value, param_map)
-                )
+                gast.keyword(arg=kw.arg, value=self._substitute_params(kw.value, param_map))
             )
 
         # Recursively extract attributes from parent class
@@ -280,9 +284,7 @@ class ClassMethodInliner(gast.NodeTransformer):
             Inlined method body or original node
         """
         # Check for pattern: obj.method(args)
-        if (isinstance(node.func, gast.Attribute) and
-            isinstance(node.func.value, gast.Name)):
-
+        if isinstance(node.func, gast.Attribute) and isinstance(node.func.value, gast.Name):
             obj_name = node.func.value.id
             method_name = node.func.attr
 
@@ -297,8 +299,7 @@ class ClassMethodInliner(gast.NodeTransformer):
                     # Only inline if it's an instance method
                     if inspect.ismethod(method) or inspect.isfunction(method):
                         # Inline the method!
-                        return self._inline_method(method, obj_name, node.args,
-                                                   node.keywords)
+                        return self._inline_method(method, obj_name, node.args, node.keywords)
 
         # Not a tracked method call, visit normally
         self.generic_visit(node)
@@ -349,8 +350,7 @@ class ClassMethodInliner(gast.NodeTransformer):
                 param_map[keyword.arg] = keyword.value
 
             # Substitute parameters and 'self' in the return expression
-            inlined_expr = self._substitute_in_expr(
-                return_stmt.value, param_map, instance_var)
+            inlined_expr = self._substitute_in_expr(return_stmt.value, param_map, instance_var)
 
             return inlined_expr
 
@@ -361,9 +361,11 @@ class ClassMethodInliner(gast.NodeTransformer):
                 func=gast.Attribute(
                     value=gast.Name(id=instance_var, ctx=gast.Load(), annotation=None),
                     attr=method.__name__,
-                    ctx=gast.Load()),
+                    ctx=gast.Load(),
+                ),
                 args=args,
-                keywords=keywords)
+                keywords=keywords,
+            )
 
     def _substitute_in_expr(self, expr, param_map, instance_var):
         """Recursively substitute parameters and 'self' in an expression.
@@ -394,24 +396,23 @@ class ClassMethodInliner(gast.NodeTransformer):
 
             def visit_Attribute(self, node):
                 # Substitute self.attr
-                if (isinstance(node.value, gast.Name) and
-                    node.value.id == 'self'):
-
+                if isinstance(node.value, gast.Name) and node.value.id == 'self':
                     attr_name = node.attr
 
                     # If we know the attribute value from __init__, use it
-                    if (self.instance_var in self.instance_attrs and
-                        attr_name in self.instance_attrs[self.instance_var]):
-                        return copy.deepcopy(
-                            self.instance_attrs[self.instance_var][attr_name])
+                    if (
+                        self.instance_var in self.instance_attrs
+                        and attr_name in self.instance_attrs[self.instance_var]
+                    ):
+                        return copy.deepcopy(self.instance_attrs[self.instance_var][attr_name])
 
                     # Otherwise, replace self with instance variable name
                     # This handles cases where attributes aren't set in __init__
                     return gast.Attribute(
-                        value=gast.Name(id=self.instance_var, ctx=gast.Load(),
-                                       annotation=None),
+                        value=gast.Name(id=self.instance_var, ctx=gast.Load(), annotation=None),
                         attr=attr_name,
-                        ctx=node.ctx)
+                        ctx=node.ctx,
+                    )
 
                 # Recursively visit the value
                 self.generic_visit(node)
@@ -419,15 +420,16 @@ class ClassMethodInliner(gast.NodeTransformer):
 
             def visit_Call(self, node):
                 # Handle self.method() calls (method chaining)
-                if (isinstance(node.func, gast.Attribute) and
-                    isinstance(node.func.value, gast.Name) and
-                    node.func.value.id == 'self'):
-
+                if (
+                    isinstance(node.func, gast.Attribute)
+                    and isinstance(node.func.value, gast.Name)
+                    and node.func.value.id == 'self'
+                ):
                     # This is a self.method() call - we'll handle it in the outer transformer
                     # For now, just replace self with the instance variable
-                    node.func.value = gast.Name(id=self.instance_var,
-                                                ctx=gast.Load(),
-                                                annotation=None)
+                    node.func.value = gast.Name(
+                        id=self.instance_var, ctx=gast.Load(), annotation=None
+                    )
 
                 # Recursively visit arguments
                 self.generic_visit(node)

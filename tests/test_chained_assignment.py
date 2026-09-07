@@ -10,6 +10,7 @@ copies:
 which the existing machinery differentiates correctly (gradients accumulate
 across the copies).
 """
+
 import pytest
 
 import tangent
@@ -26,7 +27,7 @@ class TestChainedAssignment:
 
     def test_three_targets(self):
         def f(x):
-            a = b = c = x ** 2
+            a = b = c = x**2
             return a + b + c
 
         # 3 * x^2 -> gradient 6x = 12 at x = 2
@@ -42,7 +43,7 @@ class TestChainedAssignment:
 
     def test_expression_referencing_input(self):
         def f(x):
-            a = b = x ** 3 + x
+            a = b = x**3 + x
             return a - b
 
         # a - b = 0 -> gradient 0
@@ -58,16 +59,15 @@ class TestChainedAssignment:
 
     def test_equivalent_to_separate_assignments(self):
         def chained(x):
-            a = b = x ** 2
+            a = b = x**2
             return a + b
 
         def separate(x):
-            a = x ** 2
+            a = x**2
             b = a
             return a + b
 
-        assert tangent.grad(chained)(3.0) == pytest.approx(
-            tangent.grad(separate)(3.0))
+        assert tangent.grad(chained)(3.0) == pytest.approx(tangent.grad(separate)(3.0))
 
 
 if __name__ == '__main__':

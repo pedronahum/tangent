@@ -32,11 +32,11 @@ Transformation Examples:
     # After:
     return x * y + x ** 2
 """
+
 from __future__ import absolute_import
 
 import gast
 import copy
-
 
 
 class LambdaInliner(gast.NodeTransformer):
@@ -60,10 +60,11 @@ class LambdaInliner(gast.NodeTransformer):
     def visit_Assign(self, node):
         """Track assignments of lambdas to variables."""
         # Check if this is assigning a lambda to a simple name
-        if (len(node.targets) == 1 and
-                isinstance(node.targets[0], gast.Name) and
-                isinstance(node.value, gast.Lambda)):
-
+        if (
+            len(node.targets) == 1
+            and isinstance(node.targets[0], gast.Name)
+            and isinstance(node.value, gast.Lambda)
+        ):
             var_name = node.targets[0].id
             lambda_node = node.value
 
@@ -98,10 +99,7 @@ class LambdaInliner(gast.NodeTransformer):
             substitutions = dict(zip(param_names, node.args))
 
             # Inline the lambda body with substituted arguments
-            inlined_body = self._substitute_args(
-                copy.deepcopy(lambda_node.body),
-                substitutions
-            )
+            inlined_body = self._substitute_args(copy.deepcopy(lambda_node.body), substitutions)
 
             # Return the inlined expression
             return inlined_body
@@ -118,6 +116,7 @@ class LambdaInliner(gast.NodeTransformer):
         Returns:
             Modified AST node with substitutions applied
         """
+
         class ArgSubstituter(gast.NodeTransformer):
             def __init__(self, subs):
                 self.subs = subs

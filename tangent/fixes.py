@@ -28,6 +28,7 @@ with assignment (`CleanGrad`) or we explicitly initialize the gradient to zeros
 (`FixGrad`, e.g. in loops).
 
 """
+
 from __future__ import absolute_import
 import gast
 
@@ -39,94 +40,98 @@ from tangent import utils
 
 
 class CleanStack(transformers.TreeTransformer):
-  """Remove stack pushes of variables that are never defined."""
+    """Remove stack pushes of variables that are never defined."""
 
-  def visit(self, node):
-    # Remove all AD-generated pushes of unused variables.
-    if anno.hasanno(node, 'push_var') and anno.hasanno(
-        node, 'pop') and anno.hasanno(node, 'gen_push'):
-      defs = frozenset(id_
-                       for id_, node in anno.getanno(node, 'definitions_in'))
-      if ast_.get_name(anno.getanno(node, 'push_var')) not in defs:
-        self.remove(node)
-        self.remove(anno.getanno(node, 'pop'))
-    return super(CleanStack, self).visit(node)
+    def visit(self, node):
+        # Remove all AD-generated pushes of unused variables.
+        if (
+            anno.hasanno(node, 'push_var')
+            and anno.hasanno(node, 'pop')
+            and anno.hasanno(node, 'gen_push')
+        ):
+            defs = frozenset(id_ for id_, node in anno.getanno(node, 'definitions_in'))
+            if ast_.get_name(anno.getanno(node, 'push_var')) not in defs:
+                self.remove(node)
+                self.remove(anno.getanno(node, 'pop'))
+        return super(CleanStack, self).visit(node)
 
 
 class FixStack(transformers.TreeTransformer):
-  """Explicitly defines variables that might not be defined."""
+    """Explicitly defines variables that might not be defined."""
 
-  def visit(self, node):
-    if anno.hasanno(node, 'push_var'):
-      varname = ast_.get_name(anno.getanno(node, 'push_var'))
+    def visit(self, node):
+        if anno.hasanno(node, 'push_var'):
+            varname = ast_.get_name(anno.getanno(node, 'push_var'))
 
-      # FIX: Validate variable name before using it
-      # Empty strings or strings that start with digits are not valid Python identifiers
-      if not varname or not varname.isidentifier():
-        # Generate a safe fallback name using node's memory address
-        varname = '_slice_var_{:x}'.format(id(node) & 0xFFFFFFFF)
+            # FIX: Validate variable name before using it
+            # Empty strings or strings that start with digits are not valid Python identifiers
+            if not varname or not varname.isidentifier():
+                # Generate a safe fallback name using node's memory address
+                varname = '_slice_var_{:x}'.format(id(node) & 0xFFFFFFFF)
 
-      if varname not in anno.getanno(node, 'defined_in'):
-        self.insert_top(quoting.quote('{} = None'.format(varname)))
-    return super(FixStack, self).visit(node)
+            if varname not in anno.getanno(node, 'defined_in'):
+                self.insert_top(quoting.quote('{} = None'.format(varname)))
+        return super(FixStack, self).visit(node)
 
 
 class CleanGrad(gast.NodeTransformer):
-  """Replace `dx = dx + partial` with `dx = partial` if `dx` undefined."""
+    """Replace `dx = dx + partial` with `dx = partial` if `dx` undefined."""
 
-  def visit_Assign(self, node):
-    if isinstance(node.value, gast.Call) and anno.hasanno(node.value.func,
-                                                          'add_grad'):
-      defs = frozenset(id_ for id_, node in anno.getanno(node,
-                                                         'definitions_in'))
-      if ast_.get_name(node.targets[0]) not in defs:
-        node.value = node.value.args[1]
-    return node
+    def visit_Assign(self, node):
+        if isinstance(node.value, gast.Call) and anno.hasanno(node.value.func, 'add_grad'):
+            defs = frozenset(id_ for id_, node in anno.getanno(node, 'definitions_in'))
+            if ast_.get_name(node.targets[0]) not in defs:
+                node.value = node.value.args[1]
+        return node
 
 
 class FixGrad(transformers.TreeTransformer):
-  """Explicitly initialize gradient to zero if needed."""
+    """Explicitly initialize gradient to zero if needed."""
 
-  def __init__(self):
-    super(FixGrad, self).__init__()
-    self.added = set()
+    def __init__(self):
+        super(FixGrad, self).__init__()
+        self.added = set()
 
-  def _init(self, node):
-    gradname = ast_.get_name(node)
-    if anno.hasanno(node, 'adjoint_var'):
-      var = anno.getanno(node, 'adjoint_var')
-    else:
-      var = anno.getanno(node, 'temp_adjoint_var')
-    return gast.Assign(
-        targets=[gast.Name(id=gradname, ctx=gast.Store(), annotation=None)],
-        value=gast.Call(func=utils.INIT_GRAD, args=[var], keywords=[]))
+    def _init(self, node):
+        gradname = ast_.get_name(node)
+        if anno.hasanno(node, 'adjoint_var'):
+            var = anno.getanno(node, 'adjoint_var')
+        else:
+            var = anno.getanno(node, 'temp_adjoint_var')
+        return gast.Assign(
+            targets=[gast.Name(id=gradname, ctx=gast.Store(), annotation=None)],
+            value=gast.Call(func=utils.INIT_GRAD, args=[var], keywords=[]),
+        )
 
-  def prepend_uninitialized_grads(self, node):
-    if anno.hasanno(node, 'defined_in'):
-      uses = (succ for succ in gast.walk(node) if
-              isinstance(succ, gast.Name) and
-              isinstance(succ.ctx, gast.Load))
-      for use in uses:
-        if ((anno.hasanno(use, 'adjoint_var') or
-             anno.hasanno(use, 'temp_adjoint_var')) and
-            use.id not in anno.getanno(node, 'defined_in') and
-            use.id not in self.added):
-          self.added.add(use.id)
-          self.insert_top(self._init(use))
-    return node
+    def prepend_uninitialized_grads(self, node):
+        if anno.hasanno(node, 'defined_in'):
+            uses = (
+                succ
+                for succ in gast.walk(node)
+                if isinstance(succ, gast.Name) and isinstance(succ.ctx, gast.Load)
+            )
+            for use in uses:
+                if (
+                    (anno.hasanno(use, 'adjoint_var') or anno.hasanno(use, 'temp_adjoint_var'))
+                    and use.id not in anno.getanno(node, 'defined_in')
+                    and use.id not in self.added
+                ):
+                    self.added.add(use.id)
+                    self.insert_top(self._init(use))
+        return node
 
-  def visit_Assign(self, node):
-    node = self.prepend_uninitialized_grads(node)
-    return node
+    def visit_Assign(self, node):
+        node = self.prepend_uninitialized_grads(node)
+        return node
 
-  def visit_AugAssign(self, node):
-    node = self.prepend_uninitialized_grads(node)
-    return node
+    def visit_AugAssign(self, node):
+        node = self.prepend_uninitialized_grads(node)
+        return node
 
-  def visit_Expr(self, node):
-    node = self.prepend_uninitialized_grads(node)
-    return node
+    def visit_Expr(self, node):
+        node = self.prepend_uninitialized_grads(node)
+        return node
 
-  def visit_Return(self, node):
-    node = self.prepend_uninitialized_grads(node)
-    return node
+    def visit_Return(self, node):
+        node = self.prepend_uninitialized_grads(node)
+        return node

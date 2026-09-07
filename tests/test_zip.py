@@ -10,6 +10,7 @@ A tuple-target ``zip`` loop is desugared into an indexed range loop::
 This supports the common dot-product / paired-iteration patterns over constant
 lists and array variables, N-way zips, and both reverse and forward mode.
 """
+
 import numpy as np
 import pytest
 

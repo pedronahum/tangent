@@ -18,85 +18,89 @@ from tangent import transformers
 
 
 def test_insert():
-  def f(x):
-      y = x
-      return y
-  node = quoting.parse_function(f)
+    def f(x):
+        y = x
+        return y
 
-  class Prepend(transformers.TreeTransformer):
-    def visit_Assign(self, node):
-      # If the target is y, then prepend this statement
-      # NOTE Without this test, we'd have an infinite loop
-      if node.targets[0].id == 'y':
-        statement = quoting.quote("x = 2 * x")
-        self.prepend(statement)
-      return node
+    node = quoting.parse_function(f)
 
-  Prepend().visit(node)
-  assert quoting.unquote(node).split('\n')[1].strip() == "x = 2 * x"
+    class Prepend(transformers.TreeTransformer):
+        def visit_Assign(self, node):
+            # If the target is y, then prepend this statement
+            # NOTE Without this test, we'd have an infinite loop
+            if node.targets[0].id == 'y':
+                statement = quoting.quote("x = 2 * x")
+                self.prepend(statement)
+            return node
+
+    Prepend().visit(node)
+    assert quoting.unquote(node).split('\n')[1].strip() == "x = 2 * x"
 
 
 def test_insert_block():
-  def f(x):
-    while True:
-      y = x
-      z = y
-    return y
-  node = quoting.parse_function(f)
+    def f(x):
+        while True:
+            y = x
+            z = y
+        return y
 
-  class PrependBlock(transformers.TreeTransformer):
-    def visit_Assign(self, node):
-      # If the target is y, then prepend this statement
-      # NOTE Without this test, we'd have an infinite loop
-      if node.targets[0].id == 'z':
-        statement = quoting.quote("x = 2 * x")
-        self.prepend_block(statement)
-      return node
+    node = quoting.parse_function(f)
 
-  PrependBlock().visit(node)
-  assert quoting.unquote(node).split('\n')[2].strip() == "x = 2 * x"
+    class PrependBlock(transformers.TreeTransformer):
+        def visit_Assign(self, node):
+            # If the target is y, then prepend this statement
+            # NOTE Without this test, we'd have an infinite loop
+            if node.targets[0].id == 'z':
+                statement = quoting.quote("x = 2 * x")
+                self.prepend_block(statement)
+            return node
+
+    PrependBlock().visit(node)
+    assert quoting.unquote(node).split('\n')[2].strip() == "x = 2 * x"
 
 
 def test_insert_top():
-  def f(x):
-    while True:
-      y = x
-      z = y
-    return y
-  node = quoting.parse_function(f)
+    def f(x):
+        while True:
+            y = x
+            z = y
+        return y
 
-  class InsertTop(transformers.TreeTransformer):
-    def visit_Assign(self, node):
-      # If the target is y, then prepend this statement
-      # NOTE Without this test, we'd have an infinite loop
-      if node.targets[0].id == 'z':
-        statement = quoting.quote("x = 2 * x")
-        self.insert_top(statement)
-      return node
+    node = quoting.parse_function(f)
 
-  InsertTop().visit(node)
-  assert quoting.unquote(node).split('\n')[1].strip() == "x = 2 * x"
+    class InsertTop(transformers.TreeTransformer):
+        def visit_Assign(self, node):
+            # If the target is y, then prepend this statement
+            # NOTE Without this test, we'd have an infinite loop
+            if node.targets[0].id == 'z':
+                statement = quoting.quote("x = 2 * x")
+                self.insert_top(statement)
+            return node
+
+    InsertTop().visit(node)
+    assert quoting.unquote(node).split('\n')[1].strip() == "x = 2 * x"
 
 
 def test_remove():
-  def f(x):
-    while True:
-      y = x
-      z = y
-    return y
-  node = quoting.parse_function(f)
+    def f(x):
+        while True:
+            y = x
+            z = y
+        return y
 
-  class InsertTop(transformers.TreeTransformer):
-    def visit_Assign(self, node):
-      # If the target is y, then prepend this statement
-      # NOTE Without this test, we'd have an infinite loop
-      if node.targets[0].id == 'z':
-        self.remove(node)
-      return node
+    node = quoting.parse_function(f)
 
-  InsertTop().visit(node)
-  assert quoting.unquote(node).split('\n')[3].strip() == "return y"
+    class InsertTop(transformers.TreeTransformer):
+        def visit_Assign(self, node):
+            # If the target is y, then prepend this statement
+            # NOTE Without this test, we'd have an infinite loop
+            if node.targets[0].id == 'z':
+                self.remove(node)
+            return node
+
+    InsertTop().visit(node)
+    assert quoting.unquote(node).split('\n')[3].strip() == "return y"
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

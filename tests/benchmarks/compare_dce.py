@@ -1,6 +1,7 @@
 """
 Compare performance before and after DCE implementation.
 """
+
 import json
 import sys
 

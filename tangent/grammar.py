@@ -12,14 +12,14 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Classifications of AST nodes."""
+
 from __future__ import absolute_import
 import gast
 
 # In Python 3.8+, gast.Constant replaces Num, Str, Bytes, Ellipsis, NameConstant
 LITERALS = (gast.Constant,)
 
-CONTROL_FLOW = (gast.For, gast.AsyncFor, gast.While, gast.If, gast.Try,
-                gast.Break, gast.Continue)
+CONTROL_FLOW = (gast.For, gast.AsyncFor, gast.While, gast.If, gast.Try, gast.Break, gast.Continue)
 
 COMPOUND_STATEMENTS = (
     gast.FunctionDef,
@@ -31,7 +31,7 @@ COMPOUND_STATEMENTS = (
     gast.Try,
     gast.AsyncFunctionDef,
     gast.AsyncFor,
-    gast.AsyncWith
+    gast.AsyncWith,
 )
 
 SIMPLE_STATEMENTS = (
@@ -48,7 +48,7 @@ SIMPLE_STATEMENTS = (
     gast.Expr,
     gast.Pass,
     gast.Break,
-    gast.Continue
+    gast.Continue,
 )
 
 STATEMENTS = COMPOUND_STATEMENTS + SIMPLE_STATEMENTS

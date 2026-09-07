@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Fence tests."""
+
 import inspect
 import sys
 
@@ -40,379 +41,385 @@ testglobal = 0
 
 
 def _assert_tangent_parse_error(func, fragment):
-  try:
-    fence.validate(quoting.parse_function(func), inspect.getsource(func))
-    assert False
-  except fence.TangentParseError as expected:
-    assert fragment in str(expected)
+    try:
+        fence.validate(quoting.parse_function(func), inspect.getsource(func))
+        assert False
+    except fence.TangentParseError as expected:
+        assert fragment in str(expected)
 
 
 def test_bytes():
-  if sys.version_info >= (3, 0):
-    def f(_):
-      return b'foo'
-    _assert_tangent_parse_error(f, 'Byte Literals')
+    if sys.version_info >= (3, 0):
+
+        def f(_):
+            return b'foo'
+
+        _assert_tangent_parse_error(f, 'Byte Literals')
 
 
 def test_set():
-  # Set literals are non-differentiable collections (commonly membership
-  # guards) and are allowed by the fence.
-  def f(x):
-    s = {1, 2, 3}
-    return x
+    # Set literals are non-differentiable collections (commonly membership
+    # guards) and are allowed by the fence.
+    def f(x):
+        s = {1, 2, 3}
+        return x
 
-  fence.validate(quoting.parse_function(f), inspect.getsource(f))
+    fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_del():
 
-  def f(x):
-    del x
-    return 1
+    def f(x):
+        del x
+        return 1
 
-  _assert_tangent_parse_error(f, 'Del')
+    _assert_tangent_parse_error(f, 'Del')
 
 
 def test_starred():
 
-  def f(x):
-    return zip(*x)
+    def f(x):
+        return zip(*x)
 
-  _assert_tangent_parse_error(f, 'Unpack')
+    _assert_tangent_parse_error(f, 'Unpack')
 
 
 def test_uadd():
 
-  def f(x):
-    return +x
+    def f(x):
+        return +x
 
-  _assert_tangent_parse_error(f, 'Unary Add')
+    _assert_tangent_parse_error(f, 'Unary Add')
 
 
 def test_not():
-  # The `not` operator produces a non-differentiable boolean (like the
-  # comparison operators) and is allowed.
-  def f(x):
-    return not x
+    # The `not` operator produces a non-differentiable boolean (like the
+    # comparison operators) and is allowed.
+    def f(x):
+        return not x
 
-  fence.validate(quoting.parse_function(f), inspect.getsource(f))
+    fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_invert():
 
-  def f(x):
-    return ~x
+    def f(x):
+        return ~x
 
-  _assert_tangent_parse_error(f, 'Invert')
+    _assert_tangent_parse_error(f, 'Invert')
 
 
 def test_floordiv():
 
-  def f(x):
-    return x // 2
+    def f(x):
+        return x // 2
 
-  _assert_tangent_parse_error(f, 'Floor Div')
+    _assert_tangent_parse_error(f, 'Floor Div')
 
 
 def test_lshift():
 
-  def f(x):
-    return x << 1
+    def f(x):
+        return x << 1
 
-  _assert_tangent_parse_error(f, 'Left Shift')
+    _assert_tangent_parse_error(f, 'Left Shift')
 
 
 def test_rshift():
 
-  def f(x):
-    return x >> 1
+    def f(x):
+        return x >> 1
 
-  _assert_tangent_parse_error(f, 'Right Shift')
+    _assert_tangent_parse_error(f, 'Right Shift')
 
 
 def test_bitor():
 
-  def f(x):
-    return x | 1
+    def f(x):
+        return x | 1
 
-  _assert_tangent_parse_error(f, 'Bitwise Or')
+    _assert_tangent_parse_error(f, 'Bitwise Or')
 
 
 def test_bitxor():
 
-  def f(x):
-    return x ^ 1
+    def f(x):
+        return x ^ 1
 
-  _assert_tangent_parse_error(f, 'Bitwise Xor')
+    _assert_tangent_parse_error(f, 'Bitwise Xor')
 
 
 def test_bitand():
 
-  def f(x):
-    return x & 1
+    def f(x):
+        return x & 1
 
-  _assert_tangent_parse_error(f, 'Bitwise And')
+    _assert_tangent_parse_error(f, 'Bitwise And')
 
 
 def test_in():
-  # Membership tests are non-differentiable booleans, like the other
-  # comparison operators, and are allowed (typically used as branch guards).
-  def f(x):
-    return 1 in x
+    # Membership tests are non-differentiable booleans, like the other
+    # comparison operators, and are allowed (typically used as branch guards).
+    def f(x):
+        return 1 in x
 
-  fence.validate(quoting.parse_function(f), inspect.getsource(f))
+    fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_notin():
-  def f(x):
-    return 1 not in x
+    def f(x):
+        return 1 not in x
 
-  fence.validate(quoting.parse_function(f), inspect.getsource(f))
+    fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_ifexp():
-  # Conditional (ternary) expressions are supported.
-  def f(x):
-    return 1 if x else 2
+    # Conditional (ternary) expressions are supported.
+    def f(x):
+        return 1 if x else 2
 
-  fence.validate(quoting.parse_function(f), inspect.getsource(f))
+    fence.validate(quoting.parse_function(f), inspect.getsource(f))
 
 
 def test_setcomp():
 
-  def f(x):
-    return {i for i in x}
+    def f(x):
+        return {i for i in x}
 
-  _assert_tangent_parse_error(f, 'Set Comprehensions')
+    _assert_tangent_parse_error(f, 'Set Comprehensions')
 
 
 def test_generatorexp():
 
-  def f(x):
-    return (i for i in x)
+    def f(x):
+        return (i for i in x)
 
-  _assert_tangent_parse_error(f, 'Generator')
+    _assert_tangent_parse_error(f, 'Generator')
 
 
 def test_dictcomp():
 
-  def f(x):
-    return {i: 1 for i in x}
+    def f(x):
+        return {i: 1 for i in x}
 
-  _assert_tangent_parse_error(f, 'Dictionary Comprehensions')
+    _assert_tangent_parse_error(f, 'Dictionary Comprehensions')
 
 
 def test_delete():
 
-  def f(x):
-    del x[1]
-    return x
+    def f(x):
+        del x[1]
+        return x
 
-  _assert_tangent_parse_error(f, 'Delete statements')
+    _assert_tangent_parse_error(f, 'Delete statements')
 
 
 def test_import():
 
-  def f(x):
-    import tangent
-    return x
+    def f(x):
+        import tangent
 
-  _assert_tangent_parse_error(f, 'Import statements')
+        return x
+
+    _assert_tangent_parse_error(f, 'Import statements')
 
 
 def test_importfrom():
 
-  def f(x):
-    from tangent import grad
-    return x
+    def f(x):
+        from tangent import grad
 
-  _assert_tangent_parse_error(f, 'Import/From statements')
+        return x
+
+    _assert_tangent_parse_error(f, 'Import/From statements')
 
 
 def test_alias():
 
-  def f(x):
-    import tangent as tg
-    return x
+    def f(x):
+        import tangent as tg
 
-  # The checker should never reach alias nodes as long as it blocks imports.
-  _assert_tangent_parse_error(f, 'Import statements')
+        return x
+
+    # The checker should never reach alias nodes as long as it blocks imports.
+    _assert_tangent_parse_error(f, 'Import statements')
 
 
 def test_for():
 
-  def f(x):
-    for _ in range(2):
-      x += 1
-      break
-    else:
-      x = 0
-    return x
+    def f(x):
+        for _ in range(2):
+            x += 1
+            break
+        else:
+            x = 0
+        return x
 
-  _assert_tangent_parse_error(f, 'Else block')
+    _assert_tangent_parse_error(f, 'Else block')
 
 
 def test_continue():
 
-  def f(x):
-    for _ in range(2):
-      continue
-    return x
+    def f(x):
+        for _ in range(2):
+            continue
+        return x
 
-  _assert_tangent_parse_error(f, 'Continue')
+    _assert_tangent_parse_error(f, 'Continue')
 
 
 def test_break():
 
-  def f(x):
-    for _ in range(2):
-      break
-    return x
+    def f(x):
+        for _ in range(2):
+            break
+        return x
 
-  _assert_tangent_parse_error(f, 'Break')
+    _assert_tangent_parse_error(f, 'Break')
 
 
 def test_lambda():
 
-  def f(_):
-    return lambda x: x + 1
+    def f(_):
+        return lambda x: x + 1
 
-  _assert_tangent_parse_error(f, 'Lambda')
+    _assert_tangent_parse_error(f, 'Lambda')
 
 
 def test_yield():
 
-  def f(x):
-    yield x + 1
+    def f(x):
+        yield x + 1
 
-  _assert_tangent_parse_error(f, 'Yield')
+    _assert_tangent_parse_error(f, 'Yield')
 
 
 def test_global():
 
-  def f(x):
-    global testglobal
-    testglobal = 0
-    return x
+    def f(x):
+        global testglobal
+        testglobal = 0
+        return x
 
-  _assert_tangent_parse_error(f, 'Global')
+    _assert_tangent_parse_error(f, 'Global')
 
 
 def test_classdef():
 
-  def f(_):
+    def f(_):
 
-    class Foo(object):
-      pass
+        class Foo(object):
+            pass
 
-    return Foo
+        return Foo
 
-  _assert_tangent_parse_error(f, 'Class')
+    _assert_tangent_parse_error(f, 'Class')
 
 
 def test_raise():
 
-  def f(x):
-    if x < 0:
-      raise ValueError('negative')
-    return x * x
+    def f(x):
+        if x < 0:
+            raise ValueError('negative')
+        return x * x
 
-  _assert_tangent_parse_error(f, 'Raise statements')
+    _assert_tangent_parse_error(f, 'Raise statements')
 
 
 def test_try():
 
-  def f(x):
-    try:
-      return x * x
-    except Exception:
-      return x
+    def f(x):
+        try:
+            return x * x
+        except Exception:
+            return x
 
-  _assert_tangent_parse_error(f, 'Try/Except')
+    _assert_tangent_parse_error(f, 'Try/Except')
 
 
 def test_walrus():
-  # The walrus operator binds a name that the reverse pass cannot track, which
-  # used to silently produce a zero gradient; it must be rejected instead.
-  def f(x):
-    if (y := x * 2) > 1:
-      return y
-    return x
+    # The walrus operator binds a name that the reverse pass cannot track, which
+    # used to silently produce a zero gradient; it must be rejected instead.
+    def f(x):
+        if (y := x * 2) > 1:
+            return y
+        return x
 
-  _assert_tangent_parse_error(f, 'walrus')
+    _assert_tangent_parse_error(f, 'walrus')
 
 
 def test_varargs():
 
-  def f(*xs):
-    return xs[0] * xs[0]
+    def f(*xs):
+        return xs[0] * xs[0]
 
-  _assert_tangent_parse_error(f, 'Variadic positional arguments')
+    _assert_tangent_parse_error(f, 'Variadic positional arguments')
 
 
 def test_varkw():
 
-  def f(x, **kw):
-    return x * x
+    def f(x, **kw):
+        return x * x
 
-  _assert_tangent_parse_error(f, 'Variadic keyword arguments')
+    _assert_tangent_parse_error(f, 'Variadic keyword arguments')
 
 
 def _assert_nested_def_rejected(func):
-  try:
-    fence.validate_no_nested_functions(
-        quoting.parse_function(func), inspect.getsource(func))
-    assert False
-  except fence.TangentParseError as expected:
-    assert 'Nested function definitions' in str(expected)
+    try:
+        fence.validate_no_nested_functions(quoting.parse_function(func), inspect.getsource(func))
+        assert False
+    except fence.TangentParseError as expected:
+        assert 'Nested function definitions' in str(expected)
 
 
 def test_nested_function():
-  # A nested def introduces a second FunctionDef whose return breaks the
-  # single-exit reverse transform; it used to crash with a raw ValueError.
+    # A nested def introduces a second FunctionDef whose return breaks the
+    # single-exit reverse transform; it used to crash with a raw ValueError.
 
-  def f(x):
-    def inner(y):
-      return y * 2
-    return inner(x)
+    def f(x):
+        def inner(y):
+            return y * 2
 
-  _assert_nested_def_rejected(f)
+        return inner(x)
+
+    _assert_nested_def_rejected(f)
 
 
 def test_closure():
 
-  def f(x):
-    scale = 3.0
+    def f(x):
+        scale = 3.0
 
-    def inner(y):
-      return y * scale
-    return inner(x)
+        def inner(y):
+            return y * scale
 
-  _assert_nested_def_rejected(f)
+        return inner(x)
+
+    _assert_nested_def_rejected(f)
 
 
 def test_recursion():
 
-  def f(x):
-    def rec(n, acc):
-      if n == 0:
-        return acc
-      return rec(n - 1, acc + x)
-    return rec(3, 0.0)
+    def f(x):
+        def rec(n, acc):
+            if n == 0:
+                return acc
+            return rec(n - 1, acc + x)
 
-  _assert_nested_def_rejected(f)
+        return rec(3, 0.0)
+
+    _assert_nested_def_rejected(f)
 
 
 def test_lambda_assigned_is_inlined_not_nested():
-  # An assigned lambda is NOT a nested def: lambda_desugar inlines it, so it
-  # must pass the nested-def check (and the whole pipeline supports it).
-  def f(x):
-    sq = lambda y: y * y
-    return sq(x)
+    # An assigned lambda is NOT a nested def: lambda_desugar inlines it, so it
+    # must pass the nested-def check (and the whole pipeline supports it).
+    def f(x):
+        sq = lambda y: y * y
+        return sq(x)
 
-  fence.validate_no_nested_functions(
-      quoting.parse_function(f), inspect.getsource(f))
+    fence.validate_no_nested_functions(quoting.parse_function(f), inspect.getsource(f))
 
 
 if __name__ == '__main__':
-  assert not pytest.main([__file__])
+    assert not pytest.main([__file__])

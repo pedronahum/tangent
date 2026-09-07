@@ -34,6 +34,7 @@ Example:
 
     df = tangent.grad(f)
 """
+
 from __future__ import absolute_import
 
 
@@ -50,7 +51,6 @@ from tangent.elementwise_rules import prefix_vocab
 from tangent.elementwise_rules import register_elementwise
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
-
 
 
 def size(x, axis):
@@ -70,8 +70,7 @@ def keras_seed(g, like):
     """
     if kops.is_tensor(g):
         return g
-    return kops.convert_to_tensor(
-        g, dtype=keras.backend.standardize_dtype(like.dtype))
+    return kops.convert_to_tensor(g, dtype=keras.backend.standardize_dtype(like.dtype))
 
 
 def keras_dtype_name(x):
@@ -105,15 +104,25 @@ def keras_min_mask(x, axis=None):
 
 # Shape queries and constructors are not differentiable.
 non_differentiable.register_non_differentiable_functions(
-    kops.zeros, kops.ones, kops.zeros_like, kops.ones_like,
-    kops.full, kops.full_like, kops.eye, kops.arange,
-    keras_seed, keras_dtype_name, keras_max_mask, keras_min_mask
+    kops.zeros,
+    kops.ones,
+    kops.zeros_like,
+    kops.ones_like,
+    kops.full,
+    kops.full_like,
+    kops.eye,
+    kops.arange,
+    keras_seed,
+    keras_dtype_name,
+    keras_max_mask,
+    keras_min_mask,
 )
 
 
 # ============================================================================
 # Reverse-mode (adjoint) gradient definitions
 # ============================================================================
+
 
 # Basic arithmetic
 @adjoint(kops.add)
@@ -150,8 +159,7 @@ def adjoint_divide(z, x1, x2):
 @adjoint(kops.power)
 def adjoint_power(z, x1, x2):
     """Adjoint for keras.ops.power (gradient wrt the base only)."""
-    d[x1] = tangent.unbroadcast(
-        tangent.keras_seed(d[z], x1) * x2 * kops.power(x1, x2 - 1), x1)
+    d[x1] = tangent.unbroadcast(tangent.keras_seed(d[z], x1) * x2 * kops.power(x1, x2 - 1), x1)
 
 
 # Unary elementwise ops: generated (adjoint AND tangent per op) from the
@@ -189,9 +197,7 @@ register_elementwise(
         'round': kops.round,
         'sign': kops.sign,
     },
-    vocab=prefix_vocab(
-        'kops',
-        mask_pos='kops.cast(({arg}) > 0, tangent.keras_dtype_name(x))'),
+    vocab=prefix_vocab('kops', mask_pos='kops.cast(({arg}) > 0, tangent.keras_dtype_name(x))'),
     seed='tangent.keras_seed({g}, x)',
 )
 
@@ -200,39 +206,41 @@ register_elementwise(
 @adjoint(kops.sum)
 def adjoint_sum(y, x, axis=None, keepdims=False):
     """Adjoint for keras.ops.sum."""
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x),
-                            tangent.shape_as_list(x), axis, keepdims)
+    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims)
 
 
 @adjoint(kops.mean)
 def adjoint_mean(y, x, axis=None, keepdims=False):
     """Adjoint for keras.ops.mean."""
     n = tangent.size(x, axis)
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x),
-                            tangent.shape_as_list(x), axis, keepdims) / n
+    d[x] = (
+        tangent.unreduce(tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) / n
+    )
 
 
 @adjoint(kops.max)
 def adjoint_max(y, x, axis=None, keepdims=False, initial=None):
     """Adjoint for keras.ops.max."""
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x),
-                            tangent.shape_as_list(x), axis,
-                            keepdims) * tangent.keras_max_mask(x, axis)
+    d[x] = tangent.unreduce(
+        tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims
+    ) * tangent.keras_max_mask(x, axis)
 
 
 @adjoint(kops.min)
 def adjoint_min(y, x, axis=None, keepdims=False, initial=None):
     """Adjoint for keras.ops.min."""
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x),
-                            tangent.shape_as_list(x), axis,
-                            keepdims) * tangent.keras_min_mask(x, axis)
+    d[x] = tangent.unreduce(
+        tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims
+    ) * tangent.keras_min_mask(x, axis)
 
 
 @adjoint(kops.prod)
 def adjoint_prod(y, x, axis=None, keepdims=False):
     """Adjoint for keras.ops.prod: dL/dx_i = dL/dy * prod(x) / x_i."""
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x) * y,
-                            tangent.shape_as_list(x), axis, keepdims) / x
+    d[x] = (
+        tangent.unreduce(tangent.keras_seed(d[y], x) * y, tangent.shape_as_list(x), axis, keepdims)
+        / x
+    )
 
 
 # Linear algebra
@@ -312,9 +320,7 @@ def adjoint_minimum(z, x1, x2):
 @adjoint(kops.clip)
 def adjoint_clip(y, x, x_min, x_max):
     """Adjoint for keras.ops.clip."""
-    inside = kops.cast(
-        kops.logical_and(x >= x_min, x <= x_max),
-        tangent.keras_dtype_name(x))
+    inside = kops.cast(kops.logical_and(x >= x_min, x <= x_max), tangent.keras_dtype_name(x))
     d[x] = tangent.keras_seed(d[y], x) * inside
 
 
@@ -349,6 +355,7 @@ def adjoint_log_softmax(y, x, axis=-1):
 # concat_seq/stack_seq machinery), whose varargs adjoints split the gradient
 # back per input.
 
+
 def keras_concat_seq(axis, *tensors):
     """Runtime helper: concatenate a varargs sequence of tensors."""
     return kops.concatenate(list(tensors), axis=axis)
@@ -376,8 +383,7 @@ def keras_stack_grads(dz, tensors, axis):
     return tuple(kops.unstack(dz, axis=axis))
 
 
-non_differentiable.register_non_differentiable_functions(
-    keras_concat_grads, keras_stack_grads)
+non_differentiable.register_non_differentiable_functions(keras_concat_grads, keras_stack_grads)
 
 
 @adjoint(keras_concat_seq)
@@ -401,7 +407,8 @@ def adjoint_concatenate(dz, xs, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate keras.ops.concatenate/stack when the '
         'list of tensors is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.')
+        'once from a literal, or pass a list literal directly.'
+    )
 
 
 @adjoint(kops.stack)
@@ -410,12 +417,14 @@ def adjoint_stack(dz, x, axis=0):
     raise NotImplementedError(
         'tangent can only differentiate keras.ops.concatenate/stack when the '
         'list of tensors is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.')
+        'once from a literal, or pass a list literal directly.'
+    )
 
 
 #
 # Forward mode (tangent) definitions
 #
+
 
 @tangent_(kops.add)
 def tangent_add(z, x1, x2):
@@ -500,6 +509,9 @@ def tangent_keras_stack_seq(z, axis, *tensors):
 
 
 import logging as _logging
+
 _logging.getLogger('tangent').debug(
     'Keras extensions loaded successfully (keras %s, backend: %s)',
-    keras.__version__, keras.backend.backend())
+    keras.__version__,
+    keras.backend.backend(),
+)

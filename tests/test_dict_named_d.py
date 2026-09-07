@@ -6,6 +6,7 @@ variable literally named ``d`` used to collide: ``d['a']`` and especially
 code / DictConstructionError. A locally-assigned ``d`` is now alpha-renamed
 before differentiation, resolving the collision for every key type.
 """
+
 import pytest
 
 import tangent
@@ -14,21 +15,21 @@ import tangent
 class TestLocalDictNamedD:
     def test_int_keys(self):
         def f(x):
-            d = {1: x, 2: x ** 2}
+            d = {1: x, 2: x**2}
             return d[1] + d[2]
 
         assert tangent.grad(f)(2.0) == pytest.approx(5.0)
 
     def test_string_keys(self):
         def f(x):
-            d = {'a': x, 'b': x ** 2}
+            d = {'a': x, 'b': x**2}
             return d['a'] + d['b']
 
         assert tangent.grad(f)(2.0) == pytest.approx(5.0)
 
     def test_int_key_dict_comprehension(self):
         def f(x):
-            d = {i: x ** i for i in range(1, 3)}
+            d = {i: x**i for i in range(1, 3)}
             return d[1] + d[2]
 
         assert tangent.grad(f)(2.0) == pytest.approx(5.0)
@@ -43,7 +44,7 @@ class TestLocalDictNamedD:
 
     def test_forward_mode(self):
         def f(x):
-            d = {1: x, 2: x ** 2}
+            d = {1: x, 2: x**2}
             return d[1] + d[2]
 
         df = tangent.autodiff(f, mode='forward', preserve_result=False)

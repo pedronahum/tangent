@@ -20,6 +20,7 @@ retrievable source (Tangent splices template source into derivative code)
 and every table-registered op carries BOTH a reverse-mode and a
 forward-mode rule - the parity property the table exists to guarantee.
 """
+
 import inspect
 
 import pytest
@@ -42,28 +43,32 @@ def _sample_ops():
     ops = []
     if _installed('torch'):
         import torch
-        ops += [('torch', f) for f in
-                (torch.exp, torch.tanh, torch.arcsin, torch.sign,
-                 torch.rsqrt, torch.expm1)]
+
+        ops += [
+            ('torch', f)
+            for f in (torch.exp, torch.tanh, torch.arcsin, torch.sign, torch.rsqrt, torch.expm1)
+        ]
     if _installed('jax'):
         import jax.numpy as jnp
-        ops += [('jax', f) for f in
-                (jnp.exp, jnp.tanh, jnp.arcsin, jnp.sign, jnp.reciprocal,
-                 jnp.log1p)]
+
+        ops += [
+            ('jax', f) for f in (jnp.exp, jnp.tanh, jnp.arcsin, jnp.sign, jnp.reciprocal, jnp.log1p)
+        ]
     if _installed('tinygrad'):
         from tinygrad import Tensor
-        ops += [('tinygrad', f) for f in
-                (Tensor.exp, Tensor.tanh, Tensor.asin, Tensor.sign,
-                 Tensor.rsqrt)]
+
+        ops += [
+            ('tinygrad', f)
+            for f in (Tensor.exp, Tensor.tanh, Tensor.asin, Tensor.sign, Tensor.rsqrt)
+        ]
     if _installed('keras'):
         import keras.ops as kops
-        ops += [('keras', f) for f in
-                (kops.exp, kops.tanh, kops.arcsin, kops.sign)]
+
+        ops += [('keras', f) for f in (kops.exp, kops.tanh, kops.arcsin, kops.sign)]
     return ops
 
 
-@pytest.mark.parametrize('backend,op', _sample_ops(),
-                         ids=lambda v: getattr(v, '__name__', v))
+@pytest.mark.parametrize('backend,op', _sample_ops(), ids=lambda v: getattr(v, '__name__', v))
 def test_both_directions_registered(backend, op):
     assert op in grads.adjoints, '%s: missing adjoint' % backend
     assert op in tangents.tangents, '%s: missing tangent' % backend
@@ -71,8 +76,7 @@ def test_both_directions_registered(backend, op):
     assert op not in tangents.UNIMPLEMENTED_TANGENTS
 
 
-@pytest.mark.parametrize('backend,op', _sample_ops(),
-                         ids=lambda v: getattr(v, '__name__', v))
+@pytest.mark.parametrize('backend,op', _sample_ops(), ids=lambda v: getattr(v, '__name__', v))
 def test_generated_templates_have_source(backend, op):
     # Tangent parses template source with inspect.getsource; the generated
     # templates register their synthetic files in linecache.

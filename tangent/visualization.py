@@ -20,6 +20,7 @@ try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -27,11 +28,11 @@ except ImportError:
 
 try:
     import networkx as nx
+
     NETWORKX_AVAILABLE = True
 except ImportError:
     NETWORKX_AVAILABLE = False
     _logger.debug('networkx not available. Install with: pip install networkx')
-
 
 
 class ComputationGraphVisualizer:
@@ -53,7 +54,9 @@ class ComputationGraphVisualizer:
     def _parse_function(self):
         """Parse function and build computation graph."""
         if not NETWORKX_AVAILABLE:
-            raise ImportError("networkx is required for graph visualization. Install with: pip install networkx")
+            raise ImportError(
+                "networkx is required for graph visualization. Install with: pip install networkx"
+            )
 
         # Get function AST
         source = inspect.getsource(self.func)
@@ -71,10 +74,7 @@ class ComputationGraphVisualizer:
                 # Add function inputs
                 for i, arg in enumerate(node.args.args):
                     arg_name = arg.arg if hasattr(arg, 'arg') else arg.id
-                    self.graph.add_node(arg_name,
-                                       node_type='input',
-                                       color='lightblue',
-                                       shape='box')
+                    self.graph.add_node(arg_name, node_type='input', color='lightblue', shape='box')
                     self.node_info[arg_name] = {'type': 'input', 'index': i}
 
             elif isinstance(node, gast.Assign):
@@ -92,11 +92,13 @@ class ComputationGraphVisualizer:
                         op_type = 'assign'
                         color = 'lightgray'
 
-                    self.graph.add_node(target,
-                                       node_type='operation',
-                                       operation=op_type,
-                                       color=color,
-                                       shape='ellipse')
+                    self.graph.add_node(
+                        target,
+                        node_type='operation',
+                        operation=op_type,
+                        color=color,
+                        shape='ellipse',
+                    )
                     self.node_info[target] = {'type': 'operation', 'op': op_type}
 
                     # Add edges from dependencies
@@ -107,10 +109,7 @@ class ComputationGraphVisualizer:
 
             elif isinstance(node, gast.Return):
                 # Add output node
-                self.graph.add_node('output',
-                                   node_type='output',
-                                   color='lightcoral',
-                                   shape='box')
+                self.graph.add_node('output', node_type='output', color='lightcoral', shape='box')
                 self.node_info['output'] = {'type': 'output'}
 
                 # Connect return value to output
@@ -155,7 +154,9 @@ class ComputationGraphVisualizer:
             figsize: Figure size (width, height)
         """
         if not MATPLOTLIB_AVAILABLE or not NETWORKX_AVAILABLE:
-            raise ImportError("matplotlib and networkx required. Install with: pip install matplotlib networkx")
+            raise ImportError(
+                "matplotlib and networkx required. Install with: pip install matplotlib networkx"
+            )
 
         # Parse function if not done yet
         if self.graph is None:
@@ -163,34 +164,42 @@ class ComputationGraphVisualizer:
 
         # Create figure
         fig, ax = plt.subplots(figsize=figsize)
-        ax.set_title(f'Computation Graph: {self.func.__name__}',
-                    fontsize=16, fontweight='bold', pad=20)
+        ax.set_title(
+            f'Computation Graph: {self.func.__name__}', fontsize=16, fontweight='bold', pad=20
+        )
 
         # Layout
         pos = nx.spring_layout(self.graph, k=2, iterations=50)
 
         # Draw nodes by type
-        for node_type, color in [('input', 'lightblue'),
-                                 ('operation', 'lightgreen'),
-                                 ('output', 'lightcoral')]:
-            nodes = [n for n, d in self.graph.nodes(data=True)
-                    if d.get('node_type') == node_type]
+        for node_type, color in [
+            ('input', 'lightblue'),
+            ('operation', 'lightgreen'),
+            ('output', 'lightcoral'),
+        ]:
+            nodes = [n for n, d in self.graph.nodes(data=True) if d.get('node_type') == node_type]
             if nodes:
-                nx.draw_networkx_nodes(self.graph, pos,
-                                      nodelist=nodes,
-                                      node_color=color,
-                                      node_size=2000,
-                                      alpha=0.9,
-                                      ax=ax)
+                nx.draw_networkx_nodes(
+                    self.graph,
+                    pos,
+                    nodelist=nodes,
+                    node_color=color,
+                    node_size=2000,
+                    alpha=0.9,
+                    ax=ax,
+                )
 
         # Draw edges
-        nx.draw_networkx_edges(self.graph, pos,
-                              edge_color='gray',
-                              arrows=True,
-                              arrowsize=20,
-                              arrowstyle='->',
-                              connectionstyle='arc3,rad=0.1',
-                              ax=ax)
+        nx.draw_networkx_edges(
+            self.graph,
+            pos,
+            edge_color='gray',
+            arrows=True,
+            arrowsize=20,
+            arrowstyle='->',
+            connectionstyle='arc3,rad=0.1',
+            ax=ax,
+        )
 
         # Draw labels
         labels = {}
@@ -200,23 +209,17 @@ class ComputationGraphVisualizer:
             else:
                 labels[node] = node
 
-        nx.draw_networkx_labels(self.graph, pos, labels,
-                               font_size=10,
-                               font_weight='bold',
-                               ax=ax)
+        nx.draw_networkx_labels(self.graph, pos, labels, font_size=10, font_weight='bold', ax=ax)
 
         # Draw edge labels
         edge_labels = nx.get_edge_attributes(self.graph, 'label')
-        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels,
-                                     font_size=8,
-                                     ax=ax)
+        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels, font_size=8, ax=ax)
 
         # Legend
         input_patch = mpatches.Patch(color='lightblue', label='Inputs')
         op_patch = mpatches.Patch(color='lightgreen', label='Operations')
         output_patch = mpatches.Patch(color='lightcoral', label='Output')
-        ax.legend(handles=[input_patch, op_patch, output_patch],
-                 loc='upper left', fontsize=12)
+        ax.legend(handles=[input_patch, op_patch, output_patch], loc='upper left', fontsize=12)
 
         ax.axis('off')
         plt.tight_layout()
@@ -284,8 +287,7 @@ class GradientFlowVisualizer:
         gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
 
         # Title
-        fig.suptitle(f'Gradient Flow: {self.func.__name__}',
-                    fontsize=16, fontweight='bold')
+        fig.suptitle(f'Gradient Flow: {self.func.__name__}', fontsize=16, fontweight='bold')
 
         # Forward pass
         ax1 = fig.add_subplot(gs[0, :])
@@ -310,59 +312,102 @@ class GradientFlowVisualizer:
         # Draw input boxes
         for i, inp in enumerate(inputs):
             x = 0.1 + i * box_width
-            box = FancyBboxPatch((x, 0.6), box_width * 0.9, 0.25,
-                                boxstyle="round,pad=0.01",
-                                facecolor='lightblue',
-                                edgecolor='black',
-                                linewidth=2,
-                                transform=ax.transAxes)
+            box = FancyBboxPatch(
+                (x, 0.6),
+                box_width * 0.9,
+                0.25,
+                boxstyle="round,pad=0.01",
+                facecolor='lightblue',
+                edgecolor='black',
+                linewidth=2,
+                transform=ax.transAxes,
+            )
             ax.add_patch(box)
 
             # Add text
-            text = f"x[{i}]\n{inp}" if hasattr(inp, '__iter__') and len(str(inp)) < 50 else f"x[{i}]"
-            ax.text(x + box_width * 0.45, 0.725, text,
-                   ha='center', va='center', fontsize=10, fontweight='bold',
-                   transform=ax.transAxes)
+            text = (
+                f"x[{i}]\n{inp}" if hasattr(inp, '__iter__') and len(str(inp)) < 50 else f"x[{i}]"
+            )
+            ax.text(
+                x + box_width * 0.45,
+                0.725,
+                text,
+                ha='center',
+                va='center',
+                fontsize=10,
+                fontweight='bold',
+                transform=ax.transAxes,
+            )
 
         # Draw function box
-        func_box = FancyBboxPatch((0.35, 0.35), 0.3, 0.15,
-                                 boxstyle="round,pad=0.01",
-                                 facecolor='lightgreen',
-                                 edgecolor='black',
-                                 linewidth=2,
-                                 transform=ax.transAxes)
+        func_box = FancyBboxPatch(
+            (0.35, 0.35),
+            0.3,
+            0.15,
+            boxstyle="round,pad=0.01",
+            facecolor='lightgreen',
+            edgecolor='black',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(func_box)
-        ax.text(0.5, 0.425, self.func.__name__,
-               ha='center', va='center', fontsize=12, fontweight='bold',
-               transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.425,
+            self.func.__name__,
+            ha='center',
+            va='center',
+            fontsize=12,
+            fontweight='bold',
+            transform=ax.transAxes,
+        )
 
         # Draw output box
-        out_box = FancyBboxPatch((0.4, 0.05), 0.2, 0.2,
-                                boxstyle="round,pad=0.01",
-                                facecolor='lightcoral',
-                                edgecolor='black',
-                                linewidth=2,
-                                transform=ax.transAxes)
+        out_box = FancyBboxPatch(
+            (0.4, 0.05),
+            0.2,
+            0.2,
+            boxstyle="round,pad=0.01",
+            facecolor='lightcoral',
+            edgecolor='black',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(out_box)
 
         output_text = f"output\n{output}" if len(str(output)) < 50 else "output"
-        ax.text(0.5, 0.15, output_text,
-               ha='center', va='center', fontsize=10, fontweight='bold',
-               transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.15,
+            output_text,
+            ha='center',
+            va='center',
+            fontsize=10,
+            fontweight='bold',
+            transform=ax.transAxes,
+        )
 
         # Draw arrows
         for i in range(n_inputs):
             x = 0.1 + i * box_width + box_width * 0.45
-            arrow = FancyArrowPatch((x, 0.6), (0.45, 0.5),
-                                   arrowstyle='->,head_width=0.4,head_length=0.4',
-                                   color='black', linewidth=2,
-                                   transform=ax.transAxes)
+            arrow = FancyArrowPatch(
+                (x, 0.6),
+                (0.45, 0.5),
+                arrowstyle='->,head_width=0.4,head_length=0.4',
+                color='black',
+                linewidth=2,
+                transform=ax.transAxes,
+            )
             ax.add_patch(arrow)
 
-        arrow = FancyArrowPatch((0.5, 0.35), (0.5, 0.25),
-                               arrowstyle='->,head_width=0.4,head_length=0.4',
-                               color='black', linewidth=2,
-                               transform=ax.transAxes)
+        arrow = FancyArrowPatch(
+            (0.5, 0.35),
+            (0.5, 0.25),
+            arrowstyle='->,head_width=0.4,head_length=0.4',
+            color='black',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(arrow)
 
     def _plot_backward_pass(self, ax, inputs, gradients):
@@ -375,38 +420,64 @@ class GradientFlowVisualizer:
 
         # Draw gradient boxes (bottom to top)
         # Output gradient (seed = 1)
-        out_grad_box = FancyBboxPatch((0.4, 0.65), 0.2, 0.2,
-                                     boxstyle="round,pad=0.01",
-                                     facecolor='#ffcccc',
-                                     edgecolor='red',
-                                     linewidth=2,
-                                     transform=ax.transAxes)
+        out_grad_box = FancyBboxPatch(
+            (0.4, 0.65),
+            0.2,
+            0.2,
+            boxstyle="round,pad=0.01",
+            facecolor='#ffcccc',
+            edgecolor='red',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(out_grad_box)
-        ax.text(0.5, 0.75, "d(output)\n= 1.0",
-               ha='center', va='center', fontsize=10, fontweight='bold',
-               transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.75,
+            "d(output)\n= 1.0",
+            ha='center',
+            va='center',
+            fontsize=10,
+            fontweight='bold',
+            transform=ax.transAxes,
+        )
 
         # Function gradient box
-        func_grad_box = FancyBboxPatch((0.35, 0.35), 0.3, 0.15,
-                                      boxstyle="round,pad=0.01",
-                                      facecolor='#ccffcc',
-                                      edgecolor='green',
-                                      linewidth=2,
-                                      transform=ax.transAxes)
+        func_grad_box = FancyBboxPatch(
+            (0.35, 0.35),
+            0.3,
+            0.15,
+            boxstyle="round,pad=0.01",
+            facecolor='#ccffcc',
+            edgecolor='green',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(func_grad_box)
-        ax.text(0.5, 0.425, "∇" + self.func.__name__,
-               ha='center', va='center', fontsize=12, fontweight='bold',
-               transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.425,
+            "∇" + self.func.__name__,
+            ha='center',
+            va='center',
+            fontsize=12,
+            fontweight='bold',
+            transform=ax.transAxes,
+        )
 
         # Input gradient boxes
         for i, grad in enumerate(gradients):
             x = 0.1 + i * box_width
-            grad_box = FancyBboxPatch((x, 0.05), box_width * 0.9, 0.25,
-                                     boxstyle="round,pad=0.01",
-                                     facecolor='#ccccff',
-                                     edgecolor='blue',
-                                     linewidth=2,
-                                     transform=ax.transAxes)
+            grad_box = FancyBboxPatch(
+                (x, 0.05),
+                box_width * 0.9,
+                0.25,
+                boxstyle="round,pad=0.01",
+                facecolor='#ccccff',
+                edgecolor='blue',
+                linewidth=2,
+                transform=ax.transAxes,
+            )
             ax.add_patch(grad_box)
 
             # Format gradient value
@@ -415,31 +486,48 @@ class GradientFlowVisualizer:
             else:
                 grad_text = f"∇x[{i}]"
 
-            ax.text(x + box_width * 0.45, 0.175, grad_text,
-                   ha='center', va='center', fontsize=10, fontweight='bold',
-                   transform=ax.transAxes)
+            ax.text(
+                x + box_width * 0.45,
+                0.175,
+                grad_text,
+                ha='center',
+                va='center',
+                fontsize=10,
+                fontweight='bold',
+                transform=ax.transAxes,
+            )
 
         # Draw backward arrows (red)
-        arrow = FancyArrowPatch((0.5, 0.65), (0.5, 0.5),
-                               arrowstyle='->,head_width=0.4,head_length=0.4',
-                               color='red', linewidth=2,
-                               transform=ax.transAxes)
+        arrow = FancyArrowPatch(
+            (0.5, 0.65),
+            (0.5, 0.5),
+            arrowstyle='->,head_width=0.4,head_length=0.4',
+            color='red',
+            linewidth=2,
+            transform=ax.transAxes,
+        )
         ax.add_patch(arrow)
 
         for i in range(len(gradients)):
             x = 0.1 + i * box_width + box_width * 0.45
-            arrow = FancyArrowPatch((0.47, 0.35), (x, 0.3),
-                                   arrowstyle='->,head_width=0.4,head_length=0.4',
-                                   color='red', linewidth=2,
-                                   transform=ax.transAxes)
+            arrow = FancyArrowPatch(
+                (0.47, 0.35),
+                (x, 0.3),
+                arrowstyle='->,head_width=0.4,head_length=0.4',
+                color='red',
+                linewidth=2,
+                transform=ax.transAxes,
+            )
             ax.add_patch(arrow)
 
 
-def visualize(func: Callable,
-              mode: str = 'graph',
-              wrt: Union[int, Tuple[int, ...]] = (0,),
-              inputs: Optional[Tuple] = None,
-              figsize: Tuple[int, int] = (12, 8)):
+def visualize(
+    func: Callable,
+    mode: str = 'graph',
+    wrt: Union[int, Tuple[int, ...]] = (0,),
+    inputs: Optional[Tuple] = None,
+    figsize: Tuple[int, int] = (12, 8),
+):
     """Visualize a function's computation or gradient flow.
 
     This is the main entry point for Tangent's visualization tools.
@@ -483,11 +571,13 @@ def visualize(func: Callable,
         raise ValueError(f"Unknown mode: {mode}. Use 'graph' or 'flow'")
 
 
-def compare_gradients(func: Callable,
-                     inputs: Tuple,
-                     wrt: Union[int, Tuple[int, ...]] = (0,),
-                     eps: float = 1e-7,
-                     figsize: Tuple[int, int] = (12, 5)):
+def compare_gradients(
+    func: Callable,
+    inputs: Tuple,
+    wrt: Union[int, Tuple[int, ...]] = (0,),
+    eps: float = 1e-7,
+    figsize: Tuple[int, int] = (12, 5),
+):
     """Compare automatic differentiation gradients with numerical gradients.
 
     This is useful for debugging and educational purposes.
@@ -554,8 +644,7 @@ def compare_gradients(func: Callable,
     if n_grads == 1:
         axes = [axes]
 
-    fig.suptitle(f'Gradient Comparison: {func.__name__}',
-                fontsize=16, fontweight='bold')
+    fig.suptitle(f'Gradient Comparison: {func.__name__}', fontsize=16, fontweight='bold')
 
     for i, (auto_g, num_g, ax) in enumerate(zip(auto_grads, num_grads, axes)):
         # Convert to numpy if needed
@@ -568,8 +657,8 @@ def compare_gradients(func: Callable,
         x_vals = np.arange(len(auto_g))
         width = 0.35
 
-        ax.bar(x_vals - width/2, auto_g, width, label='Autodiff', alpha=0.8, color='blue')
-        ax.bar(x_vals + width/2, num_g, width, label='Numerical', alpha=0.8, color='red')
+        ax.bar(x_vals - width / 2, auto_g, width, label='Autodiff', alpha=0.8, color='blue')
+        ax.bar(x_vals + width / 2, num_g, width, label='Numerical', alpha=0.8, color='red')
 
         ax.set_xlabel('Element', fontsize=12)
         ax.set_ylabel('Gradient Value', fontsize=12)
@@ -579,11 +668,16 @@ def compare_gradients(func: Callable,
 
         # Add error text
         error = np.max(np.abs(auto_g - num_g))
-        ax.text(0.95, 0.95, f'Max error: {error:.2e}',
-               transform=ax.transAxes,
-               ha='right', va='top',
-               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-               fontsize=10)
+        ax.text(
+            0.95,
+            0.95,
+            f'Max error: {error:.2e}',
+            transform=ax.transAxes,
+            ha='right',
+            va='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+            fontsize=10,
+        )
 
     plt.tight_layout()
     return fig

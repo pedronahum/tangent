@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """TensorFlow extensions."""
+
 from __future__ import absolute_import
 
 # TensorFlow extensions are optional and may not work with TensorFlow 2.x
@@ -48,6 +49,7 @@ import tangent
 try:
     from tensorflow.python.framework import ops
     from tensorflow.python.ops import resource_variable_ops
+
     # In TF 2.x, check if EagerTensor exists
     if hasattr(ops, 'EagerTensor'):
         TensorType = ops.EagerTensor
@@ -58,8 +60,8 @@ try:
 except (ImportError, AttributeError) as e:
     # Fallback for TF 2.x; a working compatibility path, so no warning.
     import logging
-    logging.getLogger('tangent').debug(
-        'Using fallback tensor types for TF 2.x: %s', e)
+
+    logging.getLogger('tangent').debug('Using fallback tensor types for TF 2.x: %s', e)
     TensorType = tf.Tensor
     try:
         VariableType = tf.Variable
@@ -68,28 +70,29 @@ except (ImportError, AttributeError) as e:
 
 
 def size(x, axis):
-  axis_shape = x.shape if axis is None else tuple(x.shape[a] for a in axis)
-  # In TF 2.x, shape elements are integers directly, no .value needed
-  prod = np.prod(axis_shape)
-  # Handle both TF 1.x (with .value) and TF 2.x (direct int)
-  prod_value = prod.value if hasattr(prod, 'value') else prod
-  return max(int(prod_value), 1)
+    axis_shape = x.shape if axis is None else tuple(x.shape[a] for a in axis)
+    # In TF 2.x, shape elements are integers directly, no .value needed
+    prod = np.prod(axis_shape)
+    # Handle both TF 1.x (with .value) and TF 2.x (direct int)
+    prod_value = prod.value if hasattr(prod, 'value') else prod
+    return max(int(prod_value), 1)
 
 
 def dtype(t):
-  return t.dtype
+    return t.dtype
 
 
 def shape_as_list(t):
-  return t.shape.as_list()
+    return t.shape.as_list()
 
 
 def tensor_shapes_match(a, b):
-  return tf.shape(a).shape == tf.shape(b).shape
+    return tf.shape(a).shape == tf.shape(b).shape
 
 
 # Register shape functions - avoid double registration
 from tangent import utils as _utils
+
 if TensorType not in _utils.shape_functions:
     register_shape_function(TensorType, shape_as_list)
 if VariableType not in _utils.shape_functions:
@@ -99,9 +102,17 @@ if VariableType not in _utils.shape_functions:
 # tf.to_float was removed in TensorFlow 2.0, use tf.cast instead
 # Note: tf.cast is differentiable, so we don't register it as non-differentiable
 non_differentiable.register_non_differentiable_functions(
-    tf.shape, tf.equal, tf.constant,
-    tf.zeros, tf.ones, tf.zeros_like, tf.ones_like,
-    size, shape_as_list, dtype)
+    tf.shape,
+    tf.equal,
+    tf.constant,
+    tf.zeros,
+    tf.ones,
+    tf.zeros_like,
+    tf.ones_like,
+    size,
+    shape_as_list,
+    dtype,
+)
 
 
 # Register gradient initializers - avoid double registration
@@ -113,9 +124,7 @@ if VariableType not in _utils.grad_initializers:
 # structure when a tangent passes through a shape value (e.g. via
 # shape_as_list in a second derivative).
 if tf.TensorShape not in _utils.grad_initializers:
-    register_init_grad(
-        tf.TensorShape,
-        lambda shape: tf.TensorShape([0 for _ in range(len(shape))]))
+    register_init_grad(tf.TensorShape, lambda shape: tf.TensorShape([0 for _ in range(len(shape))]))
 
 # Register add_grad and shape checker for supported types
 # Only register if not already done
@@ -123,10 +132,19 @@ try:
     # Register add_grad for TF tensors with each other AND with Python numerics
     # Gradient code often needs to add TF tensors with Python floats/ints
     from numbers import Number
-    tensor_and_numeric_types = (TensorType, VariableType, float, int, Number,
-                                 np.float32, np.float64, np.int32, np.int64)
-    register_all_add_grad(
-        tf.add, tensor_and_numeric_types)
+
+    tensor_and_numeric_types = (
+        TensorType,
+        VariableType,
+        float,
+        int,
+        Number,
+        np.float32,
+        np.float64,
+        np.int32,
+        np.int64,
+    )
+    register_all_add_grad(tf.add, tensor_and_numeric_types)
 except ValueError as e:
     # Already registered, skip
     if "already mapped" not in str(e):
@@ -136,11 +154,19 @@ try:
     # Register shape checkers for TF tensors with each other AND with Python numerics
     # This is needed because gradient code may mix TF tensors with Python floats/ints
     from numbers import Number
-    tensor_and_numeric_types = (TensorType, VariableType, float, int, Number,
-                                 np.float32, np.float64, np.int32, np.int64)
-    register_all_shape_checker(
-        tensor_shapes_match,
-        tensor_and_numeric_types)
+
+    tensor_and_numeric_types = (
+        TensorType,
+        VariableType,
+        float,
+        int,
+        Number,
+        np.float32,
+        np.float64,
+        np.int32,
+        np.int64,
+    )
+    register_all_shape_checker(tensor_shapes_match, tensor_and_numeric_types)
 except ValueError as e:
     # Already registered, skip
     if "already mapped" not in str(e):
@@ -173,13 +199,13 @@ def tf_matmul_grad_y(dz, x, y):
 
 _utils.register_matmul_grad(TensorType, tf_matmul_grad_x, tf_matmul_grad_y)
 if VariableType is not TensorType:
-    _utils.register_matmul_grad(VariableType, tf_matmul_grad_x,
-                                tf_matmul_grad_y)
+    _utils.register_matmul_grad(VariableType, tf_matmul_grad_x, tf_matmul_grad_y)
 
 
 # Type mixing support: NumPy <-> TensorFlow conversion
 # This handles cases where Python's ** operator returns NumPy arrays
 # when operating on TensorFlow tensors
+
 
 def add_grad_numpy_to_tensor(left, right):
     """Add NumPy array to TensorFlow tensor by converting to TensorFlow.
@@ -198,6 +224,7 @@ def add_grad_numpy_to_tensor(left, right):
     left_tf = tf.constant(left, dtype=right.dtype)
     return tf.add(left_tf, right)
 
+
 def add_grad_tensor_to_numpy(left, right):
     """Add TensorFlow tensor to NumPy array by converting to TensorFlow.
 
@@ -211,6 +238,7 @@ def add_grad_tensor_to_numpy(left, right):
     # Convert NumPy array to TensorFlow tensor, matching the dtype of left
     right_tf = tf.constant(right, dtype=left.dtype)
     return tf.add(left, right_tf)
+
 
 # Register NumPy <-> TensorFlow conversions
 try:
@@ -230,37 +258,37 @@ except ValueError as e:
 
 
 def unbroadcast_tfe_to(tensor, shape):
-  """Reverse the broadcasting operation.
+    """Reverse the broadcasting operation.
 
-  See utils.py.
+    See utils.py.
 
-  Args:
-    tensor: A Tensor.
-    shape: A shape that could have been broadcasted to the shape of tensor.
+    Args:
+      tensor: A Tensor.
+      shape: A shape that could have been broadcasted to the shape of tensor.
 
-  Returns:
-    Tensor with dimensions summed to match `shape`.
-  """
-  axis = utils.create_unbroadcast_axis(shape, shape_as_list(tensor))
-  return tf.reshape(tf.reduce_sum(tensor, axis=axis), shape)
+    Returns:
+      Tensor with dimensions summed to match `shape`.
+    """
+    axis = utils.create_unbroadcast_axis(shape, shape_as_list(tensor))
+    return tf.reshape(tf.reduce_sum(tensor, axis=axis), shape)
 
 
 def unbroadcast_tensor(tensor, like):
-  """Reverse the broadcasting operation.
+    """Reverse the broadcasting operation.
 
-  See utils.py.
+    See utils.py.
 
-  Args:
-    tensor: A Tensor, or a generic seed (Python scalar/NumPy) which is
-      converted to a tensor of `like`'s dtype.
-    like: A Tensor that could have been broadcasted to the shape of tensor.
+    Args:
+      tensor: A Tensor, or a generic seed (Python scalar/NumPy) which is
+        converted to a tensor of `like`'s dtype.
+      like: A Tensor that could have been broadcasted to the shape of tensor.
 
-  Returns:
-    Tensor with certain dimensions summed to match the shape of `like`.
-  """
-  if not isinstance(tensor, (TensorType, VariableType)):
-    tensor = tf.convert_to_tensor(tensor, dtype=getattr(like, 'dtype', None))
-  return unbroadcast_tfe_to(tensor, shape_as_list(like))
+    Returns:
+      Tensor with certain dimensions summed to match the shape of `like`.
+    """
+    if not isinstance(tensor, (TensorType, VariableType)):
+        tensor = tf.convert_to_tensor(tensor, dtype=getattr(like, 'dtype', None))
+    return unbroadcast_tfe_to(tensor, shape_as_list(like))
 
 
 # Register unbroadcast - avoid double registration
@@ -271,28 +299,28 @@ if VariableType not in _utils.unbroadcasters:
 
 
 def unreduce_tensor(tensor, shape, axis, keepdims):
-  """Reverse summing over a dimension.
+    """Reverse summing over a dimension.
 
-  See utils.py.
+    See utils.py.
 
-  Args:
-    tensor: The tensor that was reduced.
-    shape: A list, the original shape of the tensor before reduction.
-    axis: The axis or axes that were summed.
-    keepdims: Whether these axes were kept as singleton axes.
+    Args:
+      tensor: The tensor that was reduced.
+      shape: A list, the original shape of the tensor before reduction.
+      axis: The axis or axes that were summed.
+      keepdims: Whether these axes were kept as singleton axes.
 
-  Returns:
-    A tensor with axes broadcast to match the shape of the original tensor.
-  """
-  if not keepdims:
-    if axis is None:
-      axis = range(len(shape))
-    elif isinstance(axis, int):
-      axis = axis,
-    for ax in sorted(axis):
-      tensor = tf.expand_dims(tensor, ax)
-  tile_shape = np.array(shape) / np.array(shape_as_list(tensor))
-  return tf.tile(tensor, tile_shape)
+    Returns:
+      A tensor with axes broadcast to match the shape of the original tensor.
+    """
+    if not keepdims:
+        if axis is None:
+            axis = range(len(shape))
+        elif isinstance(axis, int):
+            axis = (axis,)
+        for ax in sorted(axis):
+            tensor = tf.expand_dims(tensor, ax)
+    tile_shape = np.array(shape) / np.array(shape_as_list(tensor))
+    return tf.tile(tensor, tile_shape)
 
 
 # Register unreduce - avoid double registration
@@ -304,35 +332,35 @@ if VariableType not in _utils.unreducers:
 
 # TODO: Once the optimizer can handle multiple return values, consolidate.
 def matmul_adjoint_x(dz, x, y, transpose_a, transpose_b):
-  """Implementation of dtfmatmul wrt x, separate for readability."""
-  # TF 2.x requires matching dtypes for matmul operations
-  # Cast dz to match x's dtype if needed
-  if hasattr(dz, 'dtype') and hasattr(x, 'dtype') and dz.dtype != x.dtype:
-    dz = tf.cast(dz, x.dtype)
-  if not transpose_a and not transpose_b:
-    return tf.matmul(dz, y, transpose_b=True)
-  elif not transpose_a and transpose_b:
-    return tf.matmul(dz, y)
-  elif transpose_a and not transpose_b:
-    return tf.matmul(y, dz, transpose_b=True)
-  else:  # transpose_a and transpose_b
-    return tf.matmul(y, dz, transpose_a=True, transpose_b=True)
+    """Implementation of dtfmatmul wrt x, separate for readability."""
+    # TF 2.x requires matching dtypes for matmul operations
+    # Cast dz to match x's dtype if needed
+    if hasattr(dz, 'dtype') and hasattr(x, 'dtype') and dz.dtype != x.dtype:
+        dz = tf.cast(dz, x.dtype)
+    if not transpose_a and not transpose_b:
+        return tf.matmul(dz, y, transpose_b=True)
+    elif not transpose_a and transpose_b:
+        return tf.matmul(dz, y)
+    elif transpose_a and not transpose_b:
+        return tf.matmul(y, dz, transpose_b=True)
+    else:  # transpose_a and transpose_b
+        return tf.matmul(y, dz, transpose_a=True, transpose_b=True)
 
 
 def matmul_adjoint_y(dz, x, y, transpose_a, transpose_b):
-  """Implementation of dtfmatmul, separate for readability."""
-  # TF 2.x requires matching dtypes for matmul operations
-  # Cast dz to match y's dtype if needed
-  if hasattr(dz, 'dtype') and hasattr(y, 'dtype') and dz.dtype != y.dtype:
-    dz = tf.cast(dz, y.dtype)
-  if not transpose_a and not transpose_b:
-    return tf.matmul(x, dz, transpose_a=True)
-  elif not transpose_a and transpose_b:
-    return tf.matmul(dz, x, transpose_a=True)
-  elif transpose_a and not transpose_b:
-    return tf.matmul(x, dz)
-  else:  # transpose_a and transpose_b
-    return tf.matmul(dz, x, transpose_a=True, transpose_b=True)
+    """Implementation of dtfmatmul, separate for readability."""
+    # TF 2.x requires matching dtypes for matmul operations
+    # Cast dz to match y's dtype if needed
+    if hasattr(dz, 'dtype') and hasattr(y, 'dtype') and dz.dtype != y.dtype:
+        dz = tf.cast(dz, y.dtype)
+    if not transpose_a and not transpose_b:
+        return tf.matmul(x, dz, transpose_a=True)
+    elif not transpose_a and transpose_b:
+        return tf.matmul(dz, x, transpose_a=True)
+    elif transpose_a and not transpose_b:
+        return tf.matmul(x, dz)
+    else:  # transpose_a and transpose_b
+        return tf.matmul(dz, x, transpose_a=True, transpose_b=True)
 
 
 #
@@ -342,7 +370,7 @@ def matmul_adjoint_y(dz, x, y, transpose_a, transpose_b):
 
 @adjoint(tf.exp)
 def dtfexp(y, x):
-  d[x] = y * d[y]
+    d[x] = y * d[y]
 
 
 # TF 2.x: Many math functions moved to tf.math.*
@@ -365,6 +393,7 @@ except AttributeError:
 # TF 2.x: conv2d backprop functions moved to gen_nn_ops
 try:
     from tensorflow.python.ops import gen_nn_ops
+
     tf_conv2d_backprop_input = gen_nn_ops.conv2d_backprop_input
     tf_conv2d_backprop_filter = gen_nn_ops.conv2d_backprop_filter
 except (ImportError, AttributeError):
@@ -385,140 +414,138 @@ if tf_conv2d_backprop_input is not None:
 if tf_conv2d_backprop_filter is not None:
     tangent.conv2d_backprop_filter = tf_conv2d_backprop_filter
 
+
 @adjoint(tf_log)
 def dtflog(y, x):
-  d[x] = d[y] / x
+    d[x] = d[y] / x
 
 
 @adjoint(tf.tanh)
 def dtftanh(y, x):
-  d[x] = d[y] * (1 - (y * y))
+    d[x] = d[y] * (1 - (y * y))
 
 
 @adjoint(tf.cosh)
 def dtfcosh(y, x):
-  d[x] = d[y] * tf.sinh(x)
+    d[x] = d[y] * tf.sinh(x)
 
 
 @adjoint(tf.sinh)
 def dtfsinh(y, x):
-  d[x] = d[y] * tf.cosh(x)
+    d[x] = d[y] * tf.cosh(x)
 
 
 @adjoint(tf_rsqrt)
 def drsqrt(y, x):
-  d[x] = -0.5 * d[y] * tf.pow(tf.math.conj(y), tf.constant(3.0))
+    d[x] = -0.5 * d[y] * tf.pow(tf.math.conj(y), tf.constant(3.0))
 
 
 @adjoint(tf.negative)
 def dtfnegative(y, x):
-  # TODO: Remove the unbroadcast.
-  d[x] = tangent.unbroadcast_tensor(tf.negative(d[y]), x)
+    # TODO: Remove the unbroadcast.
+    d[x] = tangent.unbroadcast_tensor(tf.negative(d[y]), x)
 
 
 @adjoint(tf.expand_dims)
 def dtfexpand_dims(y, x, axis):
-  d[x] = tf.squeeze(d[y], axis)
+    d[x] = tf.squeeze(d[y], axis)
 
 
 @adjoint(tf.squeeze)
 def dtfsqueeze(y, x, axis=None):
-  # Reshape back to the primal's shape; this handles axis=None (squeeze all
-  # unit dims) as well as single/multi-axis squeezes, whereas expand_dims
-  # requires a concrete axis.
-  d[x] = tf.reshape(d[y], tf.shape(x))
+    # Reshape back to the primal's shape; this handles axis=None (squeeze all
+    # unit dims) as well as single/multi-axis squeezes, whereas expand_dims
+    # requires a concrete axis.
+    d[x] = tf.reshape(d[y], tf.shape(x))
 
 
 @adjoint(tf.reshape)
 def dtfreshape(y, x, shape):
-  d[x] = tf.reshape(d[y], tf.shape(x))
+    d[x] = tf.reshape(d[y], tf.shape(x))
 
 
 @adjoint(tf.transpose)
 def dtftranspose(y, x, perm=None):
-  # Transpose is its own inverse for the default (full reversal); for an
-  # explicit permutation, apply the inverse permutation.
-  if perm is None:
-    d[x] = tf.transpose(d[y])
-  else:
-    inv_perm = [0] * len(perm)
-    for i, p in enumerate(perm):
-      inv_perm[p] = i
-    d[x] = tf.transpose(d[y], inv_perm)
+    # Transpose is its own inverse for the default (full reversal); for an
+    # explicit permutation, apply the inverse permutation.
+    if perm is None:
+        d[x] = tf.transpose(d[y])
+    else:
+        inv_perm = [0] * len(perm)
+        for i, p in enumerate(perm):
+            inv_perm[p] = i
+        d[x] = tf.transpose(d[y], inv_perm)
 
 
 @adjoint(tf.cast)
 def dtfcast(y, x, dtype):
-  # Gradients flow through a cast unchanged, cast back to the input dtype.
-  d[x] = tf.cast(d[y], x.dtype)
+    # Gradients flow through a cast unchanged, cast back to the input dtype.
+    d[x] = tf.cast(d[y], x.dtype)
 
 
 @adjoint(tf.reduce_sum)
 def dtfreduce_sum(y, x, axis=None, keep_dims=False):
-  # TODO: We may be able to assume unreduce_tensor works throughout.
-  d[x] = tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims)
+    # TODO: We may be able to assume unreduce_tensor works throughout.
+    d[x] = tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims)
 
 
 @adjoint(tf.reduce_mean)
 def dtfreduce_mean(y, x, axis=None, keep_dims=False):
-  n = tf.constant(float(tangent.size(x, axis)))
-  d[x] = tf.divide(
-      tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims), n)
+    n = tf.constant(float(tangent.size(x, axis)))
+    d[x] = tf.divide(tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims), n)
 
 
 @adjoint(tf.reduce_max)
 def dtfreduce_max(y, x, axis=None, keep_dims=False):
-  mask = tf.cast(
-      tf.equal(
-          tangent.unreduce(y, tangent.shape_as_list(x), axis, keep_dims), x),
-      tf.float32)
-  d[x] = tf.multiply(
-      tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims), mask)
+    mask = tf.cast(
+        tf.equal(tangent.unreduce(y, tangent.shape_as_list(x), axis, keep_dims), x), tf.float32
+    )
+    d[x] = tf.multiply(tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keep_dims), mask)
 
 
 @adjoint(tf.add)
 def dtfadd(z, x, y):
-  d[x] = tangent.unbroadcast(d[z], x)
-  d[y] = tangent.unbroadcast(d[z], y)
+    d[x] = tangent.unbroadcast(d[z], x)
+    d[y] = tangent.unbroadcast(d[z], y)
 
 
 @adjoint(tf.subtract)
 def dtfsubtract(z, x, y):
-  d[x] = tangent.unbroadcast(d[z], x)
-  d[y] = tangent.unbroadcast(tf.negative(d[z]), y)
+    d[x] = tangent.unbroadcast(d[z], x)
+    d[y] = tangent.unbroadcast(tf.negative(d[z]), y)
 
 
 @adjoint(tf.multiply)
 def dtfmultiply(z, x, y):
-  d[x] = tangent.unbroadcast(tf.multiply(d[z], y), x)
-  d[y] = tangent.unbroadcast(tf.multiply(d[z], x), y)
+    d[x] = tangent.unbroadcast(tf.multiply(d[z], y), x)
+    d[y] = tangent.unbroadcast(tf.multiply(d[z], x), y)
 
 
 @adjoint(tf.divide)
 def dtfdivide(z, x, y):
-  d[x] = tangent.unbroadcast(tf.divide(d[z], y), x)
-  d[y] = tangent.unbroadcast(
-      tf.negative(tf.divide(tf.multiply(d[z], x), tf.multiply(y, y))), y)
+    d[x] = tangent.unbroadcast(tf.divide(d[z], y), x)
+    d[y] = tangent.unbroadcast(tf.negative(tf.divide(tf.multiply(d[z], x), tf.multiply(y, y))), y)
 
 
 @adjoint(tf.pow)
 def dtfpow(z, x, y):
-  """Gradient of tf.pow(x, y) = x^y
+    """Gradient of tf.pow(x, y) = x^y
 
-  d/dx[x^y] = y * x^(y-1)
-  d/dy[x^y] = x^y * log(x)
-  """
-  d[x] = tangent.unbroadcast(d[z] * y * tf.pow(x, y - 1), x)
-  d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
+    d/dx[x^y] = y * x^(y-1)
+    d/dy[x^y] = x^y * log(x)
+    """
+    d[x] = tangent.unbroadcast(d[z] * y * tf.pow(x, y - 1), x)
+    d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
 
 
 # Also register tf.math.pow if it exists (TF 2.x compatibility)
 try:
+
     @adjoint(tf.math.pow)
     def dtfmathpow(z, x, y):
-      """Gradient of tf.math.pow(x, y) = x^y"""
-      d[x] = tangent.unbroadcast(d[z] * y * tf.math.pow(x, y - 1), x)
-      d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
+        """Gradient of tf.math.pow(x, y) = x^y"""
+        d[x] = tangent.unbroadcast(d[z] * y * tf.math.pow(x, y - 1), x)
+        d[y] = tangent.unbroadcast(d[z] * z * tf.math.log(x), y)
 except AttributeError:
     # tf.math.pow may not exist in some TF versions
     pass
@@ -526,40 +553,43 @@ except AttributeError:
 
 @adjoint(tf.maximum)
 def dtfmaximum(z, x, y):
-  d[x] = tf.multiply(d[z], tf.cast(tf.equal(z, x), tf.float32))
-  d[y] = tf.multiply(d[z], tf.cast(tf.equal(z, y), tf.float32))
+    d[x] = tf.multiply(d[z], tf.cast(tf.equal(z, x), tf.float32))
+    d[y] = tf.multiply(d[z], tf.cast(tf.equal(z, y), tf.float32))
 
 
 @adjoint(tf_squared_difference)
 def dtfsquared_difference(z, x, y):
-  d[x] = tangent.unbroadcast(2 * d[z] * (x - y), x)
-  d[y] = tangent.unbroadcast(2 * d[z] * (y - x), y)
+    d[x] = tangent.unbroadcast(2 * d[z] * (x - y), x)
+    d[y] = tangent.unbroadcast(2 * d[z] * (y - x), y)
 
 
 @adjoint(tf.matmul)
 def dtfmatmul(z, x, y, transpose_a=False, transpose_b=False):
-  d[x] = tangent.matmul_adjoint_x(d[z], x, y, transpose_a, transpose_b)
-  d[y] = tangent.matmul_adjoint_y(d[z], x, y, transpose_a, transpose_b)
+    d[x] = tangent.matmul_adjoint_x(d[z], x, y, transpose_a, transpose_b)
+    d[y] = tangent.matmul_adjoint_y(d[z], x, y, transpose_a, transpose_b)
 
 
 @adjoint(tf.nn.conv2d)
 def dtfconv2d(z, x, y, strides, padding):
-  # Reference the helpers exposed on the tangent module: the old
-  # tf.nn.conv2d_backprop_* names were removed from the TF 2.x public API,
-  # and module-level names of this file are not visible to generated code.
-  d[x] = tangent.conv2d_backprop_input(tf.shape(x), y, d[z], strides, padding)
-  d[y] = tangent.conv2d_backprop_filter(x, tf.shape(y), d[z], strides, padding)
+    # Reference the helpers exposed on the tangent module: the old
+    # tf.nn.conv2d_backprop_* names were removed from the TF 2.x public API,
+    # and module-level names of this file are not visible to generated code.
+    d[x] = tangent.conv2d_backprop_input(tf.shape(x), y, d[z], strides, padding)
+    d[y] = tangent.conv2d_backprop_filter(x, tf.shape(y), d[z], strides, padding)
 
 
 # Register conv2d backprop adjoints only if functions are available
 if tf_conv2d_backprop_input is not None:
+
     @adjoint(tf_conv2d_backprop_input)
     def dtfconv2d_backprop_input(z, shape, x, y, strides, padding):
         # TODO: Add tests.
         d[x] = tf_conv2d_backprop_filter(d[z], shape, y, strides, padding)
         d[y] = tf.nn.conv2d(d[z], x, strides, padding)
 
+
 if tf_conv2d_backprop_filter is not None:
+
     @adjoint(tf_conv2d_backprop_filter)
     def dtfconv2d_backprop_filter(z, x, shape, y, strides, padding):
         # TODO: Add tests.
@@ -569,34 +599,34 @@ if tf_conv2d_backprop_filter is not None:
 
 @adjoint(tf.nn.avg_pool)
 def dtfavg_pool(y, x, sizes, strides, padding):
-  # The callable is selected in the try/except and assigned to a local, so
-  # that d[x] is written exactly once: a d[x] store inside each branch would
-  # create a distinct temp adjoint per branch, and only one of them exists at
-  # runtime.
-  try:
-    from tensorflow.python.ops import gen_nn_ops
-    _pool_grad = gen_nn_ops.avg_pool_grad(
-        tf.shape(x), d[y], sizes, strides, padding)
-  except (ImportError, AttributeError):
-    # Fallback for older TF versions
-    _pool_grad = tf.nn._nn_grad.gen_nn_ops._avg_pool_grad(
-        tf.shape(x), d[y], sizes, strides, padding)
-  d[x] = _pool_grad
+    # The callable is selected in the try/except and assigned to a local, so
+    # that d[x] is written exactly once: a d[x] store inside each branch would
+    # create a distinct temp adjoint per branch, and only one of them exists at
+    # runtime.
+    try:
+        from tensorflow.python.ops import gen_nn_ops
+
+        _pool_grad = gen_nn_ops.avg_pool_grad(tf.shape(x), d[y], sizes, strides, padding)
+    except (ImportError, AttributeError):
+        # Fallback for older TF versions
+        _pool_grad = tf.nn._nn_grad.gen_nn_ops._avg_pool_grad(
+            tf.shape(x), d[y], sizes, strides, padding
+        )
+    d[x] = _pool_grad
 
 
 @adjoint(tf.nn.max_pool)
 def dtfmax_pool(y, x, sizes, strides, padding):
-  # See dtfavg_pool for why the d[x] store must happen outside the
-  # try/except.
-  try:
-    from tensorflow.python.ops import gen_nn_ops
-    _pool_grad = gen_nn_ops.max_pool_grad(
-        x, y, d[y], sizes, strides, padding)
-  except (ImportError, AttributeError):
-    # Fallback for older TF versions
-    _pool_grad = tf.nn._nn_grad.gen_nn_ops._max_pool_grad(
-        x, y, d[y], sizes, strides, padding)
-  d[x] = _pool_grad
+    # See dtfavg_pool for why the d[x] store must happen outside the
+    # try/except.
+    try:
+        from tensorflow.python.ops import gen_nn_ops
+
+        _pool_grad = gen_nn_ops.max_pool_grad(x, y, d[y], sizes, strides, padding)
+    except (ImportError, AttributeError):
+        # Fallback for older TF versions
+        _pool_grad = tf.nn._nn_grad.gen_nn_ops._max_pool_grad(x, y, d[y], sizes, strides, padding)
+    d[x] = _pool_grad
 
 
 #
@@ -606,125 +636,123 @@ def dtfmax_pool(y, x, sizes, strides, padding):
 
 @tangent_(shape_as_list)
 def tshape_as_list(y, x):
-  d[y] = tangent.shape_as_list(d[x])
+    d[y] = tangent.shape_as_list(d[x])
 
 
 @tangent_(tf.exp)
 def ttfexp(y, x):
-  d[y] = d[x] * y
+    d[y] = d[x] * y
 
 
 @tangent_(tf_log)
 def ttflog(y, x):
-  d[y] = d[x] / x
+    d[y] = d[x] / x
 
 
 @tangent_(tf.tanh)
 def ttftanh(y, x):
-  cx = tf.cosh(x)
-  d[y] = d[x] / (cx * cx)
+    cx = tf.cosh(x)
+    d[y] = d[x] / (cx * cx)
 
 
 @tangent_(tf.cosh)
 def ttfcosh(y, x):
-  d[y] = d[x] * tf.sinh(x)
+    d[y] = d[x] * tf.sinh(x)
 
 
 @tangent_(tf.sinh)
 def ttfsinh(y, x):
-  d[y] = d[x] * tf.cosh(x)
+    d[y] = d[x] * tf.cosh(x)
 
 
 @tangent_(tf.expand_dims)
 def ttfexpand_dims(y, x, axis):
-  d[y] = tf.expand_dims(d[x], axis)
+    d[y] = tf.expand_dims(d[x], axis)
 
 
 @tangent_(tf.squeeze)
 def ttfsqueeze(y, x, axis):
-  d[y] = tf.squeeze(d[x], axis)
+    d[y] = tf.squeeze(d[x], axis)
 
 
 @tangent_(tf.reshape)
 def ttfreshape(y, x, shape):
-  d[y] = tf.reshape(d[x], shape)
+    d[y] = tf.reshape(d[x], shape)
 
 
 @tangent_(tf.cast)
 def ttfcast(y, x, dtype):
-  d[y] = tf.cast(d[x], dtype)
+    d[y] = tf.cast(d[x], dtype)
 
 
 @tangent_(tf.reduce_sum)
 def ttfreduce_sum(y, x, axis=None, keep_dims=False):
-  d[y] = tf.reduce_sum(d[x], axis, keep_dims)
+    d[y] = tf.reduce_sum(d[x], axis, keep_dims)
 
 
 @tangent_(tf.reduce_mean)
 def ttfreduce_mean(y, x, axis=None, keep_dims=False):
-  d[y] = tf.reduce_mean(d[x], axis, keep_dims)
+    d[y] = tf.reduce_mean(d[x], axis, keep_dims)
 
 
 @tangent_(tf.reduce_max)
 def ttfreduce_max(y, x, axis=None, keep_dims=False):
-  mask = tf.cast(
-      tf.equal(
-          tangent.unreduce(
-              tf.ones_like(y), tangent.shape_as_list(x), axis, keep_dims), x),
-      tf.float32)
-  d[y] = tf.multiply(d[x], mask)
+    mask = tf.cast(
+        tf.equal(tangent.unreduce(tf.ones_like(y), tangent.shape_as_list(x), axis, keep_dims), x),
+        tf.float32,
+    )
+    d[y] = tf.multiply(d[x], mask)
 
 
 @tangent_(tf.negative)
 def ttfnegative(y, x):
-  d[y] = tf.negative(d[x])
+    d[y] = tf.negative(d[x])
 
 
 @tangent_(tf.add)
 def ttfadd(z, x, y):
-  d[z] = tf.add(d[x], d[y])
+    d[z] = tf.add(d[x], d[y])
 
 
 @tangent_(tf.subtract)
 def ttfsubtract(z, x, y):
-  d[z] = tf.subtract(d[x], d[y])
+    d[z] = tf.subtract(d[x], d[y])
 
 
 @tangent_(tf.multiply)
 def ttfmultiply(z, x, y):
-  d[z] = tf.add(tf.multiply(d[x], y), tf.multiply(x, d[y]))
+    d[z] = tf.add(tf.multiply(d[x], y), tf.multiply(x, d[y]))
 
 
 @tangent_(tf.divide)
 def ttfdivide(z, x, y):
-  d[z] = tf.divide(
-          tf.subtract(tf.multiply(d[x], y), tf.multiply(x, d[y])),
-          tf.multiply(y, y))
+    d[z] = tf.divide(tf.subtract(tf.multiply(d[x], y), tf.multiply(x, d[y])), tf.multiply(y, y))
 
 
 @tangent_(tf.pow)
 def ttfpow(z, x, y):
-  """Forward mode gradient of tf.pow(x, y) = x^y
+    """Forward mode gradient of tf.pow(x, y) = x^y
 
-  Using the product rule:
-  d[z] = d[x] * (∂z/∂x) + d[y] * (∂z/∂y)
-       = d[x] * y * x^(y-1) + d[y] * x^y * log(x)
-  """
-  d[z] = tf.add(
-      tf.multiply(d[x], tf.multiply(y, tf.pow(x, y - 1))),
-      tf.multiply(d[y], tf.multiply(z, tf.math.log(x)))
-  )
+    Using the product rule:
+    d[z] = d[x] * (∂z/∂x) + d[y] * (∂z/∂y)
+         = d[x] * y * x^(y-1) + d[y] * x^y * log(x)
+    """
+    d[z] = tf.add(
+        tf.multiply(d[x], tf.multiply(y, tf.pow(x, y - 1))),
+        tf.multiply(d[y], tf.multiply(z, tf.math.log(x))),
+    )
 
 
 # Also register tf.math.pow if it exists (TF 2.x compatibility)
 try:
+
     @tangent_(tf.math.pow)
     def ttfmathpow(z, x, y):
-      """Forward mode gradient of tf.math.pow(x, y)"""
-      d[z] = tf.add(
-          tf.multiply(d[x], tf.multiply(y, tf.math.pow(x, y - 1))),
-          tf.multiply(d[y], tf.multiply(z, tf.math.log(x)))
-      )
+        """Forward mode gradient of tf.math.pow(x, y)"""
+        d[z] = tf.add(
+            tf.multiply(d[x], tf.multiply(y, tf.math.pow(x, y - 1))),
+            tf.multiply(d[y], tf.multiply(z, tf.math.log(x))),
+        )
 except AttributeError:
     # tf.math.pow may not exist in some TF versions
     pass
@@ -732,22 +760,22 @@ except AttributeError:
 
 @tangent_(tf.maximum)
 def ttfmaximum(z, x, y):
-  d[z] = d[x] * tf.cast(tf.equal(z, x), tf.float32) + d[y] * tf.cast(tf.equal(z, y), tf.float32)
+    d[z] = d[x] * tf.cast(tf.equal(z, x), tf.float32) + d[y] * tf.cast(tf.equal(z, y), tf.float32)
 
 
 @tangent_(tf.nn.avg_pool)
 def ttfavg_pool(y, x, sizes, strides, padding):
-  raise tangent.ForwardNotImplementedError(tf.nn.avg_pool)
+    raise tangent.ForwardNotImplementedError(tf.nn.avg_pool)
 
 
 @tangent_(tf.nn.max_pool)
 def ttfmax_pool(y, x, sizes, strides, padding):
-  raise tangent.ForwardNotImplementedError(tf.nn.max_pool)
+    raise tangent.ForwardNotImplementedError(tf.nn.max_pool)
 
 
 @tangent_(tf.shape)
 def tshape(y, x):
-  d[y] = tf.shape(d[x])
+    d[y] = tf.shape(d[x])
 
 
 #
@@ -768,7 +796,9 @@ for optional_mod_name in ['math', 'signal', 'random', 'distributions', 'layers']
         tf_modules_to_check.append(getattr(tf, optional_mod_name))
 
 grads.UNIMPLEMENTED_ADJOINTS.update(
-    grads.get_module_functions(tuple(tf_modules_to_check)) - set(grads.adjoints))
+    grads.get_module_functions(tuple(tf_modules_to_check)) - set(grads.adjoints)
+)
 
 tangents.UNIMPLEMENTED_TANGENTS.update(
-    grads.get_module_functions(tuple(tf_modules_to_check)) - set(tangents.tangents))
+    grads.get_module_functions(tuple(tf_modules_to_check)) - set(tangents.tangents)
+)

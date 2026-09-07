@@ -5,6 +5,7 @@ comparison operators (``<``, ``==``, ``is`` ...), so they are safe to use in
 conditions that guide control flow. This suite exercises them in both reverse
 and forward mode.
 """
+
 import numpy as np
 import pytest
 
@@ -39,7 +40,7 @@ class TestMembershipReverseMode:
     def test_not_in_tuple_non_member(self):
         def f(x):
             if x not in (1.0, 2.0):
-                y = x ** 2
+                y = x**2
             else:
                 y = x * 5.0
             return y
@@ -50,7 +51,7 @@ class TestMembershipReverseMode:
     def test_not_in_tuple_member(self):
         def f(x):
             if x not in (1.0, 2.0):
-                y = x ** 2
+                y = x**2
             else:
                 y = x * 5.0
             return y
@@ -75,7 +76,7 @@ class TestMembershipReverseMode:
             result = 0.0
             for i in range(1, 4):
                 if i in (2, 3):
-                    result = result + x ** i
+                    result = result + x**i
             return result
 
         # d/dx (x^2 + x^3) at x=2 = 2x + 3x^2 = 4 + 12 = 16
@@ -100,7 +101,7 @@ class TestMembershipForwardMode:
     def test_not_in_forward(self):
         def f(x):
             if x not in (1.0, 2.0):
-                y = x ** 2
+                y = x**2
             else:
                 y = x * 5.0
             return y

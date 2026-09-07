@@ -74,8 +74,12 @@ class SubexpressionAnalyzer:
         if expr_hash in self.subexpressions:
             # Already seen, increment count
             existing_node, existing_cost, count, locations = self.subexpressions[expr_hash]
-            self.subexpressions[expr_hash] = (existing_node, existing_cost, count + 1,
-                                             locations + [path[:]])
+            self.subexpressions[expr_hash] = (
+                existing_node,
+                existing_cost,
+                count + 1,
+                locations + [path[:]],
+            )
         else:
             # New subexpression
             self.subexpressions[expr_hash] = (node, cost, 1, [path[:]])
@@ -140,8 +144,9 @@ class SubexpressionAnalyzer:
                 cost = 1
             elif isinstance(op, (ast.Mult, gast.Mult)):
                 cost = 2
-            elif isinstance(op, (ast.Div, gast.Div, ast.FloorDiv, gast.FloorDiv,
-                              ast.Mod, gast.Mod)):
+            elif isinstance(
+                op, (ast.Div, gast.Div, ast.FloorDiv, gast.FloorDiv, ast.Mod, gast.Mod)
+            ):
                 cost = 5
             elif isinstance(op, (ast.Pow, gast.Pow)):
                 cost = 10
@@ -342,7 +347,9 @@ class CommonSubexpressionEliminator:
         """Get all variable names used in an expression."""
         vars_used = set()
         for child in gast.walk(node):
-            if isinstance(child, (gast.Name, ast.Name)) and isinstance(child.ctx, (gast.Load, ast.Load)):
+            if isinstance(child, (gast.Name, ast.Name)) and isinstance(
+                child.ctx, (gast.Load, ast.Load)
+            ):
                 vars_used.add(child.id)
         return vars_used
 
@@ -405,10 +412,13 @@ class CommonSubexpressionEliminator:
 
             # Create assignment: temp_var = subexpression
             temp_assign = gast.Assign(
-                targets=[gast.Name(id=temp_var_name, ctx=gast.Store(),
-                                 annotation=None, type_comment=None)],
+                targets=[
+                    gast.Name(
+                        id=temp_var_name, ctx=gast.Store(), annotation=None, type_comment=None
+                    )
+                ],
                 value=node,
-                type_comment=None
+                type_comment=None,
             )
             ast.fix_missing_locations(temp_assign)
 
@@ -460,10 +470,16 @@ class CommonSubexpressionEliminator:
 
                         # Create assignment: temp_var = subexpression
                         temp_assign = gast.Assign(
-                            targets=[gast.Name(id=temp_var_name, ctx=gast.Store(),
-                                             annotation=None, type_comment=None)],
+                            targets=[
+                                gast.Name(
+                                    id=temp_var_name,
+                                    ctx=gast.Store(),
+                                    annotation=None,
+                                    type_comment=None,
+                                )
+                            ],
                             value=node,
-                            type_comment=None
+                            type_comment=None,
                         )
                         cse_assignments.append(temp_assign)
 

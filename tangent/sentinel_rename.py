@@ -26,6 +26,7 @@ before any differentiation runs, eliminating the collision for every key type.
 Only a *local* ``d`` (a parameter or an assigned variable) is renamed; a free /
 global ``d`` is left alone, since renaming it would break the reference.
 """
+
 from __future__ import absolute_import
 
 import gast
@@ -34,75 +35,72 @@ SENTINEL = 'd'
 
 
 class _Renamer(gast.NodeTransformer):
+    def __init__(self, new_name):
+        self.new_name = new_name
 
-  def __init__(self, new_name):
-    self.new_name = new_name
-
-  def visit_Name(self, node):
-    if node.id == SENTINEL:
-      node.id = self.new_name
-    return node
+    def visit_Name(self, node):
+        if node.id == SENTINEL:
+            node.id = self.new_name
+        return node
 
 
 def _all_names(fn):
-  return set(n.id for n in gast.walk(fn) if isinstance(n, gast.Name))
+    return set(n.id for n in gast.walk(fn) if isinstance(n, gast.Name))
 
 
 def _param_names(fn):
-  args = fn.args
-  fields = (list(args.args) + list(getattr(args, 'posonlyargs', []) or []) +
-            list(args.kwonlyargs))
-  names = set()
-  for a in fields:
-    n = getattr(a, 'id', getattr(a, 'arg', None))
-    if n is not None:
-      names.add(n)
-  for extra in (getattr(args, 'vararg', None), getattr(args, 'kwarg', None)):
-    if extra is not None:
-      n = getattr(extra, 'id', getattr(extra, 'arg', None))
-      if n is not None:
-        names.add(n)
-  return names
+    args = fn.args
+    fields = list(args.args) + list(getattr(args, 'posonlyargs', []) or []) + list(args.kwonlyargs)
+    names = set()
+    for a in fields:
+        n = getattr(a, 'id', getattr(a, 'arg', None))
+        if n is not None:
+            names.add(n)
+    for extra in (getattr(args, 'vararg', None), getattr(args, 'kwarg', None)):
+        if extra is not None:
+            n = getattr(extra, 'id', getattr(extra, 'arg', None))
+            if n is not None:
+                names.add(n)
+    return names
 
 
 def _should_rename(fn):
-  """Whether ``d`` is a locally-assigned (non-parameter) variable.
+    """Whether ``d`` is a locally-assigned (non-parameter) variable.
 
-  Parameters are not renamed: Tangent ties the generated code to the original
-  function's signature, so renaming a parameter would break argument binding.
-  A parameter dict named ``d`` with string keys already works via the template
-  layer; a free/global ``d`` is likewise left untouched.
-  """
-  if SENTINEL in _param_names(fn):
+    Parameters are not renamed: Tangent ties the generated code to the original
+    function's signature, so renaming a parameter would break argument binding.
+    A parameter dict named ``d`` with string keys already works via the template
+    layer; a free/global ``d`` is likewise left untouched.
+    """
+    if SENTINEL in _param_names(fn):
+        return False
+    for n in gast.walk(fn):
+        if isinstance(n, gast.Name) and n.id == SENTINEL and isinstance(n.ctx, gast.Store):
+            return True
     return False
-  for n in gast.walk(fn):
-    if (isinstance(n, gast.Name) and n.id == SENTINEL and
-        isinstance(n.ctx, gast.Store)):
-      return True
-  return False
 
 
 def _fresh_name(existing):
-  candidate = 'd_'
-  i = 0
-  while candidate in existing:
-    candidate = 'd_%d' % i
-    i += 1
-  return candidate
+    candidate = 'd_'
+    i = 0
+    while candidate in existing:
+        candidate = 'd_%d' % i
+        i += 1
+    return candidate
 
 
 def _top_level_functions(node):
-  if isinstance(node, gast.Module):
-    return [s for s in node.body if isinstance(s, gast.FunctionDef)]
-  if isinstance(node, gast.FunctionDef):
-    return [node]
-  return [s for s in gast.walk(node) if isinstance(s, gast.FunctionDef)]
+    if isinstance(node, gast.Module):
+        return [s for s in node.body if isinstance(s, gast.FunctionDef)]
+    if isinstance(node, gast.FunctionDef):
+        return [node]
+    return [s for s in gast.walk(node) if isinstance(s, gast.FunctionDef)]
 
 
 def rename_sentinel_vars(node):
-  """Rename a local variable named ``d`` so it does not shadow the sentinel."""
-  for fn in _top_level_functions(node):
-    if _should_rename(fn):
-      _Renamer(_fresh_name(_all_names(fn))).visit(fn)
-  gast.fix_missing_locations(node)
-  return node
+    """Rename a local variable named ``d`` so it does not shadow the sentinel."""
+    for fn in _top_level_functions(node):
+        if _should_rename(fn):
+            _Renamer(_fresh_name(_all_names(fn))).visit(fn)
+    gast.fix_missing_locations(node)
+    return node

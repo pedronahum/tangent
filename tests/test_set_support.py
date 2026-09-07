@@ -6,6 +6,7 @@ control flow without contributing to the gradient - exactly like a tuple or list
 used the same way. Set literals are therefore allowed and carried through the
 transformation with no adjoint.
 """
+
 import pytest
 
 import tangent
@@ -37,14 +38,14 @@ class TestSetMembershipReverseMode:
     def test_not_in_set(self):
         def f(x):
             if x not in {2.0, 4.0}:
-                y = x ** 2
+                y = x**2
             else:
                 y = x * 7.0
             return y
 
         df = tangent.grad(f)
-        assert df(3.0) == pytest.approx(6.0)   # 3 not in set -> 2x
-        assert df(2.0) == pytest.approx(7.0)   # 2 in set -> 7
+        assert df(3.0) == pytest.approx(6.0)  # 3 not in set -> 2x
+        assert df(2.0) == pytest.approx(7.0)  # 2 in set -> 7
 
     def test_set_bound_to_variable(self):
         def f(x):
@@ -63,7 +64,7 @@ class TestSetMembershipReverseMode:
             total = 0.0
             for i in range(5):
                 if i in {1, 3}:
-                    total = total + x ** 2
+                    total = total + x**2
             return total
 
         # 2 active iterations -> 2 * x^2 -> gradient 4x = 8 at x = 2

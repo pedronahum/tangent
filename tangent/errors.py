@@ -12,6 +12,7 @@
 #      See the License for the specific language governing permissions and
 #      limitations under the License.
 """Tangent-specific errors."""
+
 from __future__ import absolute_import
 
 # Import enhanced error handling
@@ -24,21 +25,22 @@ from tangent.error_handlers import (
     TypeMismatchError,
     InplaceModificationError,
     format_error_with_context,
-    enhance_traceback
+    enhance_traceback,
 )
 
 
 class TangentParseError(SyntaxError):
-  """Error generated when encountering an unsupported feature."""
-  pass
+    """Error generated when encountering an unsupported feature."""
+
+    pass
 
 
 class ForwardNotImplementedError(NotImplementedError):
-  """Error generated when encountering a @tangent_ yet to be implemented."""
+    """Error generated when encountering a @tangent_ yet to be implemented."""
 
-  def __init__(self, func):
-    func_name = func.__name__ if hasattr(func, '__name__') else str(func)
-    message = f'''Forward mode for function "{func_name}" is not yet implemented.
+    def __init__(self, func):
+        func_name = func.__name__ if hasattr(func, '__name__') else str(func)
+        message = f'''Forward mode for function "{func_name}" is not yet implemented.
 
 💡 Suggestion:
   Use reverse mode (default) instead:
@@ -53,15 +55,15 @@ class ForwardNotImplementedError(NotImplementedError):
 
 📖 Documentation: https://github.com/google/tangent#forward-and-reverse-mode
 '''
-    NotImplementedError.__init__(self, message)
+        NotImplementedError.__init__(self, message)
 
 
 class ReverseNotImplementedError(NotImplementedError):
-  """Error generated when encountering an @adjoint yet to be implemented."""
+    """Error generated when encountering an @adjoint yet to be implemented."""
 
-  def __init__(self, func):
-    func_name = func.__name__ if hasattr(func, '__name__') else str(func)
-    message = f'''Reverse mode for function "{func_name}" is not yet implemented.
+    def __init__(self, func):
+        func_name = func.__name__ if hasattr(func, '__name__') else str(func)
+        message = f'''Reverse mode for function "{func_name}" is not yet implemented.
 
 💡 Suggestion:
   To define a custom reverse-mode gradient:
@@ -83,4 +85,4 @@ class ReverseNotImplementedError(NotImplementedError):
 
 📖 Documentation: https://github.com/google/tangent#custom-gradients
 '''
-    NotImplementedError.__init__(self, message)
+        NotImplementedError.__init__(self, message)

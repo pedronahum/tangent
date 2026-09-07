@@ -79,7 +79,7 @@ class ASTToSymPyConverter:
             elif isinstance(op, (ast.Div, gast.Div)):
                 return left / right
             elif isinstance(op, (ast.Pow, gast.Pow)):
-                return left ** right
+                return left**right
             elif isinstance(op, (ast.FloorDiv, gast.FloorDiv)):
                 return sp.floor(left / right)
             elif isinstance(op, (ast.Mod, gast.Mod)):
@@ -154,7 +154,7 @@ class ASTToSymPyConverter:
             exp = self._convert_node(node.right)
             if base is None or exp is None:
                 return None
-            return base ** exp
+            return base**exp
 
         # Unsupported node type
         return None
@@ -194,8 +194,7 @@ class SymPyToASTConverter:
 
         # Symbols (variables)
         if expr.is_Symbol:
-            return gast.Name(id=str(expr), ctx=gast.Load(),
-                           annotation=None, type_comment=None)
+            return gast.Name(id=str(expr), ctx=gast.Load(), annotation=None, type_comment=None)
 
         # Addition
         if expr.is_Add:
@@ -265,37 +264,33 @@ class SymPyToASTConverter:
         if isinstance(expr, sp.sin):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='sin', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='sin', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         if isinstance(expr, sp.cos):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='cos', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='cos', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         if isinstance(expr, sp.exp):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='exp', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='exp', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         if isinstance(expr, sp.log):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='log', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='log', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         # Note: sqrt is not checked here. SymPy represents sqrt(x) as
@@ -307,10 +302,9 @@ class SymPyToASTConverter:
         if isinstance(expr, sp.tan):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='tan', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='tan', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         # Inverse trig. Emitted by their short names; the coarsening
@@ -318,28 +312,25 @@ class SymPyToASTConverter:
         if isinstance(expr, sp.asin):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='asin', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='asin', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         if isinstance(expr, sp.acos):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='acos', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='acos', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         if isinstance(expr, sp.atan):
             arg = self._convert_expr(expr.args[0])
             return gast.Call(
-                func=gast.Name(id='atan', ctx=gast.Load(),
-                             annotation=None, type_comment=None),
+                func=gast.Name(id='atan', ctx=gast.Load(), annotation=None, type_comment=None),
                 args=[arg],
-                keywords=[]
+                keywords=[],
             )
 
         # Fallback: can't convert
@@ -392,9 +383,7 @@ class AlgebraicSimplifier:
                 if simplified_value is not None:
                     # Create new assignment with simplified RHS
                     new_stmt = gast.Assign(
-                        targets=stmt.targets,
-                        value=simplified_value,
-                        type_comment=None
+                        targets=stmt.targets, value=simplified_value, type_comment=None
                     )
                     ast.fix_missing_locations(new_stmt)
                     new_body.append(new_stmt)
@@ -461,8 +450,9 @@ class AlgebraicSimplifier:
             original_ops = self._count_operations(sympy_expr)
 
             # Also consider string representation length as a tie-breaker
-            if best_ops < original_ops or (best_ops == original_ops and
-                                           len(str(best)) < len(str(sympy_expr))):
+            if best_ops < original_ops or (
+                best_ops == original_ops and len(str(best)) < len(str(sympy_expr))
+            ):
                 # Beneficial simplification
                 self.simplifications_applied += 1
 
