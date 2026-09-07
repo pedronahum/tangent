@@ -37,7 +37,7 @@ def f(x):
     return x ** 3 - 2 * x ** 2 + 3 * x - 1
 
 df = tangent.grad(f, verbose=1)   # prints the generated gradient code
-print(df(2.0))                    # f'(2) = 11.0
+print(df(2.0))                    # f'(2) = 7.0
 ```
 
 ---
@@ -78,7 +78,7 @@ def f(x):
     return x ** 3 - 2 * x ** 2 + 3 * x - 1
 
 df = tangent.grad(f)
-print(df(2.0))   # 11.0
+print(df(2.0))   # 7.0
 ```
 
 ### Multi-Backend Usage
@@ -234,7 +234,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Operators**: arithmetic, comparisons, boolean (`and`, `or`, `not`), augmented assignment (`+=`, `-=`, `*=`, `/=`, `**=`)
 - **Functions**: lambdas, closures and factories, nested calls, default/keyword arguments
 - **Classes**: user-defined classes with method inlining, instance attributes, method chaining, inheritance and `super()`
-- **Data**: NumPy arrays; **pytrees** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure, and **returned** as outputs (the default seed is a matching pytree of ones — the gradient of the sum of all leaves — and a caller-supplied seed of the same structure is used as the cotangent); list comprehensions
+- **Data**: NumPy arrays; **pytrees** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure, and **returned** as outputs (the default seed is a matching pytree of ones — the gradient of the sum of all leaves — and a caller-supplied seed of the same structure is used as the cotangent); list/set/dict comprehensions over compile-time-constant iterables (dynamic iterables are rejected with a clear error)
 - **Statements**: `assert`, `pass`, early `return`
 - **Higher-order**: `grad(grad(f))` second derivatives, third derivatives for NumPy functions, Hessian-vector products
 
@@ -496,7 +496,7 @@ pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
 Current status: **75,000+ parameterized test cases pass, with zero failures
-and zero expected-failure (`xfail`) markers** (last local measurement: 75,952
+and zero expected-failure (`xfail`) markers** (last local measurement: 75,981
 passed, 562 skipped, with NumPy, JAX, PyTorch-CPU, tinygrad, Keras 3 and
 SymPy installed; TensorFlow-dependent cases run in CI). CI runs the suite on
 Python 3.9–3.13 and exercises the cross-backend catalog against every
@@ -526,7 +526,7 @@ tangent/
 │   ├── function_cache.py         # Gradient-function caching
 │   ├── optimizations/            # DCE, CSE, strength reduction, algebraic
 │   └── checkpointing_simple.py   # Manual forward-pass checkpointing helpers
-├── tests/                        # 83 test modules (75k+ cases)
+├── tests/                        # 84 test modules (75k+ cases)
 │   ├── test_backend_coverage.py  # Cross-backend op catalog
 │   ├── test_torch.py             # PyTorch tests
 │   ├── test_keras.py             # Keras tests

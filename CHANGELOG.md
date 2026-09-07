@@ -33,24 +33,120 @@ over the abandoned upstream package.
   gradient-function caching, clear rejection errors for non-differentiable
   syntax, a finite-difference oracle for backend adjoints.
 - **Modernization**: Python 3.9–3.13, gast 0.6/0.7, NumPy 2.x, pyproject-based
-  packaging, GitHub Actions CI, 76k+ parameterized tests.
+  packaging, GitHub Actions CI, 75k+ parameterized tests.
+
+### Added in 0.2.0
+
+- **Container (pytree) return values in reverse mode**: functions returning
+  dicts, lists, or nested containers of arrays can now be differentiated
+  (previously a `KeyError` crash). The default seed expands to a matching
+  pytree of ones (the gradient of the sum of all leaves), a caller-supplied
+  seed of the same structure is used as the cotangent, and second derivatives
+  through container *arguments* work. A structurally mismatched seed raises a
+  clear `ValueError` instead of being silently replaced.
+- **New NumPy derivatives** (reverse and forward mode, validated against a
+  finite-difference oracle): the ufunc spellings `np.add`, `np.subtract`,
+  `np.divide`, `np.negative`, `np.power`, `np.float_power`; `np.arctan2`,
+  `np.hypot`, `np.logaddexp`, `np.arcsinh`, `np.arccosh`, `np.arctanh`,
+  `np.exp2`, `np.cbrt`, `np.fmax`, `np.fmin`; the shape ops `np.cumsum`,
+  `np.flip`, `np.ravel`, `np.swapaxes`, `np.moveaxis`, `np.tile`,
+  `np.repeat`, `np.roll`; and `np.linalg.solve` plus `np.linalg.norm`
+  (default 2-norm/Frobenius).
+- **Backend parity**: the `@` matmul operator now differentiates for PyTorch
+  (and Keras); softmax/log_softmax adjoints for PyTorch, Keras, JAX and
+  TensorFlow; `concatenate`/`stack` differentiate across NumPy, JAX,
+  TensorFlow, PyTorch and Keras (previously JAX-only); elementwise gaps
+  closed across backends (e.g. torch `expm1`/`rsqrt`, jax
+  `reciprocal`/`log1p`/`expm1`/`exp2`, keras log/exp family,
+  `tf.math.reciprocal` — whose old TF-1-only spelling registered nothing on
+  TF 2.x). Unary elementwise rules are now generated from one shared
+  backend-neutral table, so every table op has both reverse- and forward-mode
+  rules on every backend.
+- **Forward mode catches up**: the extended NumPy and TensorFlow modules
+  previously registered *zero* forward-mode tangents; they now cover their
+  op catalogs (abs, clip, where, min/max/prod, trig, linalg.inv, trace,
+  softmax, concat/stack, ...).
+- `tangent.backend_status()` reports each optional backend as
+  `'available'`, `'not installed'`, or `'broken: <error>'`.
+- `tangent.passes`: a documented pass registry for the desugaring pipeline
+  with `register_pass(..., before=/after=)` and `unregister_pass` as an
+  extension hook for inserting custom frontend passes.
+- Property-based tests (hypothesis) drive a corpus sample against the
+  finite-difference oracle; CI now also runs the tinygrad-backed tests, ruff
+  lint + format checks, and a coverage floor.
+
+### Changed in 0.2.0
+
+- **`import tangent` is silent.** Missing optional backends (jax, torch,
+  tensorflow, keras, tinygrad) no longer emit a wall of `UserWarning`s and
+  stdout banners; they are logged at DEBUG level on the `'tangent'` logger.
+  A `UserWarning` is kept only when a backend package is installed but its
+  extensions fail to load (a broken install is actionable). Use
+  `tangent.backend_status()` to see what loaded.
+- **Gradient-cache keys now include compilation settings.** `grad(f)`
+  followed by `grad(f, optimizations={...})` (or a different
+  `checkpoint_config`/`grad_config`) previously returned the *same* cached
+  function; such calls now compile and cache separately, so previously
+  colliding call sites will each trigger their own (correct) compilation.
+  Cache hits are also much cheaper: source hashes are memoized instead of
+  re-reading the source file on every lookup.
+- **Checkpointing consolidated to what demonstrably works**:
+  `grad(f, checkpoint=True)` (zero-based constant `range(n)` loops) and the
+  manual `checkpointed_loop` forward-pass helper. `grad_with_checkpointing`
+  now raises `NotImplementedError` at wrapper-creation time with an
+  actionable message. `checkpoint=True` now composes with `optimized=True`
+  (optimization is no longer force-disabled).
+- List/set/dict comprehensions over dynamic iterables are rejected with a
+  clear `TangentParseError` at transform time. The old `.append()`-loop
+  fallback crashed in return position and silently produced zero gradients in
+  assignment position. Comprehensions over compile-time-constant iterables
+  are still unrolled and differentiate correctly.
+- `numpy`/`tf` `concatenate`/`stack` over a dynamically built list raise
+  `NotImplementedError` instead of silently returning zero gradients.
+- The codebase is uniformly formatted with `ruff format` (4-space indent,
+  100 columns), enforced in CI; the reformat commit is listed in
+  `.git-blame-ignore-revs`.
+- Docs pruned: ~15 stale point-in-time progress reports (phase "COMPLETE"
+  writeups, outdated test-status snapshots) were deleted or folded into the
+  living feature guides; remaining status claims match measured reality.
 
 ### Fixed in 0.2.0
 
+- `tangent.autodiff(f, optimizations=...)`, `checkpoint_config=...` and
+  `grad_config=...` raised `TypeError`: the caching wrapper re-declared a
+  narrower parameter list than the real `autodiff`. The full signature is
+  restored.
+- Wrong or crashing *higher-order* derivatives with `optimized=True`:
+  dead-code elimination trusted per-op-id tape annotations that are not
+  unique in differentiated gradient code, so it could delete the wrong tape
+  push (second derivatives read stale primal values, or tripped the stack
+  op-id assertion). DCE now computes its own balanced push/pop pairing and
+  never removes an ambiguous pair; the two long-standing expected failures
+  in reverse-over-reverse are eliminated.
+- Multi-output functions with `check_dims=False` crashed (or could get a
+  wrong default seed): the output arity was inferred by scanning generated
+  code for the shape-check assert. It is now recorded as an annotation during
+  the reverse-mode transformation.
 - `grad(..., checkpoint=True)` could produce wrong gradients for
   `for i in range(start, stop)` loops with `start != 0`: the checkpointed
   adjoint reconstructs the loop target as the zero-based iteration index.
   Such loops now fall back to the standard (non-checkpointed) templates.
-- Removed an unreachable, unfinished automatic-checkpointing pipeline
-  (`tangent/checkpointing/`, `tangent/analysis/`, `tangent/preprocessing/`)
-  and the placeholder `checkpointed_backward` (its default path returned the
-  incoming gradient unchanged).
-
+- Broadcasting operands of `np.multiply` and `np.maximum` received
+  wrongly-shaped gradients (missing unbroadcast reduction).
 - `ValueError` for mismatched forward-mode derivative arguments was raised
   incorrectly (a `TypeError` masked the real message).
 - The stack variable in the subscript-assignment adjoint template was bound via
   a typo'd keyword (`_stack_`), working only because the default name matched.
-- Removed the vendored Python 2 `funcsigs` backport in favor of
-  `inspect.signature`.
 - Package metadata now identifies this fork (maintainer, repository URLs) and
   exposes `tangent.__version__`.
+
+### Removed in 0.2.0
+
+- An unreachable, unfinished automatic-checkpointing pipeline
+  (`tangent/checkpointing/`, `tangent/analysis/`, `tangent/preprocessing/`),
+  the placeholder `checkpointed_backward` (its default path returned the
+  incoming gradient unchanged), and `checkpointed_grad` (its "simplified
+  backward" returned the single-step gradient at the final state, not the
+  loop gradient).
+- The vendored Python 2 `funcsigs` backport, in favor of
+  `inspect.signature`.

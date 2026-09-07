@@ -19,7 +19,6 @@ They are logged at DEBUG level on the 'tangent' logger instead, and their
 status is available via tangent.backend_status().
 """
 
-import logging
 import subprocess
 import sys
 
@@ -27,25 +26,57 @@ import tangent
 
 
 def test_import_tangent_emits_no_warnings_and_no_stdout():
-    """A bare `import tangent` must print nothing and warn nothing."""
-    result = subprocess.run(
-        [sys.executable, '-W', 'error::UserWarning', '-c', 'import tangent'],
-        capture_output=True,
-        text=True,
-        timeout=300,
+    """A bare `import tangent` must print nothing and warn nothing.
+
+    One warning is intended and therefore exempted: when a backend package is
+    installed but broken (e.g. keras configured for a tensorflow backend that
+    is not installed), tangent deliberately emits a "failed to load"
+    UserWarning because that state is actionable. The exemption applies only
+    when `tangent.backend_status()` actually reports a broken backend in this
+    environment.
+    """
+    broken_backends = sorted(
+        name for name, status in tangent.backend_status().items() if status.startswith('broken:')
     )
-    assert result.returncode == 0, (
-        'import tangent raised a UserWarning (or failed):\n%s' % result.stderr
-    )
+    if broken_backends:
+        # Cannot use -W error::UserWarning: the intended broken-backend
+        # warning would abort the import. Import normally and check that the
+        # only tangent warnings are the intended ones.
+        result = subprocess.run(
+            [sys.executable, '-c', 'import tangent'],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert result.returncode == 0, 'import tangent failed:\n%s' % result.stderr
+        unexpected = [
+            line
+            for line in result.stderr.splitlines()
+            if 'tangent' in line and 'Warning' in line and 'failed to load' not in line
+        ]
+        assert not unexpected, (
+            'import tangent emitted warnings beyond the intended broken-backend '
+            'warning (broken: %s):\n%s' % (broken_backends, '\n'.join(unexpected))
+        )
+    else:
+        result = subprocess.run(
+            [sys.executable, '-W', 'error::UserWarning', '-c', 'import tangent'],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert result.returncode == 0, (
+            'import tangent raised a UserWarning (or failed):\n%s' % result.stderr
+        )
+        # Optional third-party packages may write their own chatter to stderr,
+        # but no warning may originate from tangent itself.
+        tangent_warning_lines = [
+            line for line in result.stderr.splitlines() if 'tangent' in line and 'Warning' in line
+        ]
+        assert not tangent_warning_lines, 'import tangent emitted warnings:\n%s' % '\n'.join(
+            tangent_warning_lines
+        )
     assert result.stdout == '', 'import tangent wrote to stdout:\n%s' % result.stdout
-    # Optional third-party packages may write their own chatter to stderr, but
-    # no warning may originate from tangent itself.
-    tangent_warning_lines = [
-        line for line in result.stderr.splitlines() if 'tangent' in line and 'Warning' in line
-    ]
-    assert not tangent_warning_lines, 'import tangent emitted warnings:\n%s' % '\n'.join(
-        tangent_warning_lines
-    )
 
 
 def test_missing_backends_are_logged_at_debug_level():
