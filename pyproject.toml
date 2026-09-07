@@ -4,12 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tangent"
-version = "0.1.9"
+# Version lives in tangent/__init__.py (__version__); see [tool.setuptools.dynamic].
+# Note: PyPI's `tangent` is Google's unmaintained 0.1.9 from 2017. This fork's
+# version must stay ahead of it so `pip install git+...` upgrades cleanly.
+dynamic = ["version"]
 description = "Automatic differentiation using source code transformation for Python"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
     { name = "Google Inc.", email = "alexbw@google.com" },
+]
+maintainers = [
+    { name = "Pedro N. Rodriguez", email = "pnrodriguezh@gmail.com" },
 ]
 keywords = [
     "autodiff",
@@ -38,7 +44,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/google/tangent"
+Homepage = "https://github.com/pedronahum/tangent"
+Repository = "https://github.com/pedronahum/tangent"
+Issues = "https://github.com/pedronahum/tangent/issues"
+Upstream = "https://github.com/google/tangent"
 
 # Optional backends and features. Wheels for tf/jax/torch are platform-specific;
 # on aarch64 (e.g. Grace/DGX Spark) TensorFlow and the default PyTorch wheel
@@ -71,6 +80,10 @@ all = [
     "tinygrad>=0.14",
     "torch>=2.0",
 ]
+
+[tool.setuptools.dynamic]
+# Read statically (no import) from the literal assignment in tangent/__init__.py.
+version = { attr = "tangent.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,13 +1,10 @@
 # Core runtime dependencies (mirrors the [project] dependencies in
 # pyproject.toml) plus what is needed to run the test suite. Optional backends
-# are installed via extras:
-#   pip install tangent[tf]       TensorFlow support
-#   pip install tangent[jax]      JAX support
-#   pip install tangent[torch]    PyTorch support
-#   pip install tangent[keras]    Keras 3 support
-#   pip install tangent[symbolic] SymPy-based algebraic simplification
-#   pip install tangent[viz]      matplotlib + networkx visualization
-#   pip install tangent[all]      everything above, including pytest
+# are installed via extras — note this fork is not on PyPI (PyPI's `tangent` is
+# Google's unmaintained 2017 release), so extras must reference the repo:
+#   pip install "tangent[tf] @ git+https://github.com/pedronahum/tangent.git"
+# Available extras: tf, jax, torch, keras, tinygrad, symbolic (SymPy-based
+# algebraic simplification), viz (matplotlib + networkx), test, all.
 gast>=0.6.0,<0.8.0
 numpy
 # Test-suite only: autograd is the reference oracle for the gradient tests and

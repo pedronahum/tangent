@@ -32,7 +32,6 @@ from tangent import cfg
 from tangent import comments
 from tangent import create
 from tangent import errors
-from tangent import funcsigs
 from tangent import grads
 from tangent import naming
 from tangent import non_differentiable
@@ -131,7 +130,7 @@ class ForwardAD(transformers.TreeTransformer):
     if len(self.wrt) != len(grad_args):
       raise ValueError(
           'Mismatch between requested and retrieved derivative arguments. '
-          'Requested %d, found %d') % (len(self.wrt), len(grad_args))
+          'Requested %d, found %d' % (len(self.wrt), len(grad_args)))
 
     node.args.args += grad_args
 
@@ -286,7 +285,7 @@ class ForwardAD(transformers.TreeTransformer):
     template_ = tangents.tangents[func]
 
     # Match the function call to the template
-    sig = funcsigs.signature(template_)
+    sig = inspect.signature(template_)
     sig = sig.replace(parameters=list(sig.parameters.values())[1:])
     kwargs = dict((keyword.arg, keyword.value) for keyword in node.keywords)
     bound_args = sig.bind(*node.args, **kwargs)

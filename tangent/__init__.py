@@ -15,6 +15,11 @@
 from __future__ import absolute_import
 import functools
 
+# Single source of truth for the package version; pyproject.toml reads this
+# statically via [tool.setuptools.dynamic]. PyPI's `tangent` 0.1.9 is Google's
+# unmaintained 2017 release — this fork's version must stay ahead of it.
+__version__ = '0.2.0'
+
 import gast
 
 from tangent import annotate

@@ -35,7 +35,6 @@ from tangent import comments
 from tangent import create
 from tangent import errors
 from tangent import fixes
-from tangent import funcsigs
 from tangent import grads
 from tangent import naming
 from tangent import non_differentiable
@@ -800,7 +799,7 @@ class ReverseAD(object):
           'i = pop(_stack, op_id)',
           pop=pop,
           i=i,
-          _stack_=self.stack,
+          _stack=self.stack,
           op_id=op_id)
 
       primal.insert(len(primal), push_index)
@@ -812,9 +811,6 @@ class ReverseAD(object):
       adjoint[i] = comments.add_comment(adj, 'Grad of: %s' % orig_src)
 
     return primal, adjoint
-
-  def visit_Pass(self, node):
-    return node, []
 
   def visit_Subscript(self, node):
     """Handle subscript access in reverse mode.
@@ -1198,7 +1194,7 @@ class ReverseAD(object):
     template_ = grads.adjoints[func]
 
     # Match the function call to the template
-    sig = funcsigs.signature(template_)
+    sig = inspect.signature(template_)
     sig = sig.replace(parameters=list(sig.parameters.values())[1:])
     kwargs = dict((keyword.arg, keyword.value) for keyword in node.keywords)
     bound_args = sig.bind(*node.args, **kwargs)

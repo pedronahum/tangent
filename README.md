@@ -46,19 +46,22 @@ print(df(2.0))                    # f'(2) = 11.0
 
 ### Installation
 
+> **Note:** this fork is not on PyPI. The `tangent` package on PyPI is Google's
+> unmaintained 2017 release — always install from this repository as shown below.
+
 ```bash
 # Core (NumPy gradients)
-pip install git+https://github.com/pedronahum/tangent.git
+pip install "tangent @ git+https://github.com/pedronahum/tangent.git"
 
 # Optional backends are installed as extras:
-pip install "tangent[jax]"        # JAX support
-pip install "tangent[tf]"         # TensorFlow support
-pip install "tangent[torch]"      # PyTorch support
-pip install "tangent[keras]"      # Keras 3 (backend-agnostic keras.ops)
-pip install "tangent[tinygrad]"   # tinygrad (method-based tensor API)
-pip install "tangent[viz]"        # matplotlib + networkx visualization
-pip install "tangent[symbolic]"   # SymPy-based algebraic optimizations
-pip install "tangent[all]"        # everything above, plus pytest
+pip install "tangent[jax] @ git+https://github.com/pedronahum/tangent.git"       # JAX support
+pip install "tangent[tf] @ git+https://github.com/pedronahum/tangent.git"        # TensorFlow support
+pip install "tangent[torch] @ git+https://github.com/pedronahum/tangent.git"     # PyTorch support
+pip install "tangent[keras] @ git+https://github.com/pedronahum/tangent.git"     # Keras 3 (backend-agnostic keras.ops)
+pip install "tangent[tinygrad] @ git+https://github.com/pedronahum/tangent.git"  # tinygrad (method-based tensor API)
+pip install "tangent[viz] @ git+https://github.com/pedronahum/tangent.git"       # matplotlib + networkx visualization
+pip install "tangent[symbolic] @ git+https://github.com/pedronahum/tangent.git"  # SymPy-based algebraic optimizations
+pip install "tangent[all] @ git+https://github.com/pedronahum/tangent.git"       # everything above, plus pytest
 ```
 
 Python 3.9–3.13 are supported and tested in CI. Note the platform caveats in
@@ -296,7 +299,7 @@ control flow, reductions such as `np.sum`, non-NumPy backends
 (JAX/PyTorch/TensorFlow/Keras), varargs, multi-output configurations, or
 `preserve_result` — transparently falls back to the standard pipeline, so
 enabling it never changes correctness. Requires the `symbolic` extra
-(`pip install "tangent[symbolic]"`). See
+(see [Installation](#installation)). See
 [tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py),
 [docs/optimizations/COARSENING.md](docs/optimizations/COARSENING.md), and the
 worked demo in [`examples/recent_features.py`](examples/recent_features.py).
@@ -305,7 +308,8 @@ worked demo in [`examples/recent_features.py`](examples/recent_features.py).
 
 ## 🎨 Visualization Tools
 
-Interactive tools for understanding autodiff (install with `pip install "tangent[viz]"`):
+Interactive tools for understanding autodiff (install with the `viz` extra, see
+[Installation](#installation)):
 
 | Tool | What it shows |
 |---|---|
@@ -510,13 +514,14 @@ tangent/
 │   ├── tf_extended.py            # Extended TensorFlow adjoints
 │   ├── torch_extensions.py       # PyTorch adjoints + tangents
 │   ├── keras_extensions.py       # Keras 3 (backend-agnostic) adjoints + tangents
+│   ├── tinygrad_extensions.py    # tinygrad adjoints + tangents
 │   ├── class_desugar.py          # Class method inlining
 │   ├── visualization.py          # Visualization tools
 │   ├── function_cache.py         # Gradient-function caching
 │   ├── optimizations/            # DCE, CSE, strength reduction, algebraic
 │   ├── analysis/                 # Activity analysis, checkpoint analysis
 │   └── checkpointing/            # Gradient checkpointing
-├── tests/                        # 69 test modules (75k+ cases)
+├── tests/                        # 77 test modules (76k+ cases)
 │   ├── test_backend_coverage.py  # Cross-backend op catalog
 │   ├── test_torch.py             # PyTorch tests
 │   ├── test_keras.py             # Keras tests
