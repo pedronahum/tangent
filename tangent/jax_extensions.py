@@ -46,6 +46,8 @@ except ImportError:
 import numpy as np
 from tangent import non_differentiable
 from tangent import utils
+from tangent.elementwise_rules import prefix_vocab
+from tangent.elementwise_rules import register_elementwise
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_init_grad
@@ -285,104 +287,41 @@ def adjoint_power(y, x, n):
     d[x] = tangent.unbroadcast(d[y] * n * jnp.power(x, n - 1), x)
 
 
-@adjoint(jnp.negative)
-def adjoint_negative(y, x):
-    """Adjoint for jnp.negative: ∂L/∂x = -∂L/∂z"""
-    d[x] = -d[y]
-
-
-# Exponential and logarithmic functions
-@adjoint(jnp.exp)
-def adjoint_exp(y, x):
-    """Adjoint for jnp.exp: ∂L/∂x = exp(x)·∂L/∂z"""
-    d[x] = d[y] * jnp.exp(x)
-
-
-@adjoint(jnp.log)
-def adjoint_log(y, x):
-    """Adjoint for jnp.log: ∂L/∂x = ∂L/∂z/x"""
-    d[x] = d[y] / x
-
-
-@adjoint(jnp.log10)
-def adjoint_log10(y, x):
-    """Adjoint for jnp.log10: ∂L/∂x = ∂L/∂z/(x·ln(10))"""
-    d[x] = d[y] / (x * jnp.log(10.0))
-
-
-@adjoint(jnp.log2)
-def adjoint_log2(y, x):
-    """Adjoint for jnp.log2: ∂L/∂x = ∂L/∂z/(x·ln(2))"""
-    d[x] = d[y] / (x * jnp.log(2.0))
-
-
-@adjoint(jnp.sqrt)
-def adjoint_sqrt(y, x):
-    """Adjoint for jnp.sqrt: ∂L/∂x = ∂L/∂z/(2√x)"""
-    d[x] = d[y] / (2.0 * jnp.sqrt(x))
-
-
-@adjoint(jnp.square)
-def adjoint_square(y, x):
-    """Adjoint for jnp.square: ∂L/∂x = 2x·∂L/∂z"""
-    d[x] = 2.0 * x * d[y]
-
-
-# Trigonometric functions
-@adjoint(jnp.sin)
-def adjoint_sin(y, x):
-    """Adjoint for jnp.sin: ∂L/∂x = cos(x)·∂L/∂z"""
-    d[x] = d[y] * jnp.cos(x)
-
-
-@adjoint(jnp.cos)
-def adjoint_cos(y, x):
-    """Adjoint for jnp.cos: ∂L/∂x = -sin(x)·∂L/∂z"""
-    d[x] = -d[y] * jnp.sin(x)
-
-
-@adjoint(jnp.tan)
-def adjoint_tan(y, x):
-    """Adjoint for jnp.tan: ∂L/∂x = sec²(x)·∂L/∂z = ∂L/∂z/cos²(x)"""
-    d[x] = d[y] / (jnp.cos(x) ** 2)
-
-
-# Inverse trigonometric functions
-@adjoint(jnp.arcsin)
-def adjoint_arcsin(y, x):
-    """Adjoint for jnp.arcsin: ∂L/∂x = ∂L/∂z/√(1-x²)"""
-    d[x] = d[y] / jnp.sqrt(1.0 - x**2)
-
-
-@adjoint(jnp.arccos)
-def adjoint_arccos(y, x):
-    """Adjoint for jnp.arccos: ∂L/∂x = -∂L/∂z/√(1-x²)"""
-    d[x] = -d[y] / jnp.sqrt(1.0 - x**2)
-
-
-@adjoint(jnp.arctan)
-def adjoint_arctan(y, x):
-    """Adjoint for jnp.arctan: ∂L/∂x = ∂L/∂z/(1+x²)"""
-    d[x] = d[y] / (1.0 + x**2)
-
-
-# Hyperbolic functions
-@adjoint(jnp.sinh)
-def adjoint_sinh(y, x):
-    """Adjoint for jnp.sinh: ∂L/∂x = cosh(x)·∂L/∂z"""
-    d[x] = d[y] * jnp.cosh(x)
-
-
-@adjoint(jnp.cosh)
-def adjoint_cosh(y, x):
-    """Adjoint for jnp.cosh: ∂L/∂x = sinh(x)·∂L/∂z"""
-    d[x] = d[y] * jnp.sinh(x)
-
-
-@adjoint(jnp.tanh)
-def adjoint_tanh(y, x):
-    """Adjoint for jnp.tanh: ∂L/∂x = (1 - tanh²(x))·∂L/∂z"""
-    d[x] = d[y] * (1.0 - jnp.tanh(x) ** 2)
+# Unary elementwise ops: generated (adjoint AND tangent per op) from the
+# backend-neutral rule table. jnp exposes several NumPy-style aliases as
+# distinct objects in some versions, so both spellings are registered where
+# they exist.
+register_elementwise(
+    'jax',
+    ops={
+        'exp': jnp.exp,
+        'expm1': jnp.expm1,
+        'exp2': jnp.exp2,
+        'log': jnp.log,
+        'log2': jnp.log2,
+        'log10': jnp.log10,
+        'log1p': jnp.log1p,
+        'sqrt': jnp.sqrt,
+        'square': jnp.square,
+        'reciprocal': jnp.reciprocal,
+        'negative': jnp.negative,
+        'abs': (jnp.abs, jnp.absolute),
+        'sin': jnp.sin,
+        'cos': jnp.cos,
+        'tan': jnp.tan,
+        'arcsin': (jnp.arcsin, getattr(jnp, 'asin', None)),
+        'arccos': (jnp.arccos, getattr(jnp, 'acos', None)),
+        'arctan': (jnp.arctan, getattr(jnp, 'atan', None)),
+        'sinh': jnp.sinh,
+        'cosh': jnp.cosh,
+        'tanh': jnp.tanh,
+        'floor': jnp.floor,
+        'ceil': jnp.ceil,
+        'round': jnp.round,
+        'sign': jnp.sign,
+    },
+    vocab=prefix_vocab('jnp', mask_pos='(({arg}) > 0)'),
+)
 
 
 # Activation functions (common in ML)
@@ -523,36 +462,6 @@ def adjoint_expand_dims(y, x, axis):
 
 
 # Element-wise operations
-@adjoint(jnp.abs)
-def adjoint_abs(y, x):
-    """Adjoint for jnp.abs: ∂L/∂x = sign(x)·∂L/∂z"""
-    d[x] = d[y] * jnp.sign(x)
-
-
-@adjoint(jnp.floor)
-def adjoint_floor(y, x):
-    """Adjoint for jnp.floor: gradient is zero (piecewise constant)."""
-    d[x] = jnp.zeros_like(x)
-
-
-@adjoint(jnp.ceil)
-def adjoint_ceil(y, x):
-    """Adjoint for jnp.ceil: gradient is zero (piecewise constant)."""
-    d[x] = jnp.zeros_like(x)
-
-
-@adjoint(jnp.round)
-def adjoint_round(y, x):
-    """Adjoint for jnp.round: gradient is zero (piecewise constant)."""
-    d[x] = jnp.zeros_like(x)
-
-
-@adjoint(jnp.sign)
-def adjoint_sign(y, x):
-    """Adjoint for jnp.sign: gradient is zero (piecewise constant)."""
-    d[x] = jnp.zeros_like(x)
-
-
 @adjoint(jnp.maximum)
 def adjoint_maximum(z, x, y):
     """Adjoint for jnp.maximum: gradient flows to the larger argument."""
@@ -813,106 +722,8 @@ def tangent_jnp_power(z, x, y):
     )
 
 
-@tangent_(jnp.negative)
-def tangent_jnp_negative(y, x):
-    """Forward mode for jnp.negative."""
-    d[y] = jnp.negative(d[x])
-
-
-# Exponential and Logarithmic Functions
-@tangent_(jnp.exp)
-def tangent_jnp_exp(y, x):
-    """Forward mode for jnp.exp: d[y] = d[x] * exp(x)."""
-    d[y] = jnp.multiply(d[x], y)
-
-
-@tangent_(jnp.log)
-def tangent_jnp_log(y, x):
-    """Forward mode for jnp.log: d[y] = d[x] / x."""
-    d[y] = jnp.divide(d[x], x)
-
-
-@tangent_(jnp.log10)
-def tangent_jnp_log10(y, x):
-    """Forward mode for jnp.log10: d[y] = d[x] / (x * ln(10))."""
-    d[y] = jnp.divide(d[x], jnp.multiply(x, jnp.log(10.0)))
-
-
-@tangent_(jnp.log2)
-def tangent_jnp_log2(y, x):
-    """Forward mode for jnp.log2: d[y] = d[x] / (x * ln(2))."""
-    d[y] = jnp.divide(d[x], jnp.multiply(x, jnp.log(2.0)))
-
-
-@tangent_(jnp.sqrt)
-def tangent_jnp_sqrt(y, x):
-    """Forward mode for jnp.sqrt: d[y] = d[x] / (2*sqrt(x))."""
-    d[y] = jnp.divide(d[x], jnp.multiply(2.0, y))
-
-
-@tangent_(jnp.square)
-def tangent_jnp_square(y, x):
-    """Forward mode for jnp.square: d[y] = 2*x*d[x]."""
-    d[y] = jnp.multiply(jnp.multiply(2.0, x), d[x])
-
-
-# Trigonometric Functions
-@tangent_(jnp.sin)
-def tangent_jnp_sin(y, x):
-    """Forward mode for jnp.sin: d[y] = d[x] * cos(x)."""
-    d[y] = jnp.multiply(d[x], jnp.cos(x))
-
-
-@tangent_(jnp.cos)
-def tangent_jnp_cos(y, x):
-    """Forward mode for jnp.cos: d[y] = -d[x] * sin(x)."""
-    d[y] = jnp.negative(jnp.multiply(d[x], jnp.sin(x)))
-
-
-@tangent_(jnp.tan)
-def tangent_jnp_tan(y, x):
-    """Forward mode for jnp.tan: d[y] = d[x] / cos^2(x)."""
-    cx = jnp.cos(x)
-    d[y] = jnp.divide(d[x], jnp.multiply(cx, cx))
-
-
-# Inverse Trigonometric Functions
-@tangent_(jnp.arcsin)
-def tangent_jnp_arcsin(y, x):
-    """Forward mode for jnp.arcsin: d[y] = d[x] / √(1-x²)."""
-    d[y] = jnp.divide(d[x], jnp.sqrt(1.0 - x**2))
-
-
-@tangent_(jnp.arccos)
-def tangent_jnp_arccos(y, x):
-    """Forward mode for jnp.arccos: d[y] = -d[x] / √(1-x²)."""
-    d[y] = jnp.negative(jnp.divide(d[x], jnp.sqrt(1.0 - x**2)))
-
-
-@tangent_(jnp.arctan)
-def tangent_jnp_arctan(y, x):
-    """Forward mode for jnp.arctan: d[y] = d[x] / (1+x²)."""
-    d[y] = jnp.divide(d[x], 1.0 + x**2)
-
-
-# Hyperbolic Functions
-@tangent_(jnp.sinh)
-def tangent_jnp_sinh(y, x):
-    """Forward mode for jnp.sinh: d[y] = d[x] * cosh(x)."""
-    d[y] = jnp.multiply(d[x], jnp.cosh(x))
-
-
-@tangent_(jnp.cosh)
-def tangent_jnp_cosh(y, x):
-    """Forward mode for jnp.cosh: d[y] = d[x] * sinh(x)."""
-    d[y] = jnp.multiply(d[x], jnp.sinh(x))
-
-
-@tangent_(jnp.tanh)
-def tangent_jnp_tanh(y, x):
-    """Forward mode for jnp.tanh: d[y] = d[x] / cosh^2(x)."""
-    cx = jnp.cosh(x)
-    d[y] = jnp.divide(d[x], jnp.multiply(cx, cx))
+# Unary elementwise tangents (exp, log, trig, ...) are generated alongside
+# their adjoints by the register_elementwise call above.
 
 
 # Reduction Operations
@@ -991,12 +802,6 @@ def tangent_jnp_expand_dims(y, x, axis):
 
 
 # Comparison and Selection
-@tangent_(jnp.abs)
-def tangent_jnp_abs(y, x):
-    """Forward mode for jnp.abs: d[y] = d[x] * sign(x)."""
-    d[y] = jnp.multiply(d[x], jnp.sign(x))
-
-
 @tangent_(jnp.maximum)
 def tangent_jnp_maximum(z, x, y):
     """Forward mode for jnp.maximum."""

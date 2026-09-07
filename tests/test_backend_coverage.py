@@ -206,6 +206,14 @@ UNARY_OPS = {
     'ceil': ('ceil', lambda x: np.zeros_like(x), X_ANY),
     'round': ('round', lambda x: np.zeros_like(x), X_ANY),
     'sign': ('sign', lambda x: np.zeros_like(x), X_ANY),
+    # Extended elementwise family (backends lacking a spelling skip).
+    'log2': ('log2', lambda x: 1.0 / (x * np.log(2.0)), X_POS),
+    'log10': ('log10', lambda x: 1.0 / (x * np.log(10.0)), X_POS),
+    'log1p': ('log1p', lambda x: 1.0 / (1.0 + x), X_POS),
+    'expm1': ('expm1', lambda x: np.exp(x), X_ANY),
+    'exp2': ('exp2', lambda x: np.exp2(x) * np.log(2.0), X_ANY),
+    'reciprocal': ('reciprocal', lambda x: -1.0 / (x * x), X_POS),
+    'rsqrt': ('rsqrt', lambda x: -0.5 * x ** -1.5, X_POS),
 }
 
 
@@ -217,7 +225,9 @@ def _backend_op(mod, op_name):
 # TF exposes some ops under tf.math / tf.nn rather than top-level.
 _TF_OP_MAP = {'arcsin': 'asin', 'arccos': 'acos', 'arctan': 'atan',
               'floor': 'floor', 'ceil': 'ceil', 'round': 'round',
-              'sign': 'sign'}
+              'sign': 'sign', 'log2': 'log2', 'log10': 'log10',
+              'log1p': 'log1p', 'expm1': 'expm1', 'reciprocal': 'reciprocal',
+              'rsqrt': 'rsqrt'}
 
 # tinygrad names a few methods differently from the catalog.
 _TINYGRAD_OP_MAP = {'negative': 'neg', 'arcsin': 'asin', 'arccos': 'acos',
@@ -286,10 +296,11 @@ def test_unary_gradients(backend, op_name):
 # which is what keeps the per-backend adjoint surface scalable.
 # ---------------------------------------------------------------------------
 
-# NumPy has no relu/sigmoid; provide equivalents for the FD oracle.
+# NumPy has no relu/sigmoid/rsqrt; provide equivalents for the FD oracle.
 _FD_OP_OVERRIDE = {
     'relu': lambda x: np.maximum(x, 0.0),
     'sigmoid': lambda x: 1.0 / (1.0 + np.exp(-x)),
+    'rsqrt': lambda x: 1.0 / np.sqrt(x),
 }
 
 

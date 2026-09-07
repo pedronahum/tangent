@@ -40,6 +40,8 @@ except ImportError:
 import numpy as np
 from tangent import non_differentiable
 from tangent import utils
+from tangent.elementwise_rules import prefix_vocab
+from tangent.elementwise_rules import register_elementwise
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -288,142 +290,45 @@ def adjoint_pow(y, x, n):
     d[x] = tangent.unbroadcast(tangent.torch_seed(d[y], x) * n * torch.pow(x, n - 1), x)
 
 
-@adjoint(torch.neg)
-def adjoint_neg(y, x):
-    """Adjoint for torch.neg."""
-    d[x] = -tangent.torch_seed(d[y], x)
-
-
-# torch.negative etc. are distinct function objects from torch.neg; register
-# the same templates for the long-name aliases.
-adjoint(torch.negative)(adjoint_neg)
-
-
-# Exponential and logarithmic functions
-@adjoint(torch.exp)
-def adjoint_exp(y, x):
-    """Adjoint for torch.exp."""
-    d[x] = tangent.torch_seed(d[y], x) * torch.exp(x)
-
-
-@adjoint(torch.log)
-def adjoint_log(y, x):
-    """Adjoint for torch.log."""
-    d[x] = tangent.torch_seed(d[y], x) / x
-
-
-@adjoint(torch.log10)
-def adjoint_log10(y, x):
-    """Adjoint for torch.log10."""
-    d[x] = tangent.torch_seed(d[y], x) / (x * torch.log(torch.tensor(10.0)))
-
-
-@adjoint(torch.log2)
-def adjoint_log2(y, x):
-    """Adjoint for torch.log2."""
-    d[x] = tangent.torch_seed(d[y], x) / (x * torch.log(torch.tensor(2.0)))
-
-
-@adjoint(torch.log1p)
-def adjoint_log1p(y, x):
-    """Adjoint for torch.log1p."""
-    d[x] = tangent.torch_seed(d[y], x) / (1.0 + x)
-
-
-@adjoint(torch.exp2)
-def adjoint_exp2(y, x):
-    """Adjoint for torch.exp2."""
-    d[x] = tangent.torch_seed(d[y], x) * y * torch.log(torch.tensor(2.0))
-
-
-@adjoint(torch.sqrt)
-def adjoint_sqrt(y, x):
-    """Adjoint for torch.sqrt."""
-    d[x] = tangent.torch_seed(d[y], x) / (2.0 * y)
-
-
-@adjoint(torch.square)
-def adjoint_square(y, x):
-    """Adjoint for torch.square."""
-    d[x] = tangent.torch_seed(d[y], x) * 2.0 * x
-
-
-@adjoint(torch.reciprocal)
-def adjoint_reciprocal(y, x):
-    """Adjoint for torch.reciprocal."""
-    d[x] = -tangent.torch_seed(d[y], x) / (x * x)
-
-
-# Trigonometric functions
-@adjoint(torch.sin)
-def adjoint_sin(y, x):
-    """Adjoint for torch.sin."""
-    d[x] = tangent.torch_seed(d[y], x) * torch.cos(x)
-
-
-@adjoint(torch.cos)
-def adjoint_cos(y, x):
-    """Adjoint for torch.cos."""
-    d[x] = -tangent.torch_seed(d[y], x) * torch.sin(x)
-
-
-@adjoint(torch.tan)
-def adjoint_tan(y, x):
-    """Adjoint for torch.tan."""
-    cx = torch.cos(x)
-    d[x] = tangent.torch_seed(d[y], x) / (cx * cx)
-
-
-@adjoint(torch.arcsin)
-def adjoint_arcsin(y, x):
-    """Adjoint for torch.arcsin."""
-    d[x] = tangent.torch_seed(d[y], x) / torch.sqrt(1.0 - x * x)
-
-
-@adjoint(torch.arccos)
-def adjoint_arccos(y, x):
-    """Adjoint for torch.arccos."""
-    d[x] = -tangent.torch_seed(d[y], x) / torch.sqrt(1.0 - x * x)
-
-
-@adjoint(torch.arctan)
-def adjoint_arctan(y, x):
-    """Adjoint for torch.arctan."""
-    d[x] = tangent.torch_seed(d[y], x) / (1.0 + x * x)
-
-
-# Hyperbolic functions
-@adjoint(torch.sinh)
-def adjoint_sinh(y, x):
-    """Adjoint for torch.sinh."""
-    d[x] = tangent.torch_seed(d[y], x) * torch.cosh(x)
-
-
-@adjoint(torch.cosh)
-def adjoint_cosh(y, x):
-    """Adjoint for torch.cosh."""
-    d[x] = tangent.torch_seed(d[y], x) * torch.sinh(x)
-
-
-@adjoint(torch.tanh)
-def adjoint_tanh(y, x):
-    """Adjoint for torch.tanh."""
-    tx = torch.tanh(x)
-    d[x] = tangent.torch_seed(d[y], x) * (1.0 - tx * tx)
-
-
-# Activation functions
-@adjoint(torch.relu)
-def adjoint_relu(y, x):
-    """Adjoint for torch.relu."""
-    d[x] = tangent.torch_seed(d[y], x) * (x > 0)
-
-
-@adjoint(torch.sigmoid)
-def adjoint_sigmoid(y, x):
-    """Adjoint for torch.sigmoid."""
-    sig = torch.sigmoid(x)
-    d[x] = tangent.torch_seed(d[y], x) * sig * (1.0 - sig)
+# Unary elementwise ops: generated (adjoint AND tangent per op) from the
+# backend-neutral rule table. Long-name aliases (torch.negative, torch.asin,
+# ...) are distinct function objects, so they are registered alongside the
+# short spellings.
+register_elementwise(
+    'torch',
+    ops={
+        'exp': torch.exp,
+        'expm1': torch.expm1,
+        'exp2': torch.exp2,
+        'log': torch.log,
+        'log2': torch.log2,
+        'log10': torch.log10,
+        'log1p': torch.log1p,
+        'sqrt': torch.sqrt,
+        'rsqrt': torch.rsqrt,
+        'square': torch.square,
+        'reciprocal': torch.reciprocal,
+        'negative': (torch.neg, torch.negative),
+        'abs': torch.abs,
+        'sin': torch.sin,
+        'cos': torch.cos,
+        'tan': torch.tan,
+        'arcsin': (torch.arcsin, torch.asin),
+        'arccos': (torch.arccos, torch.acos),
+        'arctan': (torch.arctan, torch.atan),
+        'sinh': torch.sinh,
+        'cosh': torch.cosh,
+        'tanh': torch.tanh,
+        'sigmoid': torch.sigmoid,
+        'relu': torch.relu,
+        'floor': torch.floor,
+        'ceil': torch.ceil,
+        'round': torch.round,
+        'sign': torch.sign,
+    },
+    vocab=prefix_vocab('torch', mask_pos='(({arg}) > 0)'),
+    seed='tangent.torch_seed({g}, x)',
+)
 
 
 # Reduction operations
@@ -551,36 +456,6 @@ def adjoint_unsqueeze(y, x, axis):
 
 
 # Element-wise selection
-@adjoint(torch.abs)
-def adjoint_abs(y, x):
-    """Adjoint for torch.abs."""
-    d[x] = tangent.torch_seed(d[y], x) * torch.sign(x)
-
-
-@adjoint(torch.floor)
-def adjoint_floor(y, x):
-    """Adjoint for torch.floor: gradient is zero (piecewise constant)."""
-    d[x] = torch.zeros_like(x)
-
-
-@adjoint(torch.ceil)
-def adjoint_ceil(y, x):
-    """Adjoint for torch.ceil: gradient is zero (piecewise constant)."""
-    d[x] = torch.zeros_like(x)
-
-
-@adjoint(torch.round)
-def adjoint_round(y, x):
-    """Adjoint for torch.round: gradient is zero (piecewise constant)."""
-    d[x] = torch.zeros_like(x)
-
-
-@adjoint(torch.sign)
-def adjoint_sign(y, x):
-    """Adjoint for torch.sign: gradient is zero (piecewise constant)."""
-    d[x] = torch.zeros_like(x)
-
-
 @adjoint(torch.maximum)
 def adjoint_maximum(z, x, y):
     """Adjoint for torch.maximum."""
@@ -704,6 +579,11 @@ def adjoint_stack(dz, tensors, dim=0):
         'from a literal, or pass a list literal directly.')
 
 
+# torch.concat / torch.concatenate are distinct alias objects for torch.cat.
+adjoint(torch.concat)(adjoint_cat)
+adjoint(torch.concatenate)(adjoint_cat)
+
+
 #
 # Forward mode (tangent) definitions
 #
@@ -738,90 +618,8 @@ def tangent_pow(y, x, n):
     d[y] = d[x] * n * torch.pow(x, n - 1)
 
 
-@tangent_(torch.neg)
-def tangent_neg(y, x):
-    """Forward mode for torch.neg."""
-    d[y] = -d[x]
-
-
-@tangent_(torch.exp)
-def tangent_exp(y, x):
-    """Forward mode for torch.exp."""
-    d[y] = d[x] * y
-
-
-@tangent_(torch.log)
-def tangent_log(y, x):
-    """Forward mode for torch.log."""
-    d[y] = d[x] / x
-
-
-@tangent_(torch.sqrt)
-def tangent_sqrt(y, x):
-    """Forward mode for torch.sqrt."""
-    d[y] = d[x] / (2.0 * y)
-
-
-@tangent_(torch.square)
-def tangent_square(y, x):
-    """Forward mode for torch.square."""
-    d[y] = 2.0 * x * d[x]
-
-
-@tangent_(torch.sin)
-def tangent_sin(y, x):
-    """Forward mode for torch.sin."""
-    d[y] = d[x] * torch.cos(x)
-
-
-@tangent_(torch.cos)
-def tangent_cos(y, x):
-    """Forward mode for torch.cos."""
-    d[y] = -d[x] * torch.sin(x)
-
-
-@tangent_(torch.tan)
-def tangent_tan(y, x):
-    """Forward mode for torch.tan."""
-    cx = torch.cos(x)
-    d[y] = d[x] / (cx * cx)
-
-
-@tangent_(torch.arcsin)
-def tangent_arcsin(y, x):
-    """Forward mode for torch.arcsin."""
-    d[y] = d[x] / torch.sqrt(1.0 - x * x)
-
-
-@tangent_(torch.arccos)
-def tangent_arccos(y, x):
-    """Forward mode for torch.arccos."""
-    d[y] = -d[x] / torch.sqrt(1.0 - x * x)
-
-
-@tangent_(torch.arctan)
-def tangent_arctan(y, x):
-    """Forward mode for torch.arctan."""
-    d[y] = d[x] / (1.0 + x * x)
-
-
-@tangent_(torch.sinh)
-def tangent_sinh(y, x):
-    """Forward mode for torch.sinh."""
-    d[y] = d[x] * torch.cosh(x)
-
-
-@tangent_(torch.cosh)
-def tangent_cosh(y, x):
-    """Forward mode for torch.cosh."""
-    d[y] = d[x] * torch.sinh(x)
-
-
-@tangent_(torch.tanh)
-def tangent_tanh(y, x):
-    """Forward mode for torch.tanh."""
-    tx = torch.tanh(x)
-    d[y] = d[x] * (1.0 - tx * tx)
+# Unary elementwise tangents (exp, log, trig, ...) are generated alongside
+# their adjoints by the register_elementwise call above.
 
 
 @tangent_(torch.sum)
@@ -876,24 +674,6 @@ def tangent_squeeze(y, x, axis=None):
 def tangent_unsqueeze(y, x, axis):
     """Forward mode for torch.unsqueeze."""
     d[y] = torch.unsqueeze(d[x], dim=axis)
-
-
-@tangent_(torch.abs)
-def tangent_abs(y, x):
-    """Forward mode for torch.abs."""
-    d[y] = d[x] * torch.sign(x)
-
-
-@tangent_(torch.relu)
-def tangent_relu(y, x):
-    """Forward mode for torch.relu."""
-    d[y] = torch.where(x > 0, d[x], torch.zeros_like(d[x]))
-
-
-@tangent_(torch.sigmoid)
-def tangent_sigmoid(y, x):
-    """Forward mode for torch.sigmoid."""
-    d[y] = d[x] * y * (1.0 - y)
 
 
 @tangent_(torch.softmax)

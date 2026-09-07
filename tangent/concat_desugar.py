@@ -48,9 +48,6 @@ import gast
 # stack-like attribute name to the varargs helper (defined by that backend's
 # extension module and exposed on the tangent namespace) that carries the
 # varargs adjoint/tangent.
-#
-# NumPy's concatenate/stack are left untouched here and handled by
-# numpy_extended's adjoints.
 _BACKEND_HELPERS = {
     # backend key -> {attr name: helper name}
     'numpy': {'concatenate': 'np_concat_seq', 'stack': 'np_stack_seq'},

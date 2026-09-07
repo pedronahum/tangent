@@ -19,6 +19,8 @@ try:
     import tensorflow as tf
     import tangent
     from tangent import non_differentiable
+    from tangent.elementwise_rules import prefix_vocab
+    from tangent.elementwise_rules import register_elementwise
     from tangent.grads import adjoint
     from tangent.tangents import tangent_
     # Side-effect import: registers the base TF adjoints/tangents that this
@@ -32,63 +34,37 @@ except ImportError:
 # Element-wise Operations
 # ============================================================================
 
-@adjoint(tf.abs)
-def abs_(y, x):
-    """Adjoint for tf.abs: ∂L/∂x = sign(x)·∂L/∂z"""
-    d[x] = d[y] * tf.sign(x)
-
-
-@adjoint(tf.square)
-def square(y, x):
-    """Adjoint for tf.square: ∂L/∂x = 2x·∂L/∂z"""
-    d[x] = 2.0 * x * d[y]
-
-
-@adjoint(tf.sqrt)
-def sqrt(y, x):
-    """Adjoint for tf.sqrt: ∂L/∂x = ∂L/∂z/(2√x) = ∂L/∂z/(2y)"""
-    d[x] = d[y] / (2.0 * y)
-
-
-@adjoint(tf.sign)
-def sign(y, x):
-    """Adjoint for tf.sign: gradient is zero (discontinuous function)"""
-    d[x] = tf.zeros_like(x)
-
-
-@adjoint(tf.floor)
-def floor(y, x):
-    """Adjoint for tf.floor: gradient is zero (discontinuous function)"""
-    d[x] = tf.zeros_like(x)
-
-
-# TF 2.x: ceil moved to tf.math.ceil
-if hasattr(tf.math, 'ceil'):
-    @adjoint(tf.math.ceil)
-    def ceil_math(y, x):
-        """Adjoint for tf.math.ceil: gradient is zero (discontinuous function)"""
-        d[x] = tf.zeros_like(x)
-elif hasattr(tf, 'ceil'):
-    @adjoint(tf.ceil)
-    def ceil_tf(y, x):
-        """Adjoint for tf.ceil: gradient is zero (discontinuous function)"""
-        d[x] = tf.zeros_like(x)
-
-
-@adjoint(tf.round)
-def round_(y, x):
-    """Adjoint for tf.round: gradient is zero (discontinuous function)"""
-    d[x] = tf.zeros_like(x)
-
-
-# Try to register tf.reciprocal (may not exist in all TF versions)
-try:
-    @adjoint(tf.reciprocal)
-    def reciprocal(y, x):
-        """Adjoint for tf.reciprocal: ∂L/∂x = -∂L/∂z/x²"""
-        d[x] = -d[y] / tf.square(x)
-except AttributeError:
-    pass  # tf.reciprocal not available
+# Unary elementwise ops: generated (adjoint AND tangent per op) from the
+# backend-neutral rule table. Spellings that moved between TF versions
+# (tf.math.ceil, tf.math.reciprocal, ...) are guarded with getattr so
+# whichever exists is registered.
+register_elementwise(
+    'tf',
+    ops={
+        'abs': tf.abs,
+        'square': tf.square,
+        'sqrt': tf.sqrt,
+        'reciprocal': (getattr(tf, 'reciprocal', None),
+                       getattr(tf.math, 'reciprocal', None)),
+        'expm1': getattr(tf.math, 'expm1', None),
+        'log2': getattr(tf.math, 'log2', None),
+        'log10': getattr(tf.math, 'log10', None),
+        'log1p': getattr(tf.math, 'log1p', None),
+        'sin': tf.sin,
+        'cos': tf.cos,
+        'tan': tf.tan,
+        'arcsin': getattr(tf, 'asin', None),
+        'arccos': getattr(tf, 'acos', None),
+        'arctan': tf.atan,
+        'relu': tf.nn.relu,
+        'sigmoid': tf.nn.sigmoid,
+        'sign': tf.sign,
+        'floor': tf.floor,
+        'ceil': (getattr(tf.math, 'ceil', None) or getattr(tf, 'ceil', None)),
+        'round': tf.round,
+    },
+    vocab=prefix_vocab('tf', mask_pos='tf.cast(({arg}) > 0, x.dtype)'),
+)
 
 
 @adjoint(tf.minimum)
@@ -115,49 +91,6 @@ def where(z, condition, x, y):
         tf.where(condition, d[z], tf.zeros_like(d[z])), x)
     d[y] = tangent.unbroadcast_tensor(
         tf.where(condition, tf.zeros_like(d[z]), d[z]), y)
-
-
-# ============================================================================
-# Logarithmic Functions
-# ============================================================================
-
-# Note: tf.math.log is already handled in tf_extensions.py as tf_log
-# We register tf.math.log directly here for convenience
-
-try:
-    @adjoint(tf.math.log10)
-    def log10(y, x):
-        """Adjoint for tf.math.log10: ∂L/∂x = ∂L/∂z/(x·ln(10))"""
-        d[x] = d[y] / (x * tf.math.log(10.0))
-except AttributeError:
-    pass  # log10 not available in this TF version
-
-
-try:
-    @adjoint(tf.math.log2)
-    def log2(y, x):
-        """Adjoint for tf.math.log2: ∂L/∂x = ∂L/∂z/(x·ln(2))"""
-        d[x] = d[y] / (x * tf.math.log(2.0))
-except AttributeError:
-    pass  # log2 not available in this TF version
-
-
-try:
-    @adjoint(tf.math.log1p)
-    def log1p(y, x):
-        """Adjoint for tf.math.log1p (log(1+x)): ∂L/∂x = ∂L/∂z/(1+x)"""
-        d[x] = d[y] / (1.0 + x)
-except AttributeError:
-    pass  # log1p not available
-
-
-try:
-    @adjoint(tf.math.expm1)
-    def expm1(y, x):
-        """Adjoint for tf.math.expm1 (exp(x)-1): ∂L/∂x = exp(x)·∂L/∂z"""
-        d[x] = d[y] * tf.exp(x)
-except AttributeError:
-    pass  # expm1 not available
 
 
 # ============================================================================
@@ -193,67 +126,8 @@ def reduce_prod(y, x, axis=None, keep_dims=False):
 
 
 # ============================================================================
-# Trigonometric Functions
-# ============================================================================
-
-@adjoint(tf.sin)
-def sin(y, x):
-    """Adjoint for tf.sin: ∂L/∂x = cos(x)·∂L/∂z"""
-    d[x] = d[y] * tf.cos(x)
-
-
-@adjoint(tf.cos)
-def cos(y, x):
-    """Adjoint for tf.cos: ∂L/∂x = -sin(x)·∂L/∂z"""
-    d[x] = -d[y] * tf.sin(x)
-
-
-@adjoint(tf.tan)
-def tan(y, x):
-    """Adjoint for tf.tan: ∂L/∂x = ∂L/∂z/cos²(x) = ∂L/∂z·(1 + tan²(x))"""
-    d[x] = d[y] * (1.0 + tf.square(y))
-
-
-try:
-    @adjoint(tf.asin)
-    def asin(y, x):
-        """Adjoint for tf.asin: ∂L/∂x = ∂L/∂z/√(1-x²)"""
-        d[x] = d[y] / tf.sqrt(1.0 - tf.square(x))
-except AttributeError:
-    pass  # asin not available
-
-
-try:
-    @adjoint(tf.acos)
-    def acos(y, x):
-        """Adjoint for tf.acos: ∂L/∂x = -∂L/∂z/√(1-x²)"""
-        d[x] = -d[y] / tf.sqrt(1.0 - tf.square(x))
-except AttributeError:
-    pass  # acos not available
-
-
-@adjoint(tf.atan)
-def atan(y, x):
-    """Adjoint for tf.atan: ∂L/∂x = ∂L/∂z/(1+x²)"""
-    d[x] = d[y] / (1.0 + tf.square(x))
-
-
-# ============================================================================
 # Neural Network Activations
 # ============================================================================
-
-@adjoint(tf.nn.relu)
-def relu(y, x):
-    """Adjoint for tf.nn.relu: ∂L/∂x = ∂L/∂z where x > 0, else 0"""
-    d[x] = d[y] * tf.cast(x > 0, x.dtype)
-
-
-@adjoint(tf.nn.sigmoid)
-def sigmoid(y, x):
-    """Adjoint for tf.nn.sigmoid: ∂L/∂x = sigmoid(x)·(1-sigmoid(x))·∂L/∂z"""
-    # y is already sigmoid(x), so gradient is y * (1 - y)
-    d[x] = d[y] * y * (1.0 - y)
-
 
 @adjoint(tf.nn.softmax)
 def softmax(y, x, axis=-1):
@@ -414,49 +288,6 @@ def stack(dz, values, axis=0):
 # coverage suite.
 # ============================================================================
 
-@tangent_(tf.abs)
-def tangent_abs(y, x):
-    """Forward mode for tf.abs: dy = dx * sign(x)."""
-    d[y] = d[x] * tf.sign(x)
-
-
-@tangent_(tf.square)
-def tangent_square(y, x):
-    """Forward mode for tf.square: dy = 2 x dx."""
-    d[y] = 2.0 * x * d[x]
-
-
-@tangent_(tf.sqrt)
-def tangent_sqrt(y, x):
-    """Forward mode for tf.sqrt: dy = dx / (2 y)."""
-    d[y] = d[x] / (2.0 * y)
-
-
-@tangent_(tf.sign)
-def tangent_sign(y, x):
-    """Forward mode for tf.sign: zero tangent (piecewise constant)."""
-    d[y] = tf.zeros_like(x)
-
-
-@tangent_(tf.floor)
-def tangent_floor(y, x):
-    """Forward mode for tf.floor: zero tangent (piecewise constant)."""
-    d[y] = tf.zeros_like(x)
-
-
-@tangent_(tf.round)
-def tangent_round(y, x):
-    """Forward mode for tf.round: zero tangent (piecewise constant)."""
-    d[y] = tf.zeros_like(x)
-
-
-if hasattr(tf.math, 'ceil'):
-    @tangent_(tf.math.ceil)
-    def tangent_ceil(y, x):
-        """Forward mode for tf.math.ceil: zero tangent."""
-        d[y] = tf.zeros_like(x)
-
-
 @tangent_(tf.minimum)
 def tangent_minimum(z, x, y):
     """Forward mode for tf.minimum: the tangent of the smaller argument."""
@@ -476,30 +307,6 @@ def tangent_where(z, condition, x, y):
     d[z] = tf.where(condition, d[x], d[y])
 
 
-try:
-    @tangent_(tf.math.log10)
-    def tangent_log10(y, x):
-        """Forward mode for tf.math.log10: dy = dx / (x ln 10)."""
-        d[y] = d[x] / (x * tf.math.log(10.0))
-
-    @tangent_(tf.math.log2)
-    def tangent_log2(y, x):
-        """Forward mode for tf.math.log2: dy = dx / (x ln 2)."""
-        d[y] = d[x] / (x * tf.math.log(2.0))
-
-    @tangent_(tf.math.log1p)
-    def tangent_log1p(y, x):
-        """Forward mode for tf.math.log1p: dy = dx / (1 + x)."""
-        d[y] = d[x] / (1.0 + x)
-
-    @tangent_(tf.math.expm1)
-    def tangent_expm1(y, x):
-        """Forward mode for tf.math.expm1: dy = dx * exp(x)."""
-        d[y] = d[x] * tf.exp(x)
-except AttributeError:
-    pass  # not available in this TF version
-
-
 @tangent_(tf.reduce_min)
 def tangent_reduce_min(y, x, axis=None, keep_dims=False):
     """Forward mode for tf.reduce_min: the tangent of the minimal
@@ -517,56 +324,6 @@ def tangent_reduce_prod(y, x, axis=None, keep_dims=False):
                                    keep_dims)
     d[y] = tf.reduce_sum(d[x] * y_unreduced / x, axis=axis,
                          keepdims=keep_dims)
-
-
-@tangent_(tf.sin)
-def tangent_sin(y, x):
-    """Forward mode for tf.sin: dy = dx * cos(x)."""
-    d[y] = d[x] * tf.cos(x)
-
-
-@tangent_(tf.cos)
-def tangent_cos(y, x):
-    """Forward mode for tf.cos: dy = -dx * sin(x)."""
-    d[y] = -d[x] * tf.sin(x)
-
-
-@tangent_(tf.tan)
-def tangent_tan(y, x):
-    """Forward mode for tf.tan: dy = dx * (1 + tan(x)^2)."""
-    d[y] = d[x] * (1.0 + tf.square(y))
-
-
-try:
-    @tangent_(tf.asin)
-    def tangent_asin(y, x):
-        """Forward mode for tf.asin: dy = dx / sqrt(1 - x^2)."""
-        d[y] = d[x] / tf.sqrt(1.0 - tf.square(x))
-
-    @tangent_(tf.acos)
-    def tangent_acos(y, x):
-        """Forward mode for tf.acos: dy = -dx / sqrt(1 - x^2)."""
-        d[y] = -d[x] / tf.sqrt(1.0 - tf.square(x))
-except AttributeError:
-    pass  # not available
-
-
-@tangent_(tf.atan)
-def tangent_atan(y, x):
-    """Forward mode for tf.atan: dy = dx / (1 + x^2)."""
-    d[y] = d[x] / (1.0 + tf.square(x))
-
-
-@tangent_(tf.nn.relu)
-def tangent_relu(y, x):
-    """Forward mode for tf.nn.relu: dy = dx where x > 0, else 0."""
-    d[y] = d[x] * tf.cast(x > 0, x.dtype)
-
-
-@tangent_(tf.nn.sigmoid)
-def tangent_sigmoid(y, x):
-    """Forward mode for tf.nn.sigmoid: dy = dx * y * (1 - y)."""
-    d[y] = d[x] * y * (1.0 - y)
 
 
 try:

@@ -53,6 +53,8 @@ import numpy as np
 
 from tangent import non_differentiable
 from tangent import utils
+from tangent.elementwise_rules import method_vocab
+from tangent.elementwise_rules import register_elementwise
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -576,9 +578,44 @@ utils.register_method_resolver(utils.MethodResolver(
 
 # --- Elementwise unary ---
 
-@adjoint(Tensor.relu)
-def adjoint_relu(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * (x > 0)
+# Simple unary elementwise ops: generated (adjoint AND tangent per op) from
+# the backend-neutral rule table, using tinygrad's method-style spelling
+# ((x).cos() instead of mod.cos(x)). Activations with extra parameters or
+# tinygrad-specific formulas (leaky_relu, elu, gelu, silu, softplus,
+# softsign) stay hand-written below.
+register_elementwise(
+    'tinygrad',
+    ops={
+        'exp': Tensor.exp,
+        'exp2': Tensor.exp2,
+        'log': Tensor.log,
+        'log2': Tensor.log2,
+        'log10': getattr(Tensor, 'log10', None),
+        'sqrt': Tensor.sqrt,
+        'rsqrt': Tensor.rsqrt,
+        'square': Tensor.square,
+        'reciprocal': Tensor.reciprocal,
+        'negative': Tensor.neg,
+        'abs': Tensor.abs,
+        'sin': Tensor.sin,
+        'cos': Tensor.cos,
+        'tan': Tensor.tan,
+        'arcsin': Tensor.asin,
+        'arccos': Tensor.acos,
+        'arctan': Tensor.atan,
+        'sinh': Tensor.sinh,
+        'cosh': Tensor.cosh,
+        'tanh': Tensor.tanh,
+        'sigmoid': Tensor.sigmoid,
+        'relu': Tensor.relu,
+        'floor': Tensor.floor,
+        'ceil': Tensor.ceil,
+        'round': Tensor.round,
+        'sign': Tensor.sign,
+    },
+    vocab=method_vocab(mask_pos='(({arg}) > 0)'),
+    seed='tangent.tg_seed({g}, x)',
+)
 
 
 @adjoint(Tensor.leaky_relu)
@@ -614,127 +651,6 @@ def adjoint_softplus(y, x, beta=1.0):
 @adjoint(Tensor.softsign)
 def adjoint_softsign(y, x):
     d[x] = tangent.tg_seed(d[y], x) / ((1.0 + x.abs()) * (1.0 + x.abs()))
-
-
-@adjoint(Tensor.sigmoid)
-def adjoint_sigmoid(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * y * (1.0 - y)
-
-
-@adjoint(Tensor.tanh)
-def adjoint_tanh(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * (1.0 - y * y)
-
-
-@adjoint(Tensor.exp)
-def adjoint_exp(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * y
-
-
-@adjoint(Tensor.exp2)
-def adjoint_exp2(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * y * 0.6931471805599453
-
-
-@adjoint(Tensor.log)
-def adjoint_log(y, x):
-    d[x] = tangent.tg_seed(d[y], x) / x
-
-
-@adjoint(Tensor.log2)
-def adjoint_log2(y, x):
-    d[x] = tangent.tg_seed(d[y], x) / (x * 0.6931471805599453)
-
-
-@adjoint(Tensor.sqrt)
-def adjoint_sqrt(y, x):
-    d[x] = tangent.tg_seed(d[y], x) / (2.0 * y)
-
-
-@adjoint(Tensor.rsqrt)
-def adjoint_rsqrt(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * (-0.5) * x.rsqrt() / x
-
-
-@adjoint(Tensor.square)
-def adjoint_square(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * 2.0 * x
-
-
-@adjoint(Tensor.reciprocal)
-def adjoint_reciprocal(y, x):
-    d[x] = -tangent.tg_seed(d[y], x) / (x * x)
-
-
-@adjoint(Tensor.neg)
-def adjoint_neg(y, x):
-    d[x] = -tangent.tg_seed(d[y], x)
-
-
-@adjoint(Tensor.abs)
-def adjoint_abs(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * x.sign()
-
-
-@adjoint(Tensor.sign)
-def adjoint_sign(y, x):
-    d[x] = tangent.init_grad(x)
-
-
-@adjoint(Tensor.sin)
-def adjoint_sin(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * x.cos()
-
-
-@adjoint(Tensor.cos)
-def adjoint_cos(y, x):
-    d[x] = -tangent.tg_seed(d[y], x) * x.sin()
-
-
-@adjoint(Tensor.tan)
-def adjoint_tan(y, x):
-    cx = x.cos()
-    d[x] = tangent.tg_seed(d[y], x) / (cx * cx)
-
-
-@adjoint(Tensor.asin)
-def adjoint_asin(y, x):
-    d[x] = tangent.tg_seed(d[y], x) / (1.0 - x * x).sqrt()
-
-
-@adjoint(Tensor.acos)
-def adjoint_acos(y, x):
-    d[x] = -tangent.tg_seed(d[y], x) / (1.0 - x * x).sqrt()
-
-
-@adjoint(Tensor.atan)
-def adjoint_atan(y, x):
-    d[x] = tangent.tg_seed(d[y], x) / (1.0 + x * x)
-
-
-@adjoint(Tensor.sinh)
-def adjoint_sinh(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * x.cosh()
-
-
-@adjoint(Tensor.cosh)
-def adjoint_cosh(y, x):
-    d[x] = tangent.tg_seed(d[y], x) * x.sinh()
-
-
-@adjoint(Tensor.floor)
-def adjoint_floor(y, x):
-    d[x] = tangent.init_grad(x)
-
-
-@adjoint(Tensor.ceil)
-def adjoint_ceil(y, x):
-    d[x] = tangent.init_grad(x)
-
-
-@adjoint(Tensor.round)
-def adjoint_round(y, x):
-    d[x] = tangent.init_grad(x)
 
 
 # --- Elementwise binary ---
@@ -1019,46 +935,6 @@ def tangent_pow(y, x, n):
     d[y] = d[x] * n * x.pow(n - 1)
 
 
-@tangent_(Tensor.neg)
-def tangent_neg(y, x):
-    d[y] = -d[x]
-
-
-@tangent_(Tensor.exp)
-def tangent_exp(y, x):
-    d[y] = d[x] * y
-
-
-@tangent_(Tensor.log)
-def tangent_log(y, x):
-    d[y] = d[x] / x
-
-
-@tangent_(Tensor.sqrt)
-def tangent_sqrt(y, x):
-    d[y] = d[x] / (2.0 * y)
-
-
-@tangent_(Tensor.square)
-def tangent_square(y, x):
-    d[y] = 2.0 * x * d[x]
-
-
-@tangent_(Tensor.tanh)
-def tangent_tanh(y, x):
-    d[y] = d[x] * (1.0 - y * y)
-
-
-@tangent_(Tensor.sigmoid)
-def tangent_sigmoid(y, x):
-    d[y] = d[x] * y * (1.0 - y)
-
-
-@tangent_(Tensor.relu)
-def tangent_relu(y, x):
-    d[y] = (x > 0).where(d[x], 0.0)
-
-
 @tangent_(Tensor.softmax)
 def tangent_softmax(y, x, axis=-1):
     d[y] = y * (d[x] - (d[x] * y).sum(axis=axis, keepdim=True))
@@ -1068,16 +944,6 @@ def tangent_softmax(y, x, axis=-1):
 def tangent_log_softmax(y, x, axis=-1):
     # dy = dx - sum(softmax(x) * dx); exp(y) is softmax(x).
     d[y] = d[x] - (y.exp() * d[x]).sum(axis=axis, keepdim=True)
-
-
-@tangent_(Tensor.sin)
-def tangent_sin(y, x):
-    d[y] = d[x] * x.cos()
-
-
-@tangent_(Tensor.cos)
-def tangent_cos(y, x):
-    d[y] = -d[x] * x.sin()
 
 
 @tangent_(Tensor.sum)

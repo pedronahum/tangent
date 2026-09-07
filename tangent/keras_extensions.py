@@ -46,6 +46,8 @@ except ImportError:
 
 import numpy as np
 from tangent import non_differentiable
+from tangent.elementwise_rules import prefix_vocab
+from tangent.elementwise_rules import register_elementwise
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 
@@ -152,138 +154,46 @@ def adjoint_power(z, x1, x2):
         tangent.keras_seed(d[z], x1) * x2 * kops.power(x1, x2 - 1), x1)
 
 
-@adjoint(kops.negative)
-def adjoint_negative(y, x):
-    """Adjoint for keras.ops.negative."""
-    d[x] = -tangent.keras_seed(d[y], x)
-
-
-# Exponential and logarithmic
-@adjoint(kops.exp)
-def adjoint_exp(y, x):
-    """Adjoint for keras.ops.exp."""
-    d[x] = tangent.keras_seed(d[y], x) * y
-
-
-@adjoint(kops.log)
-def adjoint_log(y, x):
-    """Adjoint for keras.ops.log."""
-    d[x] = tangent.keras_seed(d[y], x) / x
-
-
-@adjoint(kops.sqrt)
-def adjoint_sqrt(y, x):
-    """Adjoint for keras.ops.sqrt."""
-    d[x] = tangent.keras_seed(d[y], x) / (2.0 * y)
-
-
-@adjoint(kops.square)
-def adjoint_square(y, x):
-    """Adjoint for keras.ops.square."""
-    d[x] = tangent.keras_seed(d[y], x) * (2.0 * x)
-
-
-@adjoint(kops.abs)
-def adjoint_abs(y, x):
-    """Adjoint for keras.ops.abs."""
-    d[x] = tangent.keras_seed(d[y], x) * kops.sign(x)
-
-
-@adjoint(kops.floor)
-def adjoint_floor(y, x):
-    """Adjoint for keras.ops.floor: gradient is zero (piecewise constant)."""
-    d[x] = kops.zeros_like(x)
-
-
-@adjoint(kops.ceil)
-def adjoint_ceil(y, x):
-    """Adjoint for keras.ops.ceil: gradient is zero (piecewise constant)."""
-    d[x] = kops.zeros_like(x)
-
-
-@adjoint(kops.round)
-def adjoint_round(y, x):
-    """Adjoint for keras.ops.round: gradient is zero (piecewise constant)."""
-    d[x] = kops.zeros_like(x)
-
-
-@adjoint(kops.sign)
-def adjoint_sign(y, x):
-    """Adjoint for keras.ops.sign: gradient is zero (piecewise constant)."""
-    d[x] = kops.zeros_like(x)
-
-
-# Trigonometric
-@adjoint(kops.sin)
-def adjoint_sin(y, x):
-    """Adjoint for keras.ops.sin."""
-    d[x] = tangent.keras_seed(d[y], x) * kops.cos(x)
-
-
-@adjoint(kops.cos)
-def adjoint_cos(y, x):
-    """Adjoint for keras.ops.cos."""
-    d[x] = -tangent.keras_seed(d[y], x) * kops.sin(x)
-
-
-@adjoint(kops.tan)
-def adjoint_tan(y, x):
-    """Adjoint for keras.ops.tan."""
-    cx = kops.cos(x)
-    d[x] = tangent.keras_seed(d[y], x) / (cx * cx)
-
-
-@adjoint(kops.arcsin)
-def adjoint_arcsin(y, x):
-    """Adjoint for keras.ops.arcsin."""
-    d[x] = tangent.keras_seed(d[y], x) / kops.sqrt(1.0 - x * x)
-
-
-@adjoint(kops.arccos)
-def adjoint_arccos(y, x):
-    """Adjoint for keras.ops.arccos."""
-    d[x] = -tangent.keras_seed(d[y], x) / kops.sqrt(1.0 - x * x)
-
-
-@adjoint(kops.arctan)
-def adjoint_arctan(y, x):
-    """Adjoint for keras.ops.arctan."""
-    d[x] = tangent.keras_seed(d[y], x) / (1.0 + x * x)
-
-
-# Hyperbolic
-@adjoint(kops.sinh)
-def adjoint_sinh(y, x):
-    """Adjoint for keras.ops.sinh."""
-    d[x] = tangent.keras_seed(d[y], x) * kops.cosh(x)
-
-
-@adjoint(kops.cosh)
-def adjoint_cosh(y, x):
-    """Adjoint for keras.ops.cosh."""
-    d[x] = tangent.keras_seed(d[y], x) * kops.sinh(x)
-
-
-@adjoint(kops.tanh)
-def adjoint_tanh(y, x):
-    """Adjoint for keras.ops.tanh."""
-    tx = kops.tanh(x)
-    d[x] = tangent.keras_seed(d[y], x) * (1.0 - tx * tx)
-
-
-# Activations
-@adjoint(kops.relu)
-def adjoint_relu(y, x):
-    """Adjoint for keras.ops.relu."""
-    mask = kops.cast(x > 0, tangent.keras_dtype_name(x))
-    d[x] = tangent.keras_seed(d[y], x) * mask
-
-
-@adjoint(kops.sigmoid)
-def adjoint_sigmoid(y, x):
-    """Adjoint for keras.ops.sigmoid."""
-    sig = kops.sigmoid(x)
-    d[x] = tangent.keras_seed(d[y], x) * sig * (1.0 - sig)
+# Unary elementwise ops: generated (adjoint AND tangent per op) from the
+# backend-neutral rule table. Optional spellings are guarded with getattr
+# so older Keras versions simply skip them.
+register_elementwise(
+    'keras',
+    ops={
+        'exp': kops.exp,
+        'exp2': getattr(kops, 'exp2', None),
+        'expm1': getattr(kops, 'expm1', None),
+        'log': kops.log,
+        'log2': getattr(kops, 'log2', None),
+        'log10': getattr(kops, 'log10', None),
+        'log1p': getattr(kops, 'log1p', None),
+        'sqrt': kops.sqrt,
+        'rsqrt': getattr(kops, 'rsqrt', None),
+        'square': kops.square,
+        'reciprocal': getattr(kops, 'reciprocal', None),
+        'negative': kops.negative,
+        'abs': (kops.abs, getattr(kops, 'absolute', None)),
+        'sin': kops.sin,
+        'cos': kops.cos,
+        'tan': kops.tan,
+        'arcsin': kops.arcsin,
+        'arccos': kops.arccos,
+        'arctan': kops.arctan,
+        'sinh': kops.sinh,
+        'cosh': kops.cosh,
+        'tanh': kops.tanh,
+        'sigmoid': kops.sigmoid,
+        'relu': kops.relu,
+        'floor': kops.floor,
+        'ceil': kops.ceil,
+        'round': kops.round,
+        'sign': kops.sign,
+    },
+    vocab=prefix_vocab(
+        'kops',
+        mask_pos='kops.cast(({arg}) > 0, tangent.keras_dtype_name(x))'),
+    seed='tangent.keras_seed({g}, x)',
+)
 
 
 # Reductions
@@ -531,53 +441,8 @@ def tangent_divide(z, x1, x2):
     d[z] = (d[x1] * x2 - x1 * d[x2]) / (x2 * x2)
 
 
-@tangent_(kops.negative)
-def tangent_negative(y, x):
-    """Forward mode for keras.ops.negative."""
-    d[y] = -d[x]
-
-
-@tangent_(kops.exp)
-def tangent_exp(y, x):
-    """Forward mode for keras.ops.exp."""
-    d[y] = d[x] * y
-
-
-@tangent_(kops.log)
-def tangent_log(y, x):
-    """Forward mode for keras.ops.log."""
-    d[y] = d[x] / x
-
-
-@tangent_(kops.sqrt)
-def tangent_sqrt(y, x):
-    """Forward mode for keras.ops.sqrt."""
-    d[y] = d[x] / (2.0 * y)
-
-
-@tangent_(kops.square)
-def tangent_square(y, x):
-    """Forward mode for keras.ops.square."""
-    d[y] = 2.0 * x * d[x]
-
-
-@tangent_(kops.sin)
-def tangent_sin(y, x):
-    """Forward mode for keras.ops.sin."""
-    d[y] = d[x] * kops.cos(x)
-
-
-@tangent_(kops.cos)
-def tangent_cos(y, x):
-    """Forward mode for keras.ops.cos."""
-    d[y] = -d[x] * kops.sin(x)
-
-
-@tangent_(kops.tanh)
-def tangent_tanh(y, x):
-    """Forward mode for keras.ops.tanh."""
-    tx = kops.tanh(x)
-    d[y] = d[x] * (1.0 - tx * tx)
+# Unary elementwise tangents (exp, log, trig, ...) are generated alongside
+# their adjoints by the register_elementwise call above.
 
 
 @tangent_(kops.sum)
@@ -608,19 +473,6 @@ def tangent_reshape(y, x, newshape):
 def tangent_transpose(y, x, axes=None):
     """Forward mode for keras.ops.transpose."""
     d[y] = kops.transpose(d[x], axes=axes)
-
-
-@tangent_(kops.relu)
-def tangent_relu(y, x):
-    """Forward mode for keras.ops.relu."""
-    mask = kops.cast(x > 0, tangent.keras_dtype_name(x))
-    d[y] = d[x] * mask
-
-
-@tangent_(kops.sigmoid)
-def tangent_sigmoid(y, x):
-    """Forward mode for keras.ops.sigmoid."""
-    d[y] = d[x] * y * (1.0 - y)
 
 
 @tangent_(kops.softmax)
