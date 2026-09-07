@@ -45,6 +45,7 @@ from tangent.utils import push
 from tangent.utils import push_stack
 from tangent.utils import shapes_match
 from tangent.utils import match_seed
+from tangent.utils import match_seed_grad
 from tangent.utils import seed_pytree
 from tangent.utils import Stack
 from tangent.utils import unbroadcast

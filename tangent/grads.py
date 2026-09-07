@@ -805,6 +805,27 @@ def aastype(z, array, y):
   d[array] = tangent.astype(d[z], array)
 
 
+# match_seed(primal, seed) reconciles the gradient seed with the structure of
+# the return value (see tangent/utils.py). It only reads the *structure* of
+# `primal`, so no gradient flows into it; with respect to `seed` it is linear
+# (identity when the structures already match). Registering this adjoint lets
+# higher-order AD differentiate through the seed reconciliation emitted at
+# the top of the adjoint (see `ReverseAD.reconcile_seed`) instead of stepping
+# into the helper's type-dispatch body.
+@adjoint(tangent.match_seed)
+def amatch_seed(z, primal, seed):
+  d[seed] = tangent.match_seed_grad(seed, d[z])
+
+
+# match_seed_grad(seed, dz) is itself linear in dz; its transpose is the
+# forward reconciliation against dz's structure (a scalar cotangent broadcast
+# back over the summed leaves, identity otherwise). Registering it keeps
+# third- and higher-order derivatives inside these two primitives.
+@adjoint(tangent.match_seed_grad)
+def amatch_seed_grad(z, seed, dz):
+  d[dz] = tangent.match_seed(dz, d[z])
+
+
 # In these adjoints the op_id is a non-differentiable tape marker (a string
 # constant), so it is passed through unchanged - exactly like `stack`. Wrapping
 # it as `d[op_id]` (the gradient operator) is meaningless for a marker and, in

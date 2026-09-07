@@ -107,12 +107,15 @@ def unwrap_function(func):
 
 
 def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
-                checkpoint_config=None):
+                checkpoint_config=None, reconcile_seed=False):
   """Perform AD on a single function and return the AST.
 
   Args:
     See `grad`.
     checkpoint_config: Optional dictionary with checkpointing configuration.
+    reconcile_seed: Whether reverse mode should emit a runtime seed
+        reconciliation at the top of the adjoint, so container (pytree) return
+        values receive a structurally matching seed (see `reverse_ad`).
 
   Returns:
     node: The AST of a module containing the adjoint and primal function
@@ -147,7 +150,8 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
   if mode == 'reverse':
     node, required, stack = reverse_ad.reverse_ad(node.body[0], wrt,
                                                   preserve_result, check_dims,
-                                                  checkpoint_config)
+                                                  checkpoint_config,
+                                                  reconcile_seed)
     if verbose >= 2:
       print('RAW')
       print(quoting.to_source(node))
@@ -165,7 +169,7 @@ def autodiff_ast(func, wrt, motion, mode, preserve_result, check_dims, verbose,
 
 
 def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
-                  verbose, checkpoint_config=None):
+                  verbose, checkpoint_config=None, reconcile_seed=False):
   """Perform AD on all functions in a call tree.
 
   This function walks the call tree and differentiates each function in it. It
@@ -204,8 +208,12 @@ def autodiff_tree(func, wrt, motion, mode, preserve_result, check_dims,
         unwrapped_top.__code__.co_freevars,
         (cell.cell_contents for cell in unwrapped_top.__closure__))))
 
+  # Only the top-level function gets the seed reconciliation: the seeds of
+  # the other functions in the call tree are constructed by the generated
+  # adjoint code itself and already match structurally.
   node, required = autodiff_ast(func, wrt, motion, mode, preserve_result,
-                                check_dims, verbose, checkpoint_config)
+                                check_dims, verbose, checkpoint_config,
+                                reconcile_seed)
   final.body.extend(node.body)
 
   to_do = set(required)
@@ -463,9 +471,15 @@ def _autodiff_uncached(func,
     if coarsened is not None:
       return coarsened
 
-  # Generate the derivative
+  # Generate the derivative. User-facing gradients with a default seed
+  # (`grad`) get a runtime seed reconciliation so functions returning
+  # containers (pytrees) receive a structurally matching seed; `vjp`-style
+  # calls (input_derivative Required) keep their exact caller-supplied seed.
+  reconcile_seed = (mode == 'reverse' and motion == 'joint' and
+                    input_derivative == INPUT_DERIVATIVE.DefaultOne)
   node, namespace = autodiff_tree(func, wrt, motion, mode, preserve_result,
-                                  check_dims, verbose, checkpoint_config)
+                                  check_dims, verbose, checkpoint_config,
+                                  reconcile_seed)
 
   if mode == 'reverse' and motion == 'joint':
     # Pull the stack definition and initial gradient into the function body
@@ -778,7 +792,11 @@ def _create_joint(fwdbwd, func, wrt, input_derivative, grad_config=None):
             stacklevel=4
         )
     else:
-      # Scalar return
+      # Single (non-tuple-literal) return: scalar, array or container
+      # (dict/list/nested pytree). The scalar default works directly for
+      # scalar and array outputs; for container outputs it is expanded into a
+      # pytree of ones at runtime by the seed reconciliation that
+      # `reverse_ad` emits at the top of the adjoint (see `reconcile_seed`).
       fwdbwd.args.defaults.append(quoting.quote('1.0'))
   return fwdbwd
 

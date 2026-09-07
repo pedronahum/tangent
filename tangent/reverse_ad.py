@@ -132,11 +132,17 @@ class ReverseAD(object):
         global namespace.
   """
 
-  def __init__(self, wrt, preserve_result, check_dims, checkpoint_config=None):
+  def __init__(self, wrt, preserve_result, check_dims, checkpoint_config=None,
+               reconcile_seed=False):
     self.required = []
     self.wrt = wrt
     self.preserve_result = preserve_result
     self.check_dims = check_dims
+    # Whether to emit a runtime seed reconciliation at the top of the adjoint
+    # (`seed = tangent.match_seed(retval, seed)`). Enabled for user-facing
+    # gradients with a default seed, where the return value may be a container
+    # (pytree) whose seed structure is only known at runtime.
+    self.reconcile_seed = reconcile_seed
     # Phase 2: Checkpointing configuration
     self.checkpoint_config = checkpoint_config or {}
 
@@ -290,6 +296,22 @@ class ReverseAD(object):
 
       shape_check = template.replace(shape_match_template, primal=y, adjoint=dy)
       adjoint_body = shape_check + adjoint_body
+
+    if self.reconcile_seed and output_arity is None and isinstance(y, gast.Name):
+      # Reconcile the seed with the return value's structure at runtime,
+      # before anything (including the shape check above) consumes it. For a
+      # container (pytree) return the scalar default seed expands into a
+      # pytree of ones - the gradient of the sum of all leaves, matching how
+      # scalar and tuple outputs behave - while a caller-supplied container
+      # seed is validated structurally (see tangent.utils.match_seed). This
+      # must run at the top of the adjoint: later in the backward pass the
+      # tape pops restore the return-value variable to its pre-assignment
+      # value.
+      recon = quoting.quote(
+          '%s = tangent.match_seed(%s, %s)' % (dy.id, y.id, dy.id))
+      recon = comments.add_comment(
+          recon, 'Reconcile the seed with the structure of the return value')
+      adjoint_body = [recon] + adjoint_body
 
     # Construct the adjoint
     adjoint_template = grads.adjoints[gast.FunctionDef]
@@ -1333,7 +1355,8 @@ def _output_arity(node, return_node):
   return None
 
 
-def reverse_ad(node, wrt, preserve_result, check_dims, checkpoint_config=None):
+def reverse_ad(node, wrt, preserve_result, check_dims, checkpoint_config=None,
+               reconcile_seed=False):
   """Perform reverse-mode AD on an AST.
 
   This function analyses the AST to determine which variables are active and
@@ -1363,7 +1386,8 @@ def reverse_ad(node, wrt, preserve_result, check_dims, checkpoint_config=None):
   # Activity analysis
   cfg.forward(node, cfg.Active(wrt))
 
-  ad = ReverseAD(wrt, preserve_result, check_dims, checkpoint_config)
+  ad = ReverseAD(wrt, preserve_result, check_dims, checkpoint_config,
+                 reconcile_seed)
   pri, adj = ad.visit(node)
   mod = gast.Module(body=[pri, adj])
   mod = annotate.find_stacks(mod)

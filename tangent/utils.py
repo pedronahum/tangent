@@ -355,6 +355,12 @@ def get_shape(array):
   Returns:
     A tuple or list of integers representing the shape.
   """
+  # Containers (pytrees) map to their structure of leaf shapes, so shape
+  # mismatch errors on container values stay readable.
+  if isinstance(array, dict):
+    return {k: get_shape(v) for k, v in array.items()}
+  if isinstance(array, (list, tuple)):
+    return [get_shape(v) for v in array]
   shape_func = shape_functions.get(type(array))
   if shape_func is None:
     # Fallback: try numpy.shape if no registered function
@@ -891,6 +897,12 @@ def shapes_match(a, b):
     for (ak, av), (bk, bv) in zip(a.items(), b.items()):
       match = match and all([ak == bk and shapes_match(av, bv)])
     return match
+  elif isinstance(a, (tuple, list, dict)) or isinstance(b, (tuple, list, dict)):
+    # A container on one side and a non-container (or a different container
+    # kind) on the other is a structure mismatch, not an unknown type pair:
+    # report it as a shape mismatch so callers (the generated seed assert) can
+    # produce a clean error instead of a KeyError from the checker registry.
+    return False
   else:
     shape_checker = shape_checkers[(type(a), type(b))]
     return shape_checker(a, b)
@@ -927,22 +939,83 @@ def match_seed(primal, adjoint):
 
   Scalars and already-matching seeds are returned unchanged, so ordinary
   scalar-output functions are unaffected.
+
+  A caller-supplied *container* seed whose structure does not match the
+  return value (different dict keys, different length, or a container where
+  the output is a leaf) is rejected with a ValueError: silently replacing a
+  wrong seed with ones would compute a gradient the caller did not ask for.
   """
   if isinstance(primal, dict):
     if isinstance(adjoint, dict):
+      if set(adjoint.keys()) != set(primal.keys()):
+        raise ValueError(
+            'Seed derivative structure does not match the return value: '
+            'seed has keys %s but the returned dict has keys %s.' %
+            (sorted(map(str, adjoint.keys())),
+             sorted(map(str, primal.keys()))))
       return {k: match_seed(primal[k], adjoint[k]) for k in primal}
-    return seed_pytree(primal)
+    if isinstance(adjoint, (Number, bool)):
+      return seed_pytree(primal)
+    raise ValueError(
+        'Seed derivative structure does not match the return value: '
+        'expected a dict (or a scalar to seed the sum of all leaves), '
+        'got %s.' % type(adjoint).__name__)
   if isinstance(primal, (list, tuple)):
-    if isinstance(adjoint, (list, tuple)) and len(adjoint) == len(primal):
+    if isinstance(adjoint, (list, tuple)):
+      if len(adjoint) != len(primal):
+        raise ValueError(
+            'Seed derivative structure does not match the return value: '
+            'seed has %d elements but the returned container has %d.' %
+            (len(adjoint), len(primal)))
       return type(primal)(
           [match_seed(p, a) for p, a in zip(primal, adjoint)])
-    return seed_pytree(primal)
+    if isinstance(adjoint, (Number, bool)):
+      return seed_pytree(primal)
+    raise ValueError(
+        'Seed derivative structure does not match the return value: '
+        'expected a %s (or a scalar to seed the sum of all leaves), '
+        'got %s.' % (type(primal).__name__, type(adjoint).__name__))
+  if isinstance(adjoint, (dict, list, tuple)):
+    raise ValueError(
+        'Seed derivative structure does not match the return value: '
+        'the function returns a non-container value but the seed is a %s.' %
+        type(adjoint).__name__)
   # Leaf. Expand a scalar seed to a non-scalar array leaf's shape; leave
   # scalar/0-d outputs and already-shaped seeds untouched.
   if (isinstance(primal, numpy.ndarray) and primal.shape and
       isinstance(adjoint, (Number, bool))):
     return adjoint * numpy.ones_like(primal)
   return adjoint
+
+
+def match_seed_grad(seed, dz):
+  """Gradient of ``match_seed(primal, seed)`` with respect to ``seed``.
+
+  ``z = match_seed(primal, seed)`` is linear in ``seed``:
+
+  - when the seed already matches the output structure, ``z`` is (leaf-wise)
+    the seed itself, so the gradient passes through unchanged;
+  - when a scalar seed was broadcast against an array output
+    (``z = seed * ones_like(primal)``), the gradient is the sum of the
+    incoming cotangent;
+  - when a scalar seed was expanded against a *container* output, ``z`` is
+    ``seed_pytree(primal)`` - independent of the seed's value - so the
+    gradient is zero.
+
+  The case is recovered from the runtime types of ``seed`` and ``dz`` (the
+  cotangent of ``z``, which has the output's structure), so this helper is
+  correct wherever ``match_seed`` itself is defined. It backs the registered
+  adjoint of ``match_seed`` so higher-order reverse-mode AD can differentiate
+  through the seed reconciliation.
+  """
+  if isinstance(seed, (Number, bool)) and not isinstance(dz, (Number, bool)):
+    if isinstance(dz, (dict, list, tuple)):
+      return 0.0
+    # Sum the cotangent down to the scalar seed's shape. `unbroadcast` is
+    # type-dispatched, so backend tensors (torch/JAX/TF) reduce with their
+    # own sum rather than NumPy's.
+    return unbroadcast(dz, seed)
+  return dz
 
 
 register_all_shape_checker(

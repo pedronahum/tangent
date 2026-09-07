@@ -234,7 +234,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Operators**: arithmetic, comparisons, boolean (`and`, `or`, `not`), augmented assignment (`+=`, `-=`, `*=`, `/=`, `**=`)
 - **Functions**: lambdas, closures and factories, nested calls, default/keyword arguments
 - **Classes**: user-defined classes with method inlining, instance attributes, method chaining, inheritance and `super()`
-- **Data**: NumPy arrays; **pytree arguments** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure; list comprehensions
+- **Data**: NumPy arrays; **pytrees** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure, and **returned** as outputs (the default seed is a matching pytree of ones — the gradient of the sum of all leaves — and a caller-supplied seed of the same structure is used as the cotangent); list comprehensions
 - **Statements**: `assert`, `pass`, early `return`
 - **Higher-order**: `grad(grad(f))` second derivatives, third derivatives for NumPy functions, Hessian-vector products
 
@@ -398,11 +398,12 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
   path can return incorrect values and the unoptimized path reaches the tape
   machinery above.
 - **`break`/`continue`** are rejected at transform time.
-- **Containers as function arguments (pytrees)**: tuples, lists and dicts of
-  arrays can be passed as arguments and indexed/looped for first-order
-  gradients. **Returning** a container is not yet supported, and neither are
-  second derivatives through container arguments (`tangent.seed_pytree` /
-  `tangent.match_seed` are the building blocks toward that).
+- **Containers (pytrees)**: arguments and return values may be tuples, lists
+  and (nested) dicts of arrays, including second derivatives through container
+  arguments. A structurally mismatched container seed is rejected with a
+  `ValueError` (`tangent.match_seed` reconciles the seed with the return
+  value's structure at runtime). Third and higher derivatives through
+  container *outputs* are untested territory.
 - **TF seed dtype** — see [Backend Support](#-backend-support).
 - **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
   a variable assigned exactly once to a literal and never mutated; dynamically
@@ -487,8 +488,7 @@ pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
 Current status: **77,000+ parameterized test cases pass** (0 failures). The
-remaining expected failures (`xfail`) are documented limitations, chiefly
-higher-order differentiation through container arguments. CI runs the suite
+remaining expected failures (`xfail`) are documented limitations. CI runs the suite
 on Python 3.9–3.13 and exercises the cross-backend catalog against every
 installed backend.
 

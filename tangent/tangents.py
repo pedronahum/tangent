@@ -564,6 +564,20 @@ def tastype(z, x, y):
   d[z] = tangent.astype(d[x], d[y])
 
 
+@tangent_(tangent.match_seed)
+def tmatch_seed(z, primal, seed):
+  # match_seed only reads the *structure* of `primal` and is linear in
+  # `seed`, so its JVP is the same reconciliation applied to the seed's
+  # tangent (identity when the structures already match).
+  d[z] = tangent.match_seed(primal, d[seed])
+
+
+@tangent_(tangent.match_seed_grad)
+def tmatch_seed_grad(z, seed, dz):
+  # Linear in dz: the JVP is the same map applied to dz's tangent.
+  d[z] = tangent.match_seed_grad(seed, d[dz])
+
+
 @tangent_(tangent.unreduce)
 def tunreduce(z, array, shape, axis, keepdims):
   # The shape argument is non-differentiable metadata: the tangent is the

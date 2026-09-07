@@ -37,6 +37,11 @@ This document provides a comprehensive reference of Python language features and
 - **✅ Lists (syntax)** - List operations in non-differentiated paths
 - **✅ Tuples** - Tuple access and unpacking fully supported
 - **✅ NumPy arrays** - Full support with comprehensive gradients
+- **✅ Pytree arguments and return values** - Tuples, lists and (nested) dicts
+  of arrays as arguments (gradients come back in the same structure) and as
+  return values: the default seed is a matching pytree of ones (the gradient of
+  the sum of all leaves), a caller-supplied seed of the same structure is used
+  as the cotangent, and a structurally mismatched seed raises a `ValueError`
 
 ### Comprehensions (Partial)
 - **✅ List comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a list literal, so they differentiate correctly). `if` filters are supported when decidable at compile time
