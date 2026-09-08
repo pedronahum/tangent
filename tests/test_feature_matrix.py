@@ -266,8 +266,6 @@ REJECTIONS = [
     (_star_args, TangentParseError),
     (_varkw, TangentParseError),
     (_inline_lambda, TangentParseError),
-    (_break_loop, TangentParseError),
-    (_continue_loop, TangentParseError),
     (_class_def, TangentParseError),
     (_yield, TangentParseError),
     (_genexp, TangentParseError),
@@ -289,6 +287,18 @@ def test_clean_rejection(fn, exc):
     # internal ValueError/IndexError/TypeError and never return a wrong gradient.
     with pytest.raises(exc):
         tangent.grad(fn)
+
+
+def test_break_loop_now_supported():
+    # Formerly a pinned rejection: break lowers into guard flags
+    # (loop_exit_desugar), so the gradient counts exactly the executed
+    # iterations. At x=2: r accumulates 2, 4, 6 -> breaks after 3 iterations.
+    assert tangent.grad(_break_loop)(2.0) == pytest.approx(3.0)
+
+
+def test_continue_loop_now_supported():
+    # Formerly a pinned rejection: continue skips one accumulation of x.
+    assert tangent.grad(_continue_loop)(2.0) == pytest.approx(9.0)
 
 
 if __name__ == '__main__':

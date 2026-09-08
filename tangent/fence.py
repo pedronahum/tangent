@@ -457,21 +457,25 @@ class LanguageFence(ast.NodeVisitor):
             self._allow_and_continue(node)
 
     def visit_While(self, node):
-        self._allow_and_continue(node)
+        # while/else has the same exit-dependent semantics as for/else (the
+        # else runs only when the loop was not broken), which the break
+        # lowering does not model.
+        if node.orelse:
+            self._reject(node, 'While/Else block is not supported')
+        else:
+            self._allow_and_continue(node)
 
     def visit_Break(self, node):
-        # Break is never supported. The reverse-mode loop tape records one entry per
-        # completed iteration, but `break` exits mid-iteration before the iteration
-        # counter is advanced, so the backward pass replays the wrong number of
-        # iterations and silently produces incorrect gradients. Reject it outright
-        # (regardless of strict mode) rather than emit a plausible-but-wrong result.
-        self._reject(node, 'Break statements are not supported')
+        # Backstop only: break inside a plain loop is lowered into guard flags
+        # by loop_exit_desugar before the fence runs (a raw break would make
+        # the reverse-mode tape replay the wrong number of iterations). A
+        # Break reaching the fence sits in a construct the lowering skipped -
+        # keep rejecting rather than let the tape miscount.
+        self._reject(node, 'Break statements are not supported here')
 
     def visit_Continue(self, node):
-        # Continue has the same tape/iteration-counter problem as break (see
-        # visit_Break): it only happens to give correct gradients when no active
-        # computation precedes it, and otherwise fails or is silently wrong.
-        self._reject(node, 'Continue statements are not supported')
+        # Backstop only - see visit_Break.
+        self._reject(node, 'Continue statements are not supported here')
 
     def visit_Try(self, node):
         # On Python 3.8+ there is a single `Try` node (the old TryExcept /

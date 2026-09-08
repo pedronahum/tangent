@@ -47,6 +47,15 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **`break` and `continue`**: both now differentiate exactly (historically
+  `break` *miscomputed* gradients via tape replay, then both were rejected). A
+  new `loop_exit_desugar` pass lowers them into guard flags before
+  differentiation: `continue` becomes a per-iteration skip flag guarding the
+  rest of the body; `break` adds a loop-level flag that a `while` folds into
+  its condition and a `for` uses to skip remaining iterations. Works with
+  data-dependent exits, nested loops, forward mode, both motions, and second
+  order. Loops with an `else` clause remain rejected (`while/else` now rejected
+  explicitly, like `for/else`).
 - **Iteration over computed sequences**: `for v in x * 2.0`, `for v in
   np.flip(x)`, and `for v in [x, x * 2]` (a literal of active values) now
   differentiate - the iterable expression is hoisted into a named intermediate

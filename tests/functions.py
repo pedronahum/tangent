@@ -740,6 +740,26 @@ def iter_expression(x):
     return s
 
 
+def break_in_loop(a):
+    # break lowers into guard flags (loop_exit_desugar); the gradient counts
+    # exactly the executed iterations.
+    t = 0.0
+    for i in range(10):
+        t = t + a * a
+        if i >= 2:
+            break
+    return t
+
+
+def continue_in_loop(a):
+    t = 0.0
+    for i in range(6):
+        if i == 2:
+            continue
+        t = t + a * a
+    return t
+
+
 def while_big(a):
     while np.abs(a) > 0.1:
         a = a * 0.5

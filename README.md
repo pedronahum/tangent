@@ -240,7 +240,7 @@ Tangent supports a broad subset of Python for numerical computing:
 
 **📖 Complete reference with examples**: [Python Feature Support Guide](docs/features/PYTHON_FEATURE_SUPPORT.md) — plus focused feature docs under [`docs/features/`](docs/features/).
 
-Not supported: `break`/`continue`, `@property`/`@classmethod`/`@staticmethod`, generators, and in-place array mutation through augmented subscript assignment. See the feature guide for the full list.
+Supported: `break`/`continue` (lowered into guard flags with exact gradients). Not supported: `@property`/`@classmethod`/`@staticmethod`, generators, and in-place array mutation through augmented subscript assignment. See the feature guide for the full list.
 
 ---
 
@@ -397,7 +397,6 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
   supported, but the fourth and beyond are not yet reliable — the optimized
   path can return incorrect values and the unoptimized path reaches the tape
   machinery above.
-- **`break`/`continue`** are rejected at transform time.
 - **Containers (pytrees)**: arguments and return values may be tuples, lists
   and (nested) dicts of arrays, including second derivatives through container
   arguments. A structurally mismatched container seed is rejected with a

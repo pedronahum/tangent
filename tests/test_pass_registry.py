@@ -39,6 +39,9 @@ EXPECTED_REVERSE = [
     # xs.append(v) / xs.pop() are rewritten into differentiable rebindings
     # (tangent.list_append / list_last / list_init) before call resolution.
     'list_method_desugar',
+    # break/continue are lowered into guard flags (break converts the loop to
+    # an indexed while) after the iterator desugarings, before resolution.
+    'loop_exit_desugar',
     'resolve_calls',
     'explicit_loop_indexes',
     'fence',
@@ -47,7 +50,7 @@ EXPECTED_REVERSE = [
 
 # Forward mode additionally lowers ternaries, after all other desugarings
 # and before call resolution.
-EXPECTED_FORWARD = EXPECTED_REVERSE[:11] + ['ifexp_desugar'] + EXPECTED_REVERSE[11:]
+EXPECTED_FORWARD = EXPECTED_REVERSE[:12] + ['ifexp_desugar'] + EXPECTED_REVERSE[12:]
 
 
 def test_reverse_pass_order():

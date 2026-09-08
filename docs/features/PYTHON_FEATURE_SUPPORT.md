@@ -13,7 +13,8 @@ This document provides a comprehensive reference of Python language features and
 - **✅ For loops over sequences** - `for v in xs` over arrays, lists (built dynamically included), list/tuple literals of active values, and computed expressions like `for v in x * 2.0` (the iterable is hoisted and indexed; tuple-unpacking targets like `for a, b in pairs` work)
 - **✅ For loops with enumerate()** - `for i, v in enumerate(seq)` (desugared to an indexed loop)
 - **✅ For loops with zip()** - `for a, b in zip(xs, ys)` (desugared to an indexed loop)
-- **✅ While loops** - Variable iteration with conditions (no break/continue)
+- **✅ While loops** - Variable iteration with conditions
+- **✅ break/continue** - Lowered into guard flags (`while` folds the break flag into its condition; a `for` wraps its body), so gradients count exactly the executed iterations. Loops with an `else` clause remain rejected
 
 ### Operators
 - **✅ Boolean operators** - `and`, `or`, `not` with short-circuit evaluation
@@ -90,7 +91,7 @@ This document provides a comprehensive reference of Python language features and
 ### Loops
 - **✅ For loops** - `range(...)`, sequences (arrays, lists, active literals), and computed iterable expressions (hoisted and indexed)
 - **✅ While loops** - With termination conditions
-- **❌ break/continue** - Loop control statements not supported
+- **✅ break/continue** - Lowered into guard flags; exact gradients through early exits
 - **❌ Iterating dict views and set literals** - `for v in d.values()` and `for v in {x, y}` are rejected (no stable positional order); use `sum(d.values())` or a list/tuple
 - **Workaround**: Use conditional logic for early termination
 
@@ -376,28 +377,33 @@ def safe_divide(x):
 
 ### Loop Control (break/continue)
 
-**Status**: ❌ Not supported (rejected with a clear error)
+**Status**: ✅ Supported (lowered into guard flags)
 
-Break and continue statements are rejected at parse time with an actionable
-error. They cannot be differentiated correctly: the reverse-mode loop tape
-records one entry per completed iteration, but `break`/`continue` alter the
-control flow mid-iteration, which would silently produce incorrect gradients.
-Tangent therefore refuses them up front rather than returning a wrong result.
+`break` and `continue` are desugared before differentiation
+(`tangent/loop_exit_desugar.py`): `continue` becomes a per-iteration skip flag
+guarding the rest of the body; `break` additionally sets a loop-level flag that
+a `while` folds into its condition and a `for` uses to skip all remaining
+iterations. Every construct
+produced is one the AD core differentiates in both modes, so the gradient
+counts exactly the iterations that executed - including data-dependent exits
+(`if total > 5.0: break`).
 
 ```python
-# ❌ Doesn't work
+# ✅ Works
 def early_exit(x):
     result = 0.0
     for i in range(10):
         result += x
         if result > 100:
-            break  # ERROR
+            break
     return result
 ```
 
-**Workarounds**:
-1. Use while loops with complex conditions
-2. Include termination logic in the condition
+Note: after a `break` out of a `for`, the loop still spins through its
+remaining iterations with an empty body (exact semantics, wasted spins) - an
+early break out of a very long `range` is correct but not fast. Loops with an
+`else` clause are still rejected (`for`/`else` semantics depend on how the
+loop exited).
 3. Use conditional statements
 
 ```python
@@ -580,7 +586,7 @@ All tuple unpacking patterns have been tested and produce correct gradients.
 |---------|---------|-----|---------|------------|
 | **If/else** | ✅ | ✅ | ✅ | ✅ |
 | **For loops** | ✅ (constant range) | ✅ | ✅ | ✅ |
-| **While loops** | ✅ (no break) | ✅ | ⚠️ | ⚠️ |
+| **While loops** | ✅ | ✅ | ⚠️ | ⚠️ |
 | **Lambdas** | ⚠️ (assigned only) | ✅ | ✅ | ✅ |
 | **Closures (external)** | ✅ | ✅ | ✅ | ✅ |
 | **Nested defs inside fn** | ❌ | ✅ | ✅ | ✅ |
@@ -589,7 +595,7 @@ All tuple unpacking patterns have been tested and produce correct gradients.
 | **Dict (mutate)** | ❌ | ✅ | ✅ | ✅ |
 | **Tuples** | ✅ | ✅ | ✅ | ✅ |
 | **Try/except** | ❌ | ⚠️ | ⚠️ | ⚠️ |
-| **Break/continue** | ❌ | ⚠️ | ⚠️ | ⚠️ |
+| **Break/continue** | ✅ | ✅ | ✅ | ✅ |
 
 ## Testing
 
@@ -625,7 +631,6 @@ For maximum compatibility with Tangent:
 2. **❌ DON'T**:
    - Iterate dict `.keys()`/`.items()` (only `sum(d.values())` is supported)
    - Use try/except blocks
-   - Use break/continue in loops
    - Use set operations (union/intersection); set literals and constant-range comprehensions are fine
    - Define nested functions or use recursion inside a differentiated function (hoist helpers to module level); assigned lambdas and external closures are fine
 

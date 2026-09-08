@@ -115,41 +115,26 @@ Workarounds:
 
 📖 See: docs/features/PYTHON_FEATURE_SUPPORT.md#exception-handling
 ''',
-    'Break statements': '''Break statements are not supported in Tangent loops.
+    'Break statements': '''break is supported in plain loops (it is lowered
+into guard flags before differentiation), but this one sits in a construct the
+lowering cannot model - typically a loop with an `else` clause, whose semantics
+depend on how the loop exited.
 
-Workarounds:
-  1. Use while loop with condition:
-     ❌ for i in range(10):
-            result += x
-            if result > 100:
-                break
-
-     ✅ i = 0
-        while result <= 100 and i < 10:
-            result += x
-            i += 1
-
-  2. Use conditional logic:
-     ✅ for i in range(10):
-            if result <= 100:
-                result += x
-
-📖 See: docs/features/PYTHON_FEATURE_SUPPORT.md#loop-control
+Workaround:
+  ❌ for i in range(10):
+         ...
+         break
+     else:
+         ...
+  ✅ Restructure without the loop-else: track completion in a flag and test it
+     after the loop.
 ''',
-    'Continue statements': '''Continue statements are not supported in Tangent loops.
+    'Continue statements': '''continue is supported in plain loops (it is
+lowered into a per-iteration skip flag before differentiation), but this one
+sits in a construct the lowering cannot model - typically a loop with an
+`else` clause.
 
-Workarounds:
-  1. Use conditional logic instead:
-     ❌ for i in range(10):
-            if i % 2 == 0:
-                continue
-            result += x * i
-
-     ✅ for i in range(10):
-            if i % 2 != 0:
-                result += x * i
-
-  2. Invert the condition to avoid continue
+Workaround: restructure without the loop-else clause.
 ''',
     'In operator': '''The 'in' operator for membership testing is not supported.
 

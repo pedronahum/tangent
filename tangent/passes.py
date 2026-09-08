@@ -53,6 +53,7 @@ from tangent import fence
 from tangent import ifexp_desugar
 from tangent import lambda_desugar
 from tangent import list_method_desugar
+from tangent import loop_exit_desugar
 from tangent import return_desugar
 from tangent import sentinel_rename
 from tangent import zip_desugar
@@ -144,6 +145,17 @@ def _list_method_desugar(node, ctx):
     return list_method_desugar.desugar_list_methods(node)
 
 
+def _loop_exit_desugar(node, ctx):
+    """Lower break/continue into guard flags (while-conversion for break).
+
+    Runs after the iterator desugarings (enumerate/zip/comprehensions emit
+    loops whose bodies carry user break/continue) and before call resolution
+    (the generated `len()` must be resolved). Loops with an `else` clause are
+    left for the fence.
+    """
+    return loop_exit_desugar.desugar_loop_exits(node)
+
+
 def _ifexp_desugar(node, ctx):
     """Lower conditional expressions (ternaries) to if-statements.
 
@@ -206,6 +218,7 @@ _REGISTRY = [
     Pass('dict_method_desugar', _dict_method_desugar),
     Pass('concat_desugar', _concat_desugar),
     Pass('list_method_desugar', _list_method_desugar),
+    Pass('loop_exit_desugar', _loop_exit_desugar),
     Pass('ifexp_desugar', _ifexp_desugar, modes=frozenset(('forward',))),
     Pass('resolve_calls', _resolve_calls),
     Pass('explicit_loop_indexes', _explicit_loop_indexes),
