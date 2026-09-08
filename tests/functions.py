@@ -730,6 +730,16 @@ def listcomp(x):
     return np.sum([i * 3 for i in x])
 
 
+def iter_expression(x):
+    # Iterates a *computed* sequence: the iterable expression is hoisted into a
+    # named intermediate and indexed (this form used to silently drop
+    # gradients).
+    s = 0.0
+    for v in x * 2.0:
+        s = s + v * v
+    return s
+
+
 def while_big(a):
     while np.abs(a) > 0.1:
         a = a * 0.5

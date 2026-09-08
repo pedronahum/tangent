@@ -59,31 +59,64 @@ class ExplicitLoopIndexes(transformers.TreeTransformer):
         if isinstance(node.iter, (gast.Name, gast.Subscript, gast.Attribute)):
             iter_name = ast.get_name(node.iter)
             if iter_name in anno.getanno(node, 'active_in'):
-                # for a in x:
-                #   f(a)
-                # # becomes
-                # for i in range(len(x)):
-                #   a = x[i]
-                #   f(a)
-
-                # Get a unique iterator name
-                old_target = copy.deepcopy(node.target)
-                new_target = quoting.quote(self.namer.unique('_idx'))
-                old_iter = copy.deepcopy(node.iter)
-
-                item_access = template.replace(
-                    'old_target = x[i]', old_target=old_target, x=old_iter, i=new_target
-                )
-
-                node.target = gast.Name(id=new_target.id, ctx=gast.Store(), annotation=None)
-                node.iter = quoting.quote('range(len(%s))' % iter_name)
-                anno.setanno(node.iter, 'func', range)
-                anno.setanno(node.iter.args[0], 'func', len)
-                node.body = [item_access] + node.body
+                self._rewrite_indexed(node, copy.deepcopy(node.iter), iter_name)
+        elif self._is_hoistable_active_iter(node):
+            # for a in <expr>: iterating a *computed* sequence (x * 2.0,
+            # np.sort(x), a list literal of active values, ...). Hoist the
+            # expression so it is evaluated once and becomes a named,
+            # differentiated intermediate, then index it exactly like the
+            # name case above. Without this, the loop was neither rewritten
+            # nor rejected and gradients through the loop variable were
+            # silently dropped.
+            seq_name = self.namer.unique('_itseq')
+            self.prepend(
+                template.replace('seq = expr', seq=quoting.quote(seq_name), expr=node.iter)
+            )
+            self._rewrite_indexed(node, quoting.quote(seq_name), seq_name)
         else:
             self._reject_unsupported_iter(node)
 
         return node
+
+    def _rewrite_indexed(self, node, iter_node, iter_name):
+        # for a in x:
+        #   f(a)
+        # # becomes
+        # for i in range(len(x)):
+        #   a = x[i]
+        #   f(a)
+
+        # Get a unique iterator name
+        old_target = copy.deepcopy(node.target)
+        new_target = quoting.quote(self.namer.unique('_idx'))
+
+        item_access = template.replace(
+            'old_target = x[i]', old_target=old_target, x=iter_node, i=new_target
+        )
+
+        node.target = gast.Name(id=new_target.id, ctx=gast.Store(), annotation=None)
+        node.iter = quoting.quote('range(len(%s))' % iter_name)
+        anno.setanno(node.iter, 'func', range)
+        anno.setanno(node.iter.args[0], 'func', len)
+        node.body = [item_access] + node.body
+
+    def _is_hoistable_active_iter(self, node):
+        """Whether the loop iterates a computed expression carrying gradients.
+
+        `range(...)` iterates integers (nothing to differentiate), dict views
+        and set literals cannot be indexed positionally (rejected with a clear
+        error below), and an expression with no active reads needs no gradient,
+        so all three are left alone.
+        """
+        it = node.iter
+        if isinstance(it, gast.Call) and isinstance(it.func, gast.Name) and it.func.id == 'range':
+            return False
+        if isinstance(it, gast.Call) and isinstance(it.func, gast.Attribute):
+            if it.func.attr in ('values', 'keys', 'items'):
+                return False
+        if isinstance(it, gast.Set):
+            return False
+        return _references_active(it, anno.getanno(node, 'active_in', default=set()))
 
     def _reject_unsupported_iter(self, node):
         """Reject for-loops over iterables Tangent cannot differentiate.
@@ -111,16 +144,14 @@ class ExplicitLoopIndexes(transformers.TreeTransformer):
                 "`range(len(...))` with explicit indexing." % it.func.attr
             )
 
-        # Iterating a literal collection whose elements are differentiated values.
-        if isinstance(it, (gast.List, gast.Tuple, gast.Set)) and any(
-            _references_active(elt, active) for elt in it.elts
-        ):
+        # Iterating a set literal whose elements are differentiated values.
+        # (List and tuple literals with active elements are hoisted and indexed
+        # by the rewrite above; a set has no stable order to index.)
+        if isinstance(it, gast.Set) and any(_references_active(elt, active) for elt in it.elts):
             raise TangentParseError(
-                "Iterating a %s literal that contains differentiated values is not "
-                "supported: the loop variable is not differentiated, so gradients "
-                "would be silently wrong. Put the values in a NumPy array and iterate "
-                "that, or use `for i in range(n)` with explicit indexing."
-                % type(it).__name__.lower()
+                'Iterating a set literal that contains differentiated values is not '
+                'supported: a set has no stable order, so positional gradients would '
+                'be meaningless. Use a list or tuple literal instead.'
             )
 
 

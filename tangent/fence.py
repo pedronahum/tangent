@@ -207,6 +207,27 @@ class LanguageFence(ast.NodeVisitor):
         self._reject(node, 'Unpackings are not supported')
 
     def visit_Expr(self, node):
+        # A bare method-call statement named like a list mutator is an in-place
+        # mutation for effect. `xs.append(v)` / `xs.pop()` on a plain name never
+        # reach the fence - list_method_desugar rewrites them into
+        # differentiable rebindings - so what remains is a mutation the
+        # rebinding cannot express: through an attribute or subscript (an
+        # alias), or a mutator with no adjoint (extend/insert/remove/sort/
+        # reverse). These used to be silently treated as non-differentiable,
+        # dropping gradients; reject them instead. Statement position is what
+        # makes this unambiguous: a value-returning call like `np.sort(x)`
+        # inside an expression is untouched.
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute):
+            method = value.func.attr
+            if method in ('append', 'extend', 'insert', 'remove', 'sort', 'reverse') or (
+                method == 'pop' and not value.args and not value.keywords
+            ):
+                self._track_location(node)
+                self._reject(
+                    node, 'In-place list mutation is not supported (".%s()" here)' % method
+                )
+                return
         self._allow_and_continue(node)
 
     def visit_UnaryOp(self, node):
@@ -313,23 +334,20 @@ class LanguageFence(ast.NodeVisitor):
         self._allow_and_continue(node)
 
     def visit_Call(self, node):
-        # `xs.append(v)` / `v = xs.pop()` on a plain name never reach the fence:
-        # list_method_desugar rewrites them into differentiable rebindings. What
-        # remains is a list mutation the rebinding cannot express - a call on an
-        # attribute or subscript (mutation through an alias), or a mutator with
-        # no adjoint (extend/insert/remove/sort/reverse). Before the desugar pass
-        # existed these were silently treated as non-differentiable, dropping
-        # gradients; reject them instead. The names are list-specific, so this
-        # cannot hit dict/set methods (`.add`, `.pop(key)` with arguments, etc.).
-        if isinstance(node.func, ast.Attribute):
-            method = node.func.attr
-            if method in ('append', 'extend', 'insert', 'remove', 'sort', 'reverse') or (
-                method == 'pop' and not node.args and not node.keywords
-            ):
-                self._reject(
-                    node, 'In-place list mutation is not supported (".%s()" here)' % method
-                )
-                return
+        # An argument-less `.pop()` in expression position both mutates its
+        # sequence and yields a differentiated value; only the desugared
+        # plain-name statement forms are supported (see visit_Expr above), and
+        # unlike the other mutator names, a zero-argument `.pop()` cannot be a
+        # module-level function call, so rejecting it here has no false
+        # positives.
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'pop'
+            and not node.args
+            and not node.keywords
+        ):
+            self._reject(node, 'In-place list mutation is not supported (".pop()" here)')
+            return
         self._allow_and_continue(node)
 
     def visit_keyword(self, node):

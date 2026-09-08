@@ -47,6 +47,13 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Iteration over computed sequences**: `for v in x * 2.0`, `for v in
+  np.flip(x)`, and `for v in [x, x * 2]` (a literal of active values) now
+  differentiate - the iterable expression is hoisted into a named intermediate
+  and indexed, the same rewrite long applied to named sequences. Previously
+  these loops were neither rewritten nor rejected and gradients through the
+  loop variable were silently dropped. Tuple-unpacking targets (`for a, b in
+  pairs`) work; set literals of active values are rejected (no stable order).
 - **List comprehensions over runtime iterables**: `[f(v) for v in xs]` with a
   runtime `xs` is now lowered into an indexed loop built on
   `tangent.list_append` (previously rejected; before that, silently wrong).
