@@ -222,13 +222,22 @@ def tf_stack_seq(axis, *tensors):
 
 
 def tf_concat_grads(dz, tensors, axis):
-    """Split a concatenated gradient back into per-input gradients."""
+    """Split a concatenated gradient back into per-input gradients.
+
+    The incoming gradient can be a NumPy float64 array (the default seed
+    expanded by the generic unreduce); elementwise TF ops auto-convert such
+    operands to the tensor operand's dtype, but tf.split would mint a float64
+    tensor that later poisons float32 arithmetic, so cast explicitly.
+    """
+    dz = tf.cast(dz, tensors[0].dtype)
     sizes = [t.shape[axis] for t in tensors]
     return tuple(tf.split(dz, sizes, axis=axis))
 
 
 def tf_stack_grads(dz, tensors, axis):
-    """Unstack a stacked gradient along the stacking axis."""
+    """Unstack a stacked gradient along the stacking axis (see tf_concat_grads
+    for the cast)."""
+    dz = tf.cast(dz, tensors[0].dtype)
     return tuple(tf.unstack(dz, axis=axis))
 
 

@@ -268,7 +268,9 @@ def _resolve_unary_op(backend, mod, op_name):
         if op_name == 'sigmoid':
             return tf.math.sigmoid
         if op_name in _TF_OP_MAP:
-            return getattr(tf.math, _TF_OP_MAP[op_name])
+            # None when this TF build lacks the op (e.g. tf.math has no
+            # log2/log10 in modern TF) - the caller skips.
+            return getattr(tf.math, _TF_OP_MAP[op_name], None)
     if backend == 'keras' and op_name in ('relu', 'sigmoid'):
         return getattr(kops, op_name)
     if backend == 'tinygrad':
