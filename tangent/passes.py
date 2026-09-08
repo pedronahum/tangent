@@ -197,12 +197,12 @@ _REGISTRY = [
     Pass('enumerate_desugar', _enumerate_desugar),
     Pass('zip_desugar', _zip_desugar),
     Pass('comprehension_desugar', _comprehension_desugar),
-    # Note: there is deliberately no pass lowering the remaining (dynamic-
-    # iterable) list comprehensions to `.append()` loops: the loop body's
-    # per-iteration binding is not differentiated, so that lowering silently
-    # produced zero gradients (or crashed naming when the comprehension sat in
-    # a return expression). Any ListComp the unroller above leaves in place now
-    # falls through to the fence, which rejects it with a clear error.
+    # comprehension_desugar unrolls constant-iterable comprehensions into
+    # literals and lowers dynamic-iterable list comprehensions into indexed
+    # loops built with tangent.list_append (the same differentiable rebinding
+    # list_method_desugar uses for user-written .append()). The forms the
+    # lowering cannot express (multiple generators, non-name targets) fall
+    # through to the fence, which rejects them with a clear error.
     Pass('dict_method_desugar', _dict_method_desugar),
     Pass('concat_desugar', _concat_desugar),
     Pass('list_method_desugar', _list_method_desugar),

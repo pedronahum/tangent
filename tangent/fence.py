@@ -326,7 +326,9 @@ class LanguageFence(ast.NodeVisitor):
             if method in ('append', 'extend', 'insert', 'remove', 'sort', 'reverse') or (
                 method == 'pop' and not node.args and not node.keywords
             ):
-                self._reject(node, 'In-place list mutation is not supported (".%s()" here)' % method)
+                self._reject(
+                    node, 'In-place list mutation is not supported (".%s()" here)' % method
+                )
                 return
         self._allow_and_continue(node)
 
@@ -359,13 +361,14 @@ class LanguageFence(ast.NodeVisitor):
         self._allow_and_continue(node)
 
     def visit_ListComp(self, node):
-        # List comprehensions over a compile-time-constant iterable never reach the
-        # fence: the comprehension pass unrolls them into list literals. Anything
-        # still here ranges over a dynamic iterable (or has an undecidable filter),
-        # which would have to be lowered to an `.append()` loop — a form whose
-        # per-iteration binding is not differentiated, so it either crashes naming
-        # or silently returns zero gradients. Reject it instead.
-        self._reject(node, 'List comprehensions over dynamic iterables are not supported')
+        # List comprehensions rarely reach the fence: constant iterables are
+        # unrolled into list literals and dynamic ones are lowered into indexed
+        # loops built with tangent.list_append (see comprehension_desugar.py).
+        # What remains is a form the lowering cannot express - multiple
+        # generators, a non-name target, or a comprehension inside a `while`
+        # test (re-evaluated per iteration, so hoisting the loop would change
+        # semantics). Reject it rather than mis-differentiate.
+        self._reject(node, 'This form of list comprehension is not supported')
 
     def visit_SetComp(self, node):
         self._reject(node, 'Set Comprehensions are not supported')

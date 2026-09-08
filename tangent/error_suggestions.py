@@ -50,18 +50,20 @@ Workaround:
 
 Note: If you need set operations for control flow, consider restructuring your code.
 ''',
-    'List comprehensions over dynamic iterables': '''List comprehensions are
-only supported over a compile-time-constant iterable (a constant `range(...)`
-or a list/tuple literal), where they are unrolled into a list literal.
-A comprehension over a runtime value cannot be unrolled, and lowering it to an
-`.append()` loop would silently drop gradients.
+    'This form of list comprehension': '''List comprehensions over constant
+iterables are unrolled, and single-generator comprehensions over runtime
+iterables are lowered into differentiable loops. This one uses a form the
+lowering cannot express: multiple generators, a non-name target, or a
+comprehension inside a `while` condition.
 
 Workarounds:
-  ❌ ys = [v * 3 for v in xs]          # xs is a runtime value
-  ✅ ys = xs * 3                        # use vectorized NumPy operations
-  ✅ total = 0.0                        # or accumulate in an explicit loop
-     for v in xs:
-         total = total + v * 3
+  ❌ ys = [u * v for u in xs for v in zs]   # multiple generators
+  ✅ ys = []                                 # nest explicit loops instead
+     for i in range(len(xs)):
+         for j in range(len(zs)):
+             ys.append(xs[i] * zs[j])
+  ❌ ys = [a + b for a, b in pairs]          # tuple target
+  ✅ ys = [p[0] + p[1] for p in pairs]       # index a single target
 
 📖 See: docs/features/PYTHON_FEATURE_SUPPORT.md#comprehensions
 ''',

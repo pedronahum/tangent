@@ -30,9 +30,9 @@ EXPECTED_REVERSE = [
     'chained_assign_desugar',
     'enumerate_desugar',
     'zip_desugar',
-    # Dynamic-iterable list comprehensions are no longer lowered to .append()
-    # loops (that lowering silently dropped gradients); constant ones are
-    # unrolled by comprehension_desugar and the rest are rejected by the fence.
+    # Unrolls constant-iterable comprehensions into literals and lowers
+    # dynamic-iterable list comprehensions into indexed loops built on
+    # tangent.list_append; unexpressible forms are rejected by the fence.
     'comprehension_desugar',
     'dict_method_desugar',
     'concat_desugar',

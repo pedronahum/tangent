@@ -1368,50 +1368,56 @@ def add_grad_at_index(grad_array, index, value):
 
 
 def list_append(xs, elt):
-    """Append `elt` to the list `xs` in place and return the list.
+    """Append `elt` to the sequence `xs` and return the result as a list.
 
     This is the functional-looking spelling that `xs.append(elt)` is desugared
     into (`xs = tangent.list_append(xs, elt)`), so that list building becomes a
-    rebinding the activity analysis and the tape both see. The append itself is
-    in place (O(1)); the tape protects earlier values because `push` stores
-    lists as slices.
+    rebinding the activity analysis and the tape both see. For a plain list the
+    append is in place (O(1)); the tape protects earlier values because `push`
+    stores lists as slices.
+
+    The gradient of a list variable can legitimately arrive as an ndarray (an
+    adjoint like `np.sum`'s broadcasts over the whole sequence), so the
+    primitives accept any sequence and normalize to a list.
 
     Together with `list_last` and `list_init` this forms a set that is closed
     under differentiation: each one's adjoint is written in terms of the others,
     so higher-order derivatives never step outside the set.
     """
-    if not isinstance(xs, list):
+    if isinstance(xs, list):
+        xs.append(elt)
+        return xs
+    if isinstance(xs, tuple) or isinstance(xs, numpy.ndarray):
+        out = list(xs)
+        out.append(elt)
+        return out
+    raise TypeError(
+        'tangent.list_append expected a sequence, got %s. Only plain Python '
+        'lists support differentiable .append().' % type(xs).__name__
+    )
+
+
+def _check_poppable(xs, op):
+    if not isinstance(xs, (list, tuple, numpy.ndarray)):
         raise TypeError(
-            'tangent.list_append expected a list, got %s. Only plain Python '
-            'lists support differentiable .append().' % type(xs).__name__
+            'tangent.%s expected a sequence, got %s. Only plain Python '
+            'lists support differentiable .pop().' % (op, type(xs).__name__)
         )
-    xs.append(elt)
-    return xs
+    if len(xs) == 0:
+        raise IndexError('pop from empty sequence')
 
 
 def list_last(xs):
-    """Return the last element of the list `xs` (functional `xs[-1]`).
+    """Return the last element of the sequence `xs` (functional `xs[-1]`).
 
     `v = xs.pop()` is desugared into `v = tangent.list_last(xs)` followed by
     `xs = tangent.list_init(xs)`.
     """
-    if not isinstance(xs, list):
-        raise TypeError(
-            'tangent.list_last expected a list, got %s. Only plain Python '
-            'lists support differentiable .pop().' % type(xs).__name__
-        )
-    if not xs:
-        raise IndexError('pop from empty list')
+    _check_poppable(xs, 'list_last')
     return xs[-1]
 
 
 def list_init(xs):
-    """Return a new list holding all but the last element of `xs`."""
-    if not isinstance(xs, list):
-        raise TypeError(
-            'tangent.list_init expected a list, got %s. Only plain Python '
-            'lists support differentiable .pop().' % type(xs).__name__
-        )
-    if not xs:
-        raise IndexError('pop from empty list')
+    """Return all but the last element of `xs` (a new list, or an array slice)."""
+    _check_poppable(xs, 'list_init')
     return xs[:-1]

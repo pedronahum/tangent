@@ -724,8 +724,10 @@ def inlining_contextmanager(a):
     return c
 
 
-def listcomp(a):
-    return np.sum([i * 3 for i in a])
+def listcomp(x):
+    # Iterates a runtime vector: takes the `x` (vector) fixture, since a scalar
+    # is not iterable in plain Python either.
+    return np.sum([i * 3 for i in x])
 
 
 def while_big(a):

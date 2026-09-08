@@ -173,8 +173,15 @@ def test_unsupported_list_mutation_rejected(fn):
 
 
 def test_primitives_type_checked():
-    with pytest.raises(TypeError, match='list_append expected a list'):
-        tangent.list_append((1.0,), 2.0)
+    # Gradients of list variables can arrive as ndarrays (e.g. np.sum's
+    # adjoint broadcasts over the whole sequence), so sequences are accepted
+    # and normalized; non-sequences are rejected loudly.
+    assert tangent.list_append((1.0,), 2.0) == [1.0, 2.0]
+    assert tangent.list_last(np.array([1.0, 2.0])) == 2.0
+    with pytest.raises(TypeError, match='list_append expected a sequence'):
+        tangent.list_append({'a': 1.0}, 2.0)
+    with pytest.raises(TypeError, match='list_last expected a sequence'):
+        tangent.list_last(1.0)
     with pytest.raises(IndexError):
         tangent.list_last([])
     with pytest.raises(IndexError):

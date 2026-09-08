@@ -179,8 +179,178 @@ class ComprehensionUnroller(gast.NodeTransformer):
         return gast.copy_location(gast.Dict(keys=keys, values=vals), node)
 
 
+class _CompReplacer(gast.NodeTransformer):
+    """Replace outermost lowerable ListComps in one statement's expressions.
+
+    Each replaced comprehension's lowering statements are appended to
+    `self.prelude`; the comprehension node itself becomes a read of the result
+    variable. Nested comprehensions inside a replaced one are handled by the
+    lowerer's recursion (they end up inside the generated loop body, where the
+    loop variable is bound); a comprehension this pass cannot lower is left
+    untouched, not descended into, so the fence rejects it as a whole.
+    """
+
+    def __init__(self, lowerer):
+        self.lowerer = lowerer
+        self.prelude = []
+
+    def visit_ListComp(self, node):
+        if not self.lowerer.lowerable(node):
+            return node
+        return self.lowerer.lower(node, self.prelude)
+
+
+class DynamicListCompLowerer(object):
+    """Lower list comprehensions over dynamic iterables into indexed loops.
+
+    Comprehensions over constant iterables never reach this: the unroller has
+    already turned them into list literals. What remains ranges over a runtime
+    value, so it is lowered into the loop it means, built with the
+    differentiable `tangent.list_append` rebinding (see list_method_desugar.py)::
+
+        ys = [f(v) for v in seq if cond]
+
+    becomes::
+
+        _lcomp_seq0 = seq
+        _lcomp0 = []
+        for _lcomp_i0 in range(len(_lcomp_seq0)):
+            _lcomp_v0 = _lcomp_seq0[_lcomp_i0]
+            if cond':                      # only when filters are present
+                _lcomp0 = tangent.list_append(_lcomp0, f(_lcomp_v0))
+        ys = _lcomp0
+
+    The loop variable is renamed to a fresh name so a user variable of the same
+    name is not clobbered (Python comprehension scopes do not leak). Only
+    single-generator comprehensions with a plain-name target are lowered;
+    anything else is left for the fence to reject. The iterable must be sized
+    (`len()` works on lists, tuples and arrays); a generator argument fails
+    loudly at run time.
+    """
+
+    def __init__(self):
+        self._counter = 0
+
+    def lowerable(self, node):
+        if len(node.generators) != 1:
+            return False
+        gen = node.generators[0]
+        if getattr(gen, 'is_async', 0):
+            return False
+        return isinstance(gen.target, gast.Name)
+
+    def lower(self, node, prelude):
+        n = self._counter
+        self._counter += 1
+        seq, res, idx, tgt = (
+            '_lcomp_seq%d' % n,
+            '_lcomp%d' % n,
+            '_lcomp_i%d' % n,
+            '_lcomp_v%d' % n,
+        )
+        gen = node.generators[0]
+
+        def name(id_, ctx):
+            return gast.Name(id=id_, ctx=ctx, annotation=None)
+
+        def sub(expr):
+            renamed = _NameSubstituter(gen.target.id, name(tgt, gast.Load())).visit(
+                copy.deepcopy(expr)
+            )
+            return renamed
+
+        append = gast.Assign(
+            targets=[name(res, gast.Store())],
+            value=gast.Call(
+                func=gast.Attribute(
+                    value=name('tangent', gast.Load()), attr='list_append', ctx=gast.Load()
+                ),
+                args=[name(res, gast.Load()), sub(node.elt)],
+                keywords=[],
+            ),
+        )
+        inner = append
+        for cond in reversed(gen.ifs):
+            inner = gast.If(test=sub(cond), body=[inner], orelse=[])
+        loop_body = [
+            gast.Assign(
+                targets=[name(tgt, gast.Store())],
+                value=gast.Subscript(
+                    value=name(seq, gast.Load()),
+                    slice=name(idx, gast.Load()),
+                    ctx=gast.Load(),
+                ),
+            ),
+            inner,
+        ]
+        stmts = [
+            gast.Assign(targets=[name(seq, gast.Store())], value=gen.iter),
+            gast.Assign(
+                targets=[name(res, gast.Store())], value=gast.List(elts=[], ctx=gast.Load())
+            ),
+            gast.For(
+                target=name(idx, gast.Store()),
+                iter=gast.Call(
+                    func=name('range', gast.Load()),
+                    args=[
+                        gast.Call(
+                            func=name('len', gast.Load()),
+                            args=[name(seq, gast.Load())],
+                            keywords=[],
+                        )
+                    ],
+                    keywords=[],
+                ),
+                body=loop_body,
+                orelse=[],
+                type_comment=None,
+            ),
+        ]
+        for stmt in stmts:
+            gast.copy_location(stmt, node)
+            # Comprehensions in the iterable expression or (nested) in the
+            # element land inside these statements; lower them in place, where
+            # their free variables are bound.
+            prelude.extend(self.process_stmt(stmt))
+        return name(res, gast.Load())
+
+    def process_stmt(self, stmt):
+        """Lower every dynamic ListComp in one statement; return statements."""
+        # Recurse into nested statement lists first (loop and branch bodies).
+        for field in ('body', 'orelse'):
+            sub_body = getattr(stmt, field, None)
+            if isinstance(sub_body, list) and sub_body and isinstance(sub_body[0], gast.stmt):
+                setattr(stmt, field, self.process_body(sub_body))
+        if isinstance(stmt, (gast.For, gast.If)):
+            # Only the compound statement's own once-evaluated expression may
+            # host a lowering (a `while` test is re-evaluated per iteration, so
+            # hoisting would change semantics - leave it for the fence).
+            field = 'iter' if isinstance(stmt, gast.For) else 'test'
+            repl = _CompReplacer(self)
+            setattr(stmt, field, repl.visit(getattr(stmt, field)))
+            return repl.prelude + [stmt]
+        if isinstance(stmt, (gast.Assign, gast.AugAssign, gast.Expr, gast.Return)):
+            repl = _CompReplacer(self)
+            stmt = repl.visit(stmt)
+            return repl.prelude + [stmt]
+        return [stmt]
+
+    def process_body(self, body):
+        new_body = []
+        for stmt in body:
+            new_body.extend(self.process_stmt(stmt))
+        return new_body
+
+    def visit(self, module):
+        for fdef in module.body:
+            if isinstance(fdef, gast.FunctionDef):
+                fdef.body = self.process_body(fdef.body)
+        return module
+
+
 def desugar_comprehensions(node):
-    """Unroll set/dict comprehensions over constant iterables."""
+    """Unroll constant comprehensions; lower dynamic list comprehensions."""
     node = ComprehensionUnroller().visit(node)
+    node = DynamicListCompLowerer().visit(node)
     gast.fix_missing_locations(node)
     return node

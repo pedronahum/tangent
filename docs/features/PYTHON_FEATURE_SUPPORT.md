@@ -34,7 +34,7 @@ This document provides a comprehensive reference of Python language features and
 
 ### Data Structures (Read-Only)
 - **✅ Dictionaries (read-only)** - Dict access, methods, nested dicts
-- **✅ Lists (syntax)** - List operations in non-differentiated paths
+- **✅ Lists** - Reading, and differentiable building with `xs.append(v)` / `v = xs.pop()` (desugared into rebindings through `tangent.list_append`/`list_last`/`list_init`; works in loops, forward mode and higher order). Other in-place mutators (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through an attribute/subscript) are rejected with a clear error - they used to silently drop gradients
 - **✅ Tuples** - Tuple access and unpacking fully supported
 - **✅ NumPy arrays** - Full support with comprehensive gradients
 - **✅ Pytree arguments and return values** - Tuples, lists and (nested) dicts
@@ -44,11 +44,11 @@ This document provides a comprehensive reference of Python language features and
   as the cotangent, and a structurally mismatched seed raises a `ValueError`
 
 ### Comprehensions (Partial)
-- **✅ List comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a list literal, so they differentiate correctly). `if` filters are supported when decidable at compile time
+- **✅ List comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a list literal) **and over dynamic iterables** (lowered into an indexed loop built on the differentiable `tangent.list_append` rebinding), including runtime `if` filters and nested comprehensions. Single generator with a plain-name target only; multiple generators and tuple targets are rejected with a clear error
 - **✅ Dict comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a dict literal)
 - **✅ Set comprehensions** - Over a constant `range(...)`/list/tuple (unrolled into a set literal)
 - **❌ Generator expressions** - Not supported
-- **Note**: Set/dict comprehensions with `if` filters are rejected with a clear error; comprehensions over dynamic iterables cannot be unrolled and are rejected with a `TangentParseError` (an `.append()`-loop fallback would silently drop gradients)
+- **Note**: Set/dict comprehensions with `if` filters or dynamic iterables are rejected with a clear error
 
 ### Statements
 - **✅ Assert statements** - Input validation and runtime checks
@@ -111,7 +111,7 @@ This document provides a comprehensive reference of Python language features and
 ### Data Structures
 - **❌ Set operations** - Union/intersection/etc. not supported (literals as membership guards are supported)
 - **❌ Generator expressions** - Not supported
-- **⚠️ Comprehensions** - Only over constant ranges/literals. Set/dict comprehensions with `if` filters are rejected; list comprehensions support compile-time filters
+- **⚠️ Comprehensions** - List comprehensions over both constant and dynamic iterables (with filters); set/dict comprehensions only over constant ranges/literals and without `if` filters
 
 ### Advanced Features
 - **❌ Generators** - Generator functions and expressions not supported
@@ -629,8 +629,8 @@ For maximum compatibility with Tangent:
    - Define nested functions or use recursion inside a differentiated function (hoist helpers to module level); assigned lambdas and external closures are fine
 
 3. **⚠️ BE CAREFUL**:
-   - Comprehensions must range over a constant `range(...)`/list/tuple; set/dict comprehensions don't support `if` filters, list comprehensions support compile-time filters
-   - Loop ranges must be compile-time constants
+   - List comprehensions may range over runtime iterables (single generator, plain-name target); set/dict comprehensions must range over a constant `range(...)`/list/tuple and don't support `if` filters
+   - List building uses `.append()`/argument-less `.pop()` on plain variables; other in-place list mutators are rejected
    - Early returns in if/elif/else are supported; returns inside loops are not
 
 ## See Also

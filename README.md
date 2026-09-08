@@ -234,7 +234,7 @@ Tangent supports a broad subset of Python for numerical computing:
 - **Operators**: arithmetic, comparisons, boolean (`and`, `or`, `not`), augmented assignment (`+=`, `-=`, `*=`, `/=`, `**=`)
 - **Functions**: lambdas, closures and factories, nested calls, default/keyword arguments
 - **Classes**: user-defined classes with method inlining, instance attributes, method chaining, inheritance and `super()`
-- **Data**: NumPy arrays; **pytrees** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure, and **returned** as outputs (the default seed is a matching pytree of ones — the gradient of the sum of all leaves — and a caller-supplied seed of the same structure is used as the cotangent); list/set/dict comprehensions over compile-time-constant iterables (dynamic iterables are rejected with a clear error)
+- **Data**: NumPy arrays; **pytrees** — tuples, lists and (nested) dicts of arrays can be passed as arguments and indexed/looped, with gradients returned in the same structure, and **returned** as outputs (the default seed is a matching pytree of ones — the gradient of the sum of all leaves — and a caller-supplied seed of the same structure is used as the cotangent); differentiable list building with `xs.append(v)` / `v = xs.pop()`; list comprehensions over both constant iterables (unrolled) and runtime iterables (lowered into differentiable loops, runtime `if` filters and nesting included); set/dict comprehensions over compile-time-constant iterables
 - **Statements**: `assert`, `pass`, early `return`
 - **Higher-order**: `grad(grad(f))` second derivatives, third derivatives for NumPy functions, Hessian-vector products
 

@@ -37,6 +37,21 @@ over the abandoned upstream package.
 
 ### Added in 0.2.0
 
+- **Differentiable list building**: `xs.append(v)` and `v = xs.pop()` are now
+  differentiated (previously `.append()` was silently treated as
+  non-differentiable, returning zero gradients). They are desugared into
+  rebindings through three new primitives (`tangent.list_append` /
+  `list_last` / `list_init`) whose adjoints are written in terms of each
+  other, so forward mode and second/third derivatives work, including appends
+  inside dynamic-length loops. In-place mutations that cannot be expressed as
+  a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
+  an attribute/subscript) are rejected with a clear error instead of silently
+  dropping gradients.
+- **List comprehensions over runtime iterables**: `[f(v) for v in xs]` with a
+  runtime `xs` is now lowered into an indexed loop built on
+  `tangent.list_append` (previously rejected; before that, silently wrong).
+  Runtime `if` filters and nested comprehensions are supported; multiple
+  generators and tuple targets are still rejected cleanly.
 - **Container (pytree) return values in reverse mode**: functions returning
   dicts, lists, or nested containers of arrays can now be differentiated
   (previously a `KeyError` crash). The default seed expands to a matching

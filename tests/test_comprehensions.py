@@ -15,12 +15,13 @@ time once the loop variable is substituted:
 
     [x * i for i in range(4) if i > 1] ->   [x * 2, x * 3]
 
-Set/dict comprehensions do not support filters, and any comprehension that
-cannot be unrolled (dynamic iterable, undecidable filter, etc.) falls through
-to the language fence and is rejected with a clear TangentParseError - never
-silently mis-differentiated. (List comprehensions over dynamic iterables used
-to be lowered to an `.append()` loop, which crashed naming in return position
-and silently produced zero gradients in assignment position.)
+List comprehensions that cannot be unrolled are lowered into indexed loops
+built on the differentiable `tangent.list_append` rebinding, so dynamic
+iterables and runtime filters differentiate correctly (see
+TestDynamicIterableComprehensions). Set/dict comprehensions do not support
+filters, and comprehension forms the lowering cannot express (multiple
+generators, tuple targets) fall through to the language fence and are rejected
+with a clear TangentParseError - never silently mis-differentiated.
 """
 
 import numpy as np
@@ -163,43 +164,107 @@ class TestUnsupportedComprehensions:
         with pytest.raises(TangentParseError):
             tangent.grad(f)
 
-    def test_dynamic_iterable_listcomp_assign_rejected(self):
-        """A listcomp over a runtime iterable is rejected, not miscomputed.
+    def test_multi_generator_listcomp_rejected(self):
+        """Multiple generators cannot be lowered into a single indexed loop."""
 
-        This form was previously lowered to an `.append()` loop whose
-        per-iteration binding is not differentiated, silently returning zero
-        gradients.
-        """
+        def f(x):
+            vals = [u * v for u in x for v in x]
+            return np.sum(vals)
 
+        with pytest.raises(TangentParseError, match='form of list comprehension'):
+            tangent.grad(f)
+
+    def test_tuple_target_listcomp_rejected(self):
+        def f(pairs):
+            vals = [a + b for a, b in pairs]
+            return vals[0]
+
+        with pytest.raises(TangentParseError, match='form of list comprehension'):
+            tangent.grad(f)
+
+
+class TestDynamicIterableComprehensions:
+    """Listcomps over runtime iterables lower into differentiable loops.
+
+    These forms used to be rejected (and before that, silently returned zero
+    gradients: the old `.append()`-loop lowering had a per-iteration binding
+    the activity analysis could not see). They now lower onto the
+    tangent.list_append rebinding primitives.
+    """
+
+    def test_dynamic_iterable_listcomp_assign(self):
         def f(x):
             vals = [v * 3.0 for v in x]
             return np.sum(vals)
 
-        with pytest.raises(TangentParseError, match='dynamic iterables'):
-            tangent.grad(f)
+        x = np.array([1.0, -2.0, 3.0])
+        np.testing.assert_allclose(tangent.grad(f)(x), 3.0 * np.ones_like(x))
 
-    def test_dynamic_iterable_listcomp_return_rejected(self):
-        """Same rejection when the comprehension sits in a return expression.
-
-        This form (the `listcomp` corpus entry) previously crashed naming with
-        an opaque AttributeError.
-        """
+    def test_dynamic_iterable_listcomp_in_return(self):
+        """The `listcomp` corpus entry: comprehension in return position."""
 
         def f(x):
             return np.sum([v * 3.0 for v in x])
 
-        with pytest.raises(TangentParseError, match='dynamic iterables'):
-            tangent.grad(f)
+        x = np.array([1.0, -2.0, 3.0])
+        np.testing.assert_allclose(tangent.grad(f)(x), 3.0 * np.ones_like(x))
 
-    def test_dynamic_range_listcomp_rejected(self):
-        """range() over a runtime bound cannot be unrolled either."""
+    def test_dynamic_range_listcomp(self):
+        """range() over a runtime bound lowers like any other iterable."""
 
         def f(x, n=3):
             vals = [x * i for i in range(n)]
             return np.sum(vals)
 
-        with pytest.raises(TangentParseError, match='dynamic iterables'):
-            tangent.grad(f)
+        assert tangent.grad(f)(2.0, 4) == pytest.approx(0.0 + 1.0 + 2.0 + 3.0)
+
+    def test_runtime_filter(self):
+        def f(x):
+            vals = [v * v for v in x if v > 0.0]
+            s = 0.0
+            for i in range(len(vals)):
+                s = s + vals[i]
+            return s
+
+        x = np.array([1.0, -2.0, 3.0])
+        np.testing.assert_allclose(tangent.grad(f)(x), np.array([2.0, 0.0, 6.0]))
+
+    def test_nested_dynamic_listcomp(self):
+        def f(x):
+            ys = [[u * v for u in x] for v in x]
+            s = 0.0
+            for i in range(len(ys)):
+                for j in range(len(ys[i])):
+                    s = s + ys[i][j]
+            return s
+
+        x = np.array([1.0, -2.0, 3.0])
+        np.testing.assert_allclose(tangent.grad(f)(x), 2.0 * np.sum(x) * np.ones_like(x))
+
+    def test_loop_variable_does_not_leak_or_clobber(self):
+        """The comprehension target is renamed, so it cannot clobber a user
+        variable of the same name (Python comprehension scopes do not leak)."""
+
+        def f(v):
+            ys = [v * q for q in [v * 1.0, v * 2.0]]
+            return ys[0] + ys[1] + v
+
+        # 3v^2 + v -> 6v + 1
+        assert tangent.grad(f)(2.0) == pytest.approx(13.0)
+
+    def test_forward_and_second_order(self):
+        def f(x):
+            ys = [v * v for v in x]
+            s = 0.0
+            for i in range(len(ys)):
+                s = s + ys[i]
+            return s
+
+        x = np.array([1.0, 2.0, 3.0])
+        assert tangent.autodiff(f, mode='forward')(x, np.ones_like(x)) == pytest.approx(
+            float(np.sum(2.0 * x))
+        )
+        np.testing.assert_allclose(tangent.grad(tangent.grad(f))(x), 2.0 * np.ones_like(x))
 
 
 if __name__ == '__main__':

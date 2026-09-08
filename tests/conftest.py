@@ -36,11 +36,6 @@ np.random.seed(TEST_SEED)
 blacklisted = [
     # insert_grad_of / context-manager inlining path is not harness-compatible.
     'inlining_contextmanager',
-    # List comprehension over a *dynamic* iterable is rejected up front with a
-    # TangentParseError (pinned in tests/test_comprehensions.py), so it cannot
-    # produce gradients for this harness. Constant-range listcomps are unrolled
-    # and supported (see tests/test_comprehensions.py).
-    'listcomp',
     # Returns (r, theta) via np.arctan(b, a); raises TypeError during adjoint
     # naming. Multi-output polar transform not yet supported.
     'cart2polar',
