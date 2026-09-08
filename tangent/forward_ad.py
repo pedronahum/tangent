@@ -177,6 +177,31 @@ class ForwardAD(transformers.TreeTransformer):
 
         return node
 
+    def visit_For(self, node):
+        self.generic_visit(node)
+        # The loop target (a counter after desugaring) is bound by the loop
+        # itself, so no tangent assignment ever defines its d-variable; any
+        # tangent statement in the body that reads it (e.g. `x * i` produces
+        # `dx * i + x * di`) crashed with a NameError. Seed it at the top of
+        # the body: counters are integers, so their tangent is zero.
+        if isinstance(node.target, gast.Name):
+            grad_target = create.create_grad(node.target, self.namer, tangent=True)
+            grad_target.ctx = gast.Store()
+            seed = gast.Assign(
+                targets=[grad_target],
+                value=gast.Call(
+                    func=gast.Attribute(
+                        value=gast.Name(id='tangent', ctx=gast.Load(), annotation=None),
+                        attr='init_grad',
+                        ctx=gast.Load(),
+                    ),
+                    args=[gast.Name(id=node.target.id, ctx=gast.Load(), annotation=None)],
+                    keywords=[],
+                ),
+            )
+            node.body = [gast.copy_location(seed, node)] + node.body
+        return node
+
     def visit_Assign(self, node):
         """Visit assignment statement.
 
@@ -252,10 +277,11 @@ class ForwardAD(transformers.TreeTransformer):
         if func not in tangents.tangents:
             try:
                 quoting.parse_function(func)
-            except:
-                raise ValueError(
-                    'No tangent found for %s, and could not get source.' % func.__name__
-                )
+            except Exception:
+                # No tangent rule and no source to step into (a builtin or C
+                # function): raise the standard clean error instead of a bare
+                # ValueError.
+                raise errors.ForwardNotImplementedError(func)
 
             # z = f(x,y) -> d[z],z = df(x,y,dx=dx,dy=dy)
             active_args = tuple(i for i, arg in enumerate(node.args) if isinstance(arg, gast.Name))

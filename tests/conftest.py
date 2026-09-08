@@ -29,34 +29,23 @@ np.random.seed(TEST_SEED)
 
 
 # Functions excluded from the parametrized gradient harness. Each entry carries
-# a reason; the goal is to shrink this list. (Previously this was a silent
-# blacklist that hid broken behavior - keep it audited.) Where a function works
-# in a narrower mode, a dedicated test pins that down - see
-# tests/test_first_order_gaps.py.
+# a reason. (Previously this was a silent blacklist that hid broken behavior -
+# keep it audited.) Every remaining entry is excluded by design, not because a
+# mode is broken: the last mode-gap entries (fn_multiple_return,
+# active_subscript, init_array_grad_maybe_active, cart2polar) now pass the full
+# harness in every mode.
 blacklisted = [
     # insert_grad_of / context-manager inlining path is not harness-compatible.
     'inlining_contextmanager',
-    # Returns (r, theta) via np.arctan(b, a); raises TypeError during adjoint
-    # naming. Multi-output polar transform not yet supported.
-    'cart2polar',
     # Nested function definitions are rejected with TangentParseError by design
     # (single-exit reverse transform); see tests/test_fence.py.
     'iterpower_with_nested_def',
-    # Multi-output (2*a, a): correct in first-order reverse mode (pinned in
-    # tests/test_first_order_gaps.py) but not yet supported by forward mode or
-    # reverse-over-reverse, which the full harness exercises.
-    'fn_multiple_return',
     # Custom-gradient insertion helper; not a plain differentiable function.
     'insert_grad_of',
     # TensorFlow tracing helpers - require TF and the tracing path; exercised in
     # tests/test_tensorflow.py when TF is installed, not in the core harness.
     '_trace_mul',
     '_nontrace_mul',
-    # Subscript scatter into a freshly-initialised array: correct in first-order
-    # reverse mode (pinned in tests/test_first_order_gaps.py) but not yet
-    # supported by forward mode or reverse-over-reverse.
-    'active_subscript',
-    'init_array_grad_maybe_active',
 ]
 
 funcs = [f for f in functions.__dict__.values() if callable(f)]

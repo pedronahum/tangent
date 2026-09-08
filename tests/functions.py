@@ -712,7 +712,7 @@ def passthru_unpack(abc_packed_in_tuple):
 
 def cart2polar(a, b):
     r = np.sqrt(a**2.0 + b**2.0)
-    theta = np.arctan(b, a)  # Should really be arctan2
+    theta = np.arctan2(b, a)
     return r, theta
 
 

@@ -50,7 +50,12 @@ def _assert_allclose(a, b, tol=1e-5):
         try:
             a = np.nan_to_num(a)
             b = np.nan_to_num(b)
-            assert np.allclose(a, b, tol), 'Expected: %s\nGot: %s' % (b, a)
+            # tol bounds the error both relatively and absolutely: a purely
+            # relative bound can never accept a value near 0.0, which matters
+            # when the exact derivative is zero and the reference is finite-
+            # difference noise (e.g. second derivatives of linear functions
+            # against the FD-of-FD oracle).
+            assert np.allclose(a, b, rtol=tol, atol=tol), 'Expected: %s\nGot: %s' % (b, a)
         except TypeError:
             raise TypeError('Could not compare values %s and %s' % (a, b))
 
@@ -71,7 +76,10 @@ def assert_result_matches_reference(
     tangent_value = tangent_func()
     try:
         reference_value = reference_func()
-    except (ImportError, TypeError) as e:
+    except (ImportError, TypeError, ValueError) as e:
+        # ValueError: autograd cannot trace in-place array mutation
+        # (`y[i] = x[i]` on an ArrayBox raises "setting an array element with
+        # a sequence"); such functions fall back to finite differences.
         if __debug__:
             print(
                 'WARNING: Reference function call failed. The test will revert to '
@@ -117,7 +125,11 @@ def test_reverse_array(func, motion, optimized, preserve_result, *args):
 
     def tangent_func():
         y = func(*deepcopy(args))
-        if np.array(y).size > 1:
+        if isinstance(y, tuple):
+            # Multi-output: the seed must mirror the output structure (a flat
+            # ones-array of the wrong shape trips the shape check).
+            init_grad = tuple(np.ones_like(e) for e in y)
+        elif np.array(y).size > 1:
             init_grad = np.ones_like(y)
         else:
             init_grad = 1
@@ -182,11 +194,22 @@ def test_forward_array(func, wrt, preserve_result, *args):
 
     def backup_reference_func():
         func.__globals__['np'] = np
-        df_num = numeric_grad(func)
-        gradval = df_num(*deepcopy(args))
+        y = func(*deepcopy(args))
+        if isinstance(y, tuple):
+            # Multi-output: forward mode returns one JVP per output, so the
+            # oracle must differentiate each component separately (the plain
+            # numeric_grad would sum them through its ones seed).
+            def component(k):
+                def fk(*a):
+                    return func(*a)[k]
+
+                return fk
+
+            gradval = tuple(numeric_grad(component(k))(*deepcopy(args)) for k in range(len(y)))
+        else:
+            gradval = numeric_grad(func)(*deepcopy(args))
         if preserve_result:
-            val = func(*deepcopy(args))
-            return gradval, val
+            return gradval, y
         else:
             return gradval
 

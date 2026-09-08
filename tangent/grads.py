@@ -74,6 +74,14 @@ def get_module_functions(modules):
             attr = getattr(module, key)
             if isinstance(attr, (types.BuiltinFunctionType, types.FunctionType, numpy.ufunc)):
                 module_fns.add(attr)
+            elif callable(attr) and type(attr).__name__ == '_ArrayFunctionDispatcher':
+                # NumPy 2.x wraps most public functions (sort, median, pad, ...)
+                # in _ArrayFunctionDispatcher, which is none of the types above.
+                # Without this branch the unimplemented sets end up nearly
+                # empty, so calls to these ops recursed into NumPy's own source
+                # and crashed with opaque errors instead of raising the clean
+                # Reverse/ForwardNotImplementedError.
+                module_fns.add(attr)
     return module_fns
 
 
@@ -779,6 +787,20 @@ def min_builtin(y, x1, x2):
 def max_builtin(y, x1, x2):
     d[x1] = d[y] * (x1 >= x2)
     d[x2] = d[y] * (x2 > x1)
+
+
+# Built-in numeric casts. float() is the identity map on reals, so gradients
+# pass straight through; int() truncates, whose derivative is zero almost
+# everywhere. Registering both keeps casts symmetric across modes (each has a
+# matching @tangent_ rule) instead of erroring in one mode and not the other.
+@adjoint(float)
+def float_builtin(y, x):
+    d[x] = 1.0 * d[y]
+
+
+@adjoint(int)
+def int_builtin(y, x):
+    d[x] = 0.0 * d[y]
 
 
 #

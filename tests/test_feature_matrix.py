@@ -274,7 +274,6 @@ REJECTIONS = [
     (_del_stmt, TangentParseError),
     (_import_inside, TangentParseError),
     (_builtin_sum, GradientNotFoundError),
-    (_int_cast, GradientNotFoundError),
     (_augassign_attribute, TangentParseError),
 ]
 
@@ -299,6 +298,13 @@ def test_break_loop_now_supported():
 def test_continue_loop_now_supported():
     # Formerly a pinned rejection: continue skips one accumulation of x.
     assert tangent.grad(_continue_loop)(2.0) == pytest.approx(9.0)
+
+
+def test_int_cast_now_supported():
+    # Formerly a pinned rejection: int()/float() casts now have registered
+    # derivative rules (int truncation has zero derivative almost everywhere),
+    # so d/dx [float(int(x)) + x] = 1 away from integer boundaries.
+    assert tangent.grad(_int_cast)(2.5) == pytest.approx(1.0)
 
 
 if __name__ == '__main__':

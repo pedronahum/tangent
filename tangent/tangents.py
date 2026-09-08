@@ -563,6 +563,61 @@ def tastype(z, x, y):
     d[z] = tangent.astype(d[x], d[y])
 
 
+# Non-differentiable shape/constructor functions (see non_differentiable.py):
+# they produce constants or metadata, so their tangents are zeros of the same
+# shape (and for len, the integer zero).
+@tangent_(len)
+def tlen(z, x):
+    d[z] = 0
+
+
+@tangent_(numpy.zeros_like)
+def tzeros_like(z, x):
+    d[z] = numpy.zeros_like(x)
+
+
+@tangent_(numpy.ones_like)
+def tones_like(z, x):
+    d[z] = numpy.zeros_like(x)
+
+
+@tangent_(numpy.zeros)
+def tzeros(z, shape):
+    d[z] = numpy.zeros(shape)
+
+
+@tangent_(numpy.ones)
+def tones(z, shape):
+    d[z] = numpy.zeros(shape)
+
+
+# Built-ins: forward-mode twins of the reverse-mode rules in grads.py, so the
+# same function never errors in one mode while working in the other.
+@tangent_(abs)
+def tabs_builtin(y, x):
+    d[y] = d[x] * numpy.sign(x)
+
+
+@tangent_(min)
+def tmin_builtin(y, x1, x2):
+    d[y] = d[x1] * (x1 <= x2) + d[x2] * (x2 < x1)
+
+
+@tangent_(max)
+def tmax_builtin(y, x1, x2):
+    d[y] = d[x1] * (x1 >= x2) + d[x2] * (x2 > x1)
+
+
+@tangent_(float)
+def tfloat_builtin(y, x):
+    d[y] = 1.0 * d[x]
+
+
+@tangent_(int)
+def tint_builtin(y, x):
+    d[y] = 0.0 * d[x]
+
+
 # List building (see list_method_desugar.py): the primitives are linear, so
 # their JVPs are the same structural operations applied to the tangents.
 @tangent_(tangent.list_append)

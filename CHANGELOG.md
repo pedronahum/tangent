@@ -47,6 +47,23 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Mode consistency**: every corpus construct now behaves the same in every
+  differentiation mode. The last "first-order-only" gaps are closed - multi-
+  output functions (`return 2*a, a`; polar transforms) and subscript-scatter
+  loops now pass forward mode and reverse-over-reverse too - and the audited
+  harness exclusion list contains only by-design entries. Builtin casts and
+  comparisons gained symmetric rules in both modes: `float()` (identity),
+  `int()` (zero derivative a.e.), and forward-mode twins for `abs`/`min`/`max`.
+  Forward mode also seeds loop-counter tangents, fixing a NameError on any
+  `x * i` arithmetic inside loops.
+- **Clean errors restored for unregistered ops**: NumPy 2.x wraps most public
+  functions in `_ArrayFunctionDispatcher`, which the unimplemented-op scan did
+  not recognize - the unimplemented sets were nearly empty, so calls like
+  `np.sort(x)` recursed into NumPy's own source and crashed with an opaque
+  `AttributeError` instead of raising `ReverseNotImplementedError` /
+  `ForwardNotImplementedError`. The scan now recognizes dispatchers, and
+  forward mode's no-source fallback raises the standard clean error instead of
+  a bare `ValueError`.
 - **`break` and `continue`**: both now differentiate exactly (historically
   `break` *miscomputed* gradients via tape replay, then both were rejected). A
   new `loop_exit_desugar` pass lowers them into guard flags before
