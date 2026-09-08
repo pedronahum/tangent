@@ -878,6 +878,30 @@ def acopy(z, x):
     d[x] = tangent.copy(d[z])
 
 
+# List building. `xs.append(v)` is desugared to `xs = tangent.list_append(xs,
+# v)` and `v = xs.pop()` to `v = tangent.list_last(xs); xs =
+# tangent.list_init(xs)` (see list_method_desugar.py). The three primitives are
+# closed under differentiation: each adjoint below is written only in terms of
+# the other primitives (plus init_grad), so second- and higher-order
+# derivatives never leave the set. None of the adjoints needs the primal
+# values except for their *structure* (init_grad), which is exactly what the
+# tape preserves.
+@adjoint(tangent.list_append)
+def alist_append(ys, xs, elt):
+    d[xs] = tangent.list_init(d[ys])
+    d[elt] = tangent.list_last(d[ys])
+
+
+@adjoint(tangent.list_last)
+def alist_last(v, xs):
+    d[xs] = tangent.list_append(tangent.init_grad(tangent.list_init(xs)), d[v])
+
+
+@adjoint(tangent.list_init)
+def alist_init(ys, xs):
+    d[xs] = tangent.list_append(d[ys], tangent.init_grad(tangent.list_last(xs)))
+
+
 #
 # Tracing primitives
 #

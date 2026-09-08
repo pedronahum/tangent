@@ -313,6 +313,21 @@ class LanguageFence(ast.NodeVisitor):
         self._allow_and_continue(node)
 
     def visit_Call(self, node):
+        # `xs.append(v)` / `v = xs.pop()` on a plain name never reach the fence:
+        # list_method_desugar rewrites them into differentiable rebindings. What
+        # remains is a list mutation the rebinding cannot express - a call on an
+        # attribute or subscript (mutation through an alias), or a mutator with
+        # no adjoint (extend/insert/remove/sort/reverse). Before the desugar pass
+        # existed these were silently treated as non-differentiable, dropping
+        # gradients; reject them instead. The names are list-specific, so this
+        # cannot hit dict/set methods (`.add`, `.pop(key)` with arguments, etc.).
+        if isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in ('append', 'extend', 'insert', 'remove', 'sort', 'reverse') or (
+                method == 'pop' and not node.args and not node.keywords
+            ):
+                self._reject(node, 'In-place list mutation is not supported (".%s()" here)' % method)
+                return
         self._allow_and_continue(node)
 
     def visit_keyword(self, node):

@@ -65,6 +65,21 @@ Workarounds:
 
 📖 See: docs/features/PYTHON_FEATURE_SUPPORT.md#comprehensions
 ''',
+    'In-place list mutation': '''Only `.append()` and argument-less `.pop()` on a
+plain variable are differentiable (they are rewritten into rebindings). This
+call mutates a list in a way that rewriting cannot express - through an
+attribute or subscript (an alias), or with a mutator that has no gradient
+(extend/insert/remove/sort/reverse). It used to be silently treated as
+non-differentiable, dropping gradients.
+
+Workarounds:
+  ❌ obj.items.append(v)      # mutation through an attribute
+  ✅ items = obj.items        # bind to a plain name first
+     items.append(v)
+  ❌ xs.extend(ys)
+  ✅ for i in range(len(ys)):  # append one element at a time
+         xs.append(ys[i])
+''',
     'Set Comprehensions': '''Set comprehensions are not supported.
 
 Workaround:

@@ -56,6 +56,9 @@ from tangent.utils import unrepeat
 from tangent.utils import untile
 from tangent.utils import update_grad_at_index
 from tangent.utils import add_grad_at_index
+from tangent.utils import list_append
+from tangent.utils import list_init
+from tangent.utils import list_last
 
 # NumPy activation functions for neural networks
 from tangent.grads import (

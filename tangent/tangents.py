@@ -563,6 +563,23 @@ def tastype(z, x, y):
     d[z] = tangent.astype(d[x], d[y])
 
 
+# List building (see list_method_desugar.py): the primitives are linear, so
+# their JVPs are the same structural operations applied to the tangents.
+@tangent_(tangent.list_append)
+def tlist_append(ys, xs, elt):
+    d[ys] = tangent.list_append(d[xs], d[elt])
+
+
+@tangent_(tangent.list_last)
+def tlist_last(v, xs):
+    d[v] = tangent.list_last(d[xs])
+
+
+@tangent_(tangent.list_init)
+def tlist_init(ys, xs):
+    d[ys] = tangent.list_init(d[xs])
+
+
 @tangent_(tangent.match_seed)
 def tmatch_seed(z, primal, seed):
     # match_seed only reads the *structure* of `primal` and is linear in

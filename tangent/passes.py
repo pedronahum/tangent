@@ -52,6 +52,7 @@ from tangent import enumerate_desugar
 from tangent import fence
 from tangent import ifexp_desugar
 from tangent import lambda_desugar
+from tangent import list_method_desugar
 from tangent import return_desugar
 from tangent import sentinel_rename
 from tangent import zip_desugar
@@ -133,6 +134,16 @@ def _concat_desugar(node, ctx):
     return concat_desugar.desugar_concat(node)
 
 
+def _list_method_desugar(node, ctx):
+    """Lower list append/pop mutations into differentiable rebindings.
+
+    Runs before `resolve_calls` so the injected `tangent.list_*` calls are
+    resolved. Any list-mutating call it cannot express as a rebinding is left
+    in place for the fence to reject.
+    """
+    return list_method_desugar.desugar_list_methods(node)
+
+
 def _ifexp_desugar(node, ctx):
     """Lower conditional expressions (ternaries) to if-statements.
 
@@ -194,6 +205,7 @@ _REGISTRY = [
     # falls through to the fence, which rejects it with a clear error.
     Pass('dict_method_desugar', _dict_method_desugar),
     Pass('concat_desugar', _concat_desugar),
+    Pass('list_method_desugar', _list_method_desugar),
     Pass('ifexp_desugar', _ifexp_desugar, modes=frozenset(('forward',))),
     Pass('resolve_calls', _resolve_calls),
     Pass('explicit_loop_indexes', _explicit_loop_indexes),

@@ -663,6 +663,11 @@ def add_grad_numpy(left, right):
 
 
 def add_grad_list(left, right):
+    if len(left) != len(right):
+        raise ValueError(
+            'Cannot add list gradients of different lengths (%d vs %d); zip '
+            'would silently truncate the longer one.' % (len(left), len(right))
+        )
     return [add_grad(l, r) for l, r in zip(left, right)]
 
 
@@ -1360,3 +1365,53 @@ def add_grad_at_index(grad_array, index, value):
         current = grad_array[index]
         grad_array[index] = add_grad(current, value) if current is not None else value
         return grad_array
+
+
+def list_append(xs, elt):
+    """Append `elt` to the list `xs` in place and return the list.
+
+    This is the functional-looking spelling that `xs.append(elt)` is desugared
+    into (`xs = tangent.list_append(xs, elt)`), so that list building becomes a
+    rebinding the activity analysis and the tape both see. The append itself is
+    in place (O(1)); the tape protects earlier values because `push` stores
+    lists as slices.
+
+    Together with `list_last` and `list_init` this forms a set that is closed
+    under differentiation: each one's adjoint is written in terms of the others,
+    so higher-order derivatives never step outside the set.
+    """
+    if not isinstance(xs, list):
+        raise TypeError(
+            'tangent.list_append expected a list, got %s. Only plain Python '
+            'lists support differentiable .append().' % type(xs).__name__
+        )
+    xs.append(elt)
+    return xs
+
+
+def list_last(xs):
+    """Return the last element of the list `xs` (functional `xs[-1]`).
+
+    `v = xs.pop()` is desugared into `v = tangent.list_last(xs)` followed by
+    `xs = tangent.list_init(xs)`.
+    """
+    if not isinstance(xs, list):
+        raise TypeError(
+            'tangent.list_last expected a list, got %s. Only plain Python '
+            'lists support differentiable .pop().' % type(xs).__name__
+        )
+    if not xs:
+        raise IndexError('pop from empty list')
+    return xs[-1]
+
+
+def list_init(xs):
+    """Return a new list holding all but the last element of `xs`."""
+    if not isinstance(xs, list):
+        raise TypeError(
+            'tangent.list_init expected a list, got %s. Only plain Python '
+            'lists support differentiable .pop().' % type(xs).__name__
+        )
+    if not xs:
+        raise IndexError('pop from empty list')
+    return xs[:-1]
