@@ -14,8 +14,11 @@ variable with one trailing return:
     return __tangent_retval
 
 Returns at the tail of if/else branches, fall-through returns, elif chains, and
-nested conditionals are supported. Returns inside a loop require early loop exit
-(unsupported) and are rejected with a clear error.
+nested conditionals are supported. A return inside a plain loop lowers into an
+assignment plus a flag plus ``break`` (which loop_exit_desugar then lowers into
+guard flags), with ``if __tangent_returning: return`` propagating the exit past
+each enclosing loop. Only loops with an ``else`` clause reject returns (their
+semantics depend on how the loop exited).
 """
 
 import pytest
@@ -117,12 +120,68 @@ class TestSingleReturnUnaffected:
         assert tangent.grad(f)(3.0) == pytest.approx(6.0)
 
 
-class TestReturnInLoopRejected:
+class TestReturnInLoop:
     def test_return_inside_for_loop(self):
+        # Formerly rejected; now lowered into flag + break. At x=1.5 the loop
+        # returns x when i=2 > x (gradient 1); at x=5 it falls through to x*x.
         def f(x):
             for i in range(3):
                 if i > x:
                     return x
+            return x * x
+
+        assert tangent.grad(f)(1.5) == pytest.approx(1.0)
+        assert tangent.grad(f)(5.0) == pytest.approx(10.0)
+
+    def test_return_inside_while_loop(self):
+        def f(x):
+            t = 0.0
+            i = 0
+            while i < 100:
+                t = t + x
+                if t > 5.0:
+                    return t * t
+                i = i + 1
+            return t
+
+        # At x=2: t reaches 6 after 3 iterations -> f = (3x)**2 -> f' = 18x.
+        assert tangent.grad(f)(2.0) == pytest.approx(36.0)
+
+    def test_return_in_nested_loop_exits_all_loops(self):
+        def f(x):
+            s = 0.0
+            for i in range(5):
+                for j in range(5):
+                    s = s + x * x
+                    if s > 20.0:
+                        return s
+            return s + x
+
+        # At x=1.5: s accumulates 2.25 per step, exceeds 20 on step 9 -> s =
+        # 9 * x**2 -> gradient 18x = 27.
+        assert tangent.grad(f)(1.5) == pytest.approx(27.0)
+
+    def test_forward_and_second_order(self):
+        def f(x):
+            t = 0.0
+            i = 0
+            while i < 100:
+                t = t + x
+                if t > 5.0:
+                    return t * t
+                i = i + 1
+            return t
+
+        assert tangent.autodiff(f, mode='forward')(2.0, 1.0) == pytest.approx(36.0)
+        assert tangent.grad(tangent.grad(f))(2.0) == pytest.approx(18.0)
+
+    def test_return_in_loop_with_else_rejected(self):
+        def f(x):
+            for i in range(3):
+                if i > x:
+                    return x
+            else:
+                x = x * 2.0
             return x * x
 
         with pytest.raises(TangentParseError):

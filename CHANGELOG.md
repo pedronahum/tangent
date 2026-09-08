@@ -56,6 +56,10 @@ over the abandoned upstream package.
   data-dependent exits, nested loops, forward mode, both motions, and second
   order. Loops with an `else` clause remain rejected (`while/else` now rejected
   explicitly, like `for/else`).
+- **`return` inside loops**: lowered into an assignment plus a returning flag
+  plus `break` (which the break lowering then handles), with the exit
+  propagated past each enclosing loop and the final return lifted by the
+  single-exit transform. Previously rejected.
 - **Iteration over computed sequences**: `for v in x * 2.0`, `for v in
   np.flip(x)`, and `for v in [x, x * 2]` (a literal of active values) now
   differentiate - the iterable expression is hoisted into a named intermediate

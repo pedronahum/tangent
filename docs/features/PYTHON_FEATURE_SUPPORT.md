@@ -15,6 +15,7 @@ This document provides a comprehensive reference of Python language features and
 - **✅ For loops with zip()** - `for a, b in zip(xs, ys)` (desugared to an indexed loop)
 - **✅ While loops** - Variable iteration with conditions
 - **✅ break/continue** - Lowered into guard flags (`while` folds the break flag into its condition; a `for` wraps its body), so gradients count exactly the executed iterations. Loops with an `else` clause remain rejected
+- **✅ return inside loops** - Lowered into assign + flag + `break`, propagating the exit past each enclosing loop; combined with branch-return lifting, any mix of early returns differentiates. Only loops with an `else` clause reject returns
 
 ### Operators
 - **✅ Boolean operators** - `and`, `or`, `not` with short-circuit evaluation
@@ -91,7 +92,7 @@ This document provides a comprehensive reference of Python language features and
 ### Loops
 - **✅ For loops** - `range(...)`, sequences (arrays, lists, active literals), and computed iterable expressions (hoisted and indexed)
 - **✅ While loops** - With termination conditions
-- **✅ break/continue** - Lowered into guard flags; exact gradients through early exits
+- **✅ break/continue and return** - Lowered into guard flags; exact gradients through early exits
 - **❌ Iterating dict views and set literals** - `for v in d.values()` and `for v in {x, y}` are rejected (no stable positional order); use `sum(d.values())` or a list/tuple
 - **Workaround**: Use conditional logic for early termination
 
@@ -375,7 +376,7 @@ def safe_divide(x):
     return 1.0 / x
 ```
 
-### Loop Control (break/continue)
+### Loop Control (break/continue/return)
 
 **Status**: ✅ Supported (lowered into guard flags)
 
@@ -383,7 +384,8 @@ def safe_divide(x):
 (`tangent/loop_exit_desugar.py`): `continue` becomes a per-iteration skip flag
 guarding the rest of the body; `break` additionally sets a loop-level flag that
 a `while` folds into its condition and a `for` uses to skip all remaining
-iterations. Every construct
+iterations. A `return` inside a loop lowers into an assignment plus a returning
+flag plus `break`, propagated past each enclosing loop. Every construct
 produced is one the AD core differentiates in both modes, so the gradient
 counts exactly the iterations that executed - including data-dependent exits
 (`if total > 5.0: break`).
