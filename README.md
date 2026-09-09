@@ -407,14 +407,18 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
 - **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
   a variable assigned exactly once to a literal and never mutated; dynamically
   built lists raise `NotImplementedError`.
-- **Gradient checkpointing is limited**: `tangent.grad(f, checkpoint=True)`
-  applies only to `for i in range(n)` loops with a constant, zero-based range
-  of ≥ 100 iterations, and only stores the loop target selectively — the rest
-  of the tape is unchanged (~3% overall memory reduction measured).
-  `tangent.grad_with_checkpointing` raises `NotImplementedError` for any
-  function containing a loop, and `tangent.checkpointed_loop` is a manual
-  forward-pass helper that `tangent.grad` cannot differentiate through. See
-  the [Checkpointing User Guide](docs/checkpointing_user_guide.md).
+- **Gradient checkpointing** (`tangent.grad(f, checkpoint=True)`) uses segment
+  (√n) recomputation: eligible loops run untaped with state snapshots every
+  ceil(√n) iterations, and the backward pass replays one segment at a time —
+  peak tape memory drops from O(n) to O(√n) with *identical* gradients
+  (measured: 49.2 MB → 1.6 MB, a 96.8% reduction, on a 2000-iteration loop
+  carrying a 1000-float state; see `benchmarks/checkpointing_memory.py`).
+  Eligible today: `for i in range(...)` loops with constant bounds of ≥ 100
+  iterations (configurable); other loops fall back to full taping. First-order
+  reverse mode only — higher-order derivatives of a checkpointed gradient are
+  not supported. `tangent.grad_with_checkpointing` remains a
+  `NotImplementedError` stub, and `tangent.checkpointed_loop` a manual helper.
+  See the [Checkpointing User Guide](docs/checkpointing_user_guide.md).
 
 ---
 

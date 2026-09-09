@@ -137,85 +137,84 @@ primal_checkpointed = create_register(primals_checkpointed)
 adjoint_checkpointed = create_register(adjoints_checkpointed)
 
 
+# Segment (sqrt-n) checkpointing. The primal runs the loop UNTAPED (the
+# original, untransformed body), pushing only a snapshot of the loop-carried
+# state every `segment_size(n)` iterations. The adjoint restores each snapshot
+# in reverse order (LIFO pops naturally yield the last segment first), replays
+# just that segment with the taped body, and immediately consumes the segment's
+# tape with the adjoint body. Peak tape memory is one segment plus the
+# snapshots: O(sqrt(n)) instead of O(n). Replay is sound because push/pop pairs
+# are balanced within each iteration, and the loop target is re-derived by
+# indexing the (saved) iterable rather than being taped.
+
+
 @primal_checkpointed(gast.For)
 def for_checkpointed(
-    body,
+    orig_body,
     i,
     iter_,
     target,
     push,
-    push_target,
-    _target,
+    _it,
+    _seg,
+    _snap,
+    snap_save,
     _stack,
     op_id_iter,
-    op_id_target,
-    _checkpoint_dict,
-    _checkpoint_positions_list,
+    op_id_it,
+    op_id_snap,
 ):
-    """For loop with checkpointing - Phase 4a: selective target storage."""
-    # Compute optimal checkpoint positions
-    _num_checkpoints = tangent.compute_optimal_checkpoints(len(iter_))
-    _checkpoint_positions_list = tangent.compute_checkpoint_positions(len(iter_), _num_checkpoints)
-    _checkpoint_positions_set = set(_checkpoint_positions_list)
-    _checkpoint_dict = {}
-
+    _it = iter_
+    _seg = tangent.segment_size(len(_it))
     i = 0
-    for target in iter_:
-        _target = target
-
-        # Store checkpoint at checkpoint positions (before body execution)
-        if i in _checkpoint_positions_set:
-            _checkpoint_dict[i] = {'target': _target, 'iteration': i}
-
+    for target in _it:
+        if i % _seg == 0:
+            _snap = tangent.snapshot(snap_save)
+            push(_stack, _snap, op_id_snap)
+        orig_body
         i += 1
-        body  # Body executes normally, pushes to stack as usual
-
-        # Push target only at checkpoints (after body)
-        if (i - 1) in _checkpoint_positions_set:
-            push_target(_stack, _target, op_id_target)
-
-    # Final pushes
+    push(_stack, _it, op_id_it)
     push(_stack, i, op_id_iter)
-    push(_stack, _checkpoint_dict, '_checkpoint_dict')
-    push(_stack, _checkpoint_positions_list, '_checkpoint_positions')
 
 
 @adjoint_checkpointed(gast.For)
 def dfor_checkpointed(
+    body,
     adjoint_body,
     i,
     pop,
+    push_target,
     pop_target,
     target,
+    _target,
+    _it,
+    _seg,
+    _s,
+    _k,
+    _k2,
+    _start,
+    _len,
+    snap_restore,
     _stack,
     op_id_iter,
+    op_id_it,
+    op_id_snap,
     op_id_target,
-    _checkpoint_dict,
-    _checkpoint_positions_list,
 ):
-    """Adjoint for checkpointed loop - Phase 4a: selective pops with dict reconstruction."""
-    # Retrieve checkpoint data
-    _checkpoint_positions_list = pop(_stack, '_checkpoint_positions')
-    _checkpoint_dict = pop(_stack, '_checkpoint_dict')
     i = pop(_stack, op_id_iter)
-
-    # Convert to set for O(1) lookup
-    _checkpoint_positions_set = set(_checkpoint_positions_list)
-    _num_checkpoints = len(_checkpoint_dict)
-
-    # Backward iteration: pop checkpoints, reconstruct others
-    for _iteration in range(i - 1, -1, -1):
-        if _iteration in _checkpoint_positions_set:
-            # This was a checkpoint - pop from stack
+    _it = pop(_stack, op_id_it)
+    _seg = tangent.segment_size(i)
+    for _s in range(tangent.num_segments(i, _seg)):
+        snap_restore = pop(_stack, op_id_snap)
+        _start, _len = tangent.segment_bounds(i, _seg, _s)
+        for _k in range(_len):
+            target = _it[_start + _k]
+            _target = target
+            body
+            push_target(_stack, _target, op_id_target)
+        for _k2 in range(_len):
             target = pop_target(_stack, op_id_target)
-        else:
-            # Not a checkpoint - reconstruct target value as the 0-based iteration
-            # index. This is only valid because reverse_ad._estimate_loop_length
-            # restricts checkpointing to `for target in range(n)` loops (constant,
-            # zero-based), where target == iteration index by construction.
-            target = _iteration
-
-        adjoint_body
+            adjoint_body
 
 
 @primal(gast.While)

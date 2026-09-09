@@ -47,6 +47,16 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Real gradient checkpointing**: `tangent.grad(f, checkpoint=True)` now
+  implements segment (√n) recomputation — eligible loops run untaped with a
+  snapshot of the loop-carried state every ceil(√n) iterations, and the
+  backward pass replays one segment at a time. Peak tape memory drops from
+  O(n) to O(√n) with gradients *identical* to the fully-taped path (measured:
+  49.2 MB → 1.6 MB, 96.8%, on a 2000-iteration loop with 1000-float state;
+  `benchmarks/checkpointing_memory.py`). The previous implementation stored
+  only the loop target selectively (~0% measured reduction on state-carrying
+  loops) and was restricted to zero-based `range(n)`; any constant-bound
+  `range(start, stop, step)` is now eligible. First-order reverse mode only.
 - **Mode consistency**: every corpus construct now behaves the same in every
   differentiation mode. The last "first-order-only" gaps are closed - multi-
   output functions (`return 2*a, a`; polar transforms) and subscript-scatter

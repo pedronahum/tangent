@@ -59,6 +59,10 @@ from tangent.utils import add_grad_at_index
 from tangent.utils import list_append
 from tangent.utils import list_init
 from tangent.utils import list_last
+from tangent.utils import num_segments
+from tangent.utils import segment_bounds
+from tangent.utils import segment_size
+from tangent.utils import snapshot
 
 # NumPy activation functions for neural networks
 from tangent.grads import (

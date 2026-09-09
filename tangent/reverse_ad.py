@@ -352,6 +352,19 @@ class ReverseAD(object):
         if node.orelse:
             raise ValueError
 
+        # Segment checkpointing needs the ORIGINAL (untaped) body for the
+        # forward sweep, and visit_statements transforms statements in place -
+        # decide and copy first.
+        use_checkpointing = self._should_checkpoint_loop(node)
+        if use_checkpointing:
+            state_names = self._loop_state_names(node)
+            if not state_names:
+                # No loop-carried state to snapshot (or no analysis available):
+                # nothing to save by checkpointing.
+                use_checkpointing = False
+            else:
+                orig_body = [copy.deepcopy(stmt) for stmt in node.body]
+
         # Construct the primal and adjoint of the loop
         body, adjoint_body = self.visit_statements(node.body)
 
@@ -364,47 +377,66 @@ class ReverseAD(object):
         push_target, pop_target, op_id_target = get_push_pop()
         tmp_target = create.create_temp(node.target, self.namer)
 
-        # Phase 2: Check if we should use checkpointing for this loop
-        use_checkpointing = self._should_checkpoint_loop(node)
-
         if use_checkpointing:
-            # Use checkpointed templates - Phase 3++: selective storage
-            # Create variables for checkpoint management
-            checkpoint_dict_var = create.create_temp(gast.Name(id='checkpoint_dict'), self.namer)
-            checkpoint_positions_var = create.create_temp(
-                gast.Name(id='checkpoint_positions'), self.namer
-            )
+            # Segment (sqrt-n) checkpointing: untaped forward sweep with state
+            # snapshots; the adjoint replays one segment at a time with the
+            # taped body. See grads.for_checkpointed/dfor_checkpointed.
+            _, _, op_id_it = get_push_pop()
+            _, _, op_id_snap = get_push_pop()
+            it_name = self.namer.unique('_ckpt_it')
+            seg_name = self.namer.unique('_ckpt_seg')
 
-            primal_template = grads.primals_checkpointed[gast.For]
+            def name_node(id_, store=False):
+                return gast.Name(
+                    id=id_, ctx=gast.Store() if store else gast.Load(), annotation=None
+                )
+
+            def state_tuple(store):
+                return gast.Tuple(
+                    elts=[name_node(n, store) for n in state_names],
+                    ctx=gast.Store() if store else gast.Load(),
+                )
+
             primal = template.replace(
-                primal_template,
-                body=body,
+                grads.primals_checkpointed[gast.For],
+                orig_body=orig_body,
                 i=counter,
-                push=push,
-                target=node.target,
                 iter_=node.iter,
-                push_target=push_target,
-                _target=tmp_target,
+                target=node.target,
+                push=push,
+                _it=name_node(it_name),
+                _seg=name_node(seg_name),
+                _snap=name_node(self.namer.unique('_ckpt_snap')),
+                snap_save=state_tuple(store=False),
                 _stack=self.stack,
                 op_id_iter=op_id,
-                op_id_target=op_id_target,
-                _checkpoint_dict=checkpoint_dict_var,
-                _checkpoint_positions_list=checkpoint_positions_var,
+                op_id_it=op_id_it,
+                op_id_snap=op_id_snap,
             )
 
-            adjoint_template = grads.adjoints_checkpointed[gast.For]
             adjoint = template.replace(
-                adjoint_template,
+                grads.adjoints_checkpointed[gast.For],
+                body=body,
                 adjoint_body=adjoint_body,
                 i=counter,
                 pop=pop,
+                push_target=push_target,
                 pop_target=pop_target,
                 target=ast_.copy_node(node.target),
+                _target=tmp_target,
+                _it=name_node(self.namer.unique('_ckpt_rit')),
+                _seg=name_node(self.namer.unique('_ckpt_rseg')),
+                _s=name_node(self.namer.unique('_ckpt_s')),
+                _k=name_node(self.namer.unique('_ckpt_k')),
+                _k2=name_node(self.namer.unique('_ckpt_k2')),
+                _start=name_node(self.namer.unique('_ckpt_start')),
+                _len=name_node(self.namer.unique('_ckpt_len')),
+                snap_restore=state_tuple(store=True),
                 _stack=self.stack,
                 op_id_iter=op_id,
+                op_id_it=op_id_it,
+                op_id_snap=op_id_snap,
                 op_id_target=op_id_target,
-                _checkpoint_dict=checkpoint_dict_var,
-                _checkpoint_positions_list=checkpoint_positions_var,
             )
         else:
             # Use standard templates
@@ -439,10 +471,11 @@ class ReverseAD(object):
         return primal, adjoint
 
     def _should_checkpoint_loop(self, node):
-        """Decide if this loop should use checkpointing.
+        """Decide if this loop should use segment checkpointing.
 
-        Phase 2: Conservative approach - only checkpoint if explicitly enabled
-        and loop length can be determined.
+        Only checkpoint when explicitly enabled, when the loop is long enough
+        for the sqrt-n tape saving to matter, and when the iterable is a form
+        the adjoint can index for replay.
 
         Args:
           node: AST For node
@@ -454,16 +487,39 @@ class ReverseAD(object):
         if not self.checkpoint_config.get('enabled', False):
             return False
 
+        # The adjoint replays segments by indexing the saved iterable
+        # (`target = _it[k]`), so the loop target must be a plain name.
+        if not isinstance(node.target, gast.Name):
+            return False
+
         # Try to estimate loop length
         loop_length = self._estimate_loop_length(node.iter)
 
         if loop_length is None:
-            # Unknown length - don't checkpoint in Phase 2 (conservative)
+            # Unknown length - don't checkpoint (conservative)
             return False
 
         # Use checkpointing if length exceeds threshold
         threshold = self.checkpoint_config.get('min_length', 100)
         return loop_length >= threshold
+
+    def _loop_state_names(self, node):
+        """The loop-carried state to snapshot at segment boundaries.
+
+        A variable needs snapshotting iff the taped replay of a segment could
+        read it before writing it: it is assigned somewhere in the body AND
+        definitely defined at loop entry. Variables first defined inside the
+        body are per-iteration temporaries that replay re-derives; the loop
+        target is re-derived by indexing the iterable. Sorted for
+        deterministic generated code.
+        """
+        if not anno.hasanno(node, 'defined_in'):
+            return []
+        defined_in = anno.getanno(node, 'defined_in')
+        updated = set()
+        for stmt in node.body:
+            updated |= set(ast_.get_updated(stmt))
+        return sorted((updated & set(defined_in)) - {node.target.id})
 
     def _estimate_loop_length(self, iter_node):
         """Try to statically determine loop length from range() calls.
@@ -474,23 +530,25 @@ class ReverseAD(object):
         Returns:
           int or None: Estimated loop length, or None if unknown
         """
-        # Handle range(n) calls. Only the single-argument, zero-based form is
-        # eligible: the checkpointed adjoint template reconstructs the loop
-        # target for non-checkpointed iterations as the 0-based iteration index
-        # (see grads.dfor_checkpointed), which is only correct when the target
-        # actually equals that index. For range(start, stop) with start != 0 the
-        # reconstruction would silently produce wrong gradients whenever the
-        # adjoint needs the target value, so such loops fall back to the
-        # standard (non-checkpointed) templates.
+        # Any range(...) with constant integer arguments. The segment adjoint
+        # replays targets by indexing the saved range object, so start/step
+        # forms are fine (the old restriction to zero-based range(n) existed
+        # only because the previous template reconstructed targets as the raw
+        # iteration index).
         if isinstance(iter_node, gast.Call):
-            if isinstance(iter_node.func, gast.Name) and iter_node.func.id == 'range':
-                if len(iter_node.args) == 1:
-                    # range(n)
-                    arg = iter_node.args[0]
-                    if isinstance(arg, gast.Constant):
-                        return arg.value
+            if (
+                isinstance(iter_node.func, gast.Name)
+                and iter_node.func.id == 'range'
+                and not iter_node.keywords
+                and iter_node.args
+                and all(
+                    isinstance(a, gast.Constant) and isinstance(a.value, int)
+                    for a in iter_node.args
+                )
+            ):
+                return len(range(*[a.value for a in iter_node.args]))
 
-        # Unknown length (or a range form the adjoint cannot reconstruct)
+        # Unknown length (or not a range at all)
         return None
 
     def visit_While(self, node):
@@ -1414,6 +1472,12 @@ def reverse_ad(
         raise TypeError
     # Activity analysis
     cfg.forward(node, cfg.Active(wrt))
+    if checkpoint_config and checkpoint_config.get('enabled', False):
+        # Definitely-defined analysis: visit_For uses it to pick the
+        # loop-carried state to snapshot for segment checkpointing (a variable
+        # assigned in the body but not defined at loop entry is a
+        # per-iteration temporary that replay re-derives).
+        cfg.forward(node, cfg.Defined())
 
     ad = ReverseAD(wrt, preserve_result, check_dims, checkpoint_config, reconcile_seed)
     pri, adj = ad.visit(node)

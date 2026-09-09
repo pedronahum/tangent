@@ -10,53 +10,49 @@ needed.
 
 ## What works today (and what doesn't)
 
-Tangent's checkpointing support is **partial**. Read this section before
-relying on it.
-
 **Works:**
 
-1. **`tangent.grad(func, checkpoint=True)`** — automatic checkpointing of
-   simple counted loops inside generated gradients. Limits:
-   - Applies only to `for i in range(n)` loops where `n` is a constant
-     literal, the range is zero-based (`range(n)`, not `range(a, b)`), and
-     `n >= 100` (configurable via `checkpoint_config={'min_length': ...}`).
-     Loops that don't match fall back to standard full-tape differentiation.
-   - Only the loop *target* variable is stored selectively (at ~√n checkpoint
-     positions). Every other intermediate value produced by the loop body is
-     still pushed to the tape each iteration.
-   - **Measured benefit: ~2.8% overall tape-memory reduction** on the
-     reference benchmark (a 97% reduction of the target storage alone, which
-     is a small fraction of the tape). It is *not* the O(√n)-total-memory
-     algorithm the checkpointing literature describes.
-   - Composes with optimization: `grad(f, checkpoint=True, optimized=True)`
-     works — dead-code elimination pairs tape pushes with their pops, so the
-     checkpoint bookkeeping stays balanced.
+1. **`tangent.grad(func, checkpoint=True)`** — segment (√n) checkpointing of
+   counted loops inside generated gradients. Eligible loops run *untaped*:
+   the forward sweep pushes only a snapshot of the loop-carried state (the
+   variables assigned in the body that are defined at loop entry) every
+   ceil(√n) iterations. The backward pass restores each snapshot in reverse
+   order, replays just that segment with taping, and immediately consumes the
+   segment's tape. This is the O(√n)-total-tape algorithm from the
+   checkpointing literature, and the replay is exact recomputation — the
+   gradients are **identical** to the fully-taped ones, not approximations.
+
+   **Measured: 49.2 MB → 1.6 MB peak (96.8% reduction)** on a 2000-iteration
+   loop carrying a 1000-float state (`benchmarks/checkpointing_memory.py`).
+
+   Eligibility:
+   - `for target in range(...)` loops with constant integer bounds — any
+     start/stop/step form — of at least 100 iterations (configurable via
+     `checkpoint_config={'min_length': ...}`). Loops that don't match fall
+     back to standard full-tape differentiation, silently and safely.
+   - First-order reverse mode. Taking a higher-order derivative *of a
+     checkpointed gradient function* is not supported; use plain
+     `tangent.grad` for derivatives you intend to differentiate again.
+   - Composes with the optimizer (`optimized=True`, the default) and with
+     nested loops (an eligible outer loop checkpoints; inner loops are taped
+     within each replayed segment).
 2. **`tangent.checkpointed_loop`** — a *manual, forward-pass-only* helper
    that runs `state = step(state)` for `seq_length` iterations while storing
    only O(√n) snapshots. Useful for memory-bounded forward simulations.
    **`tangent.grad` cannot differentiate through it** (it is an opaque
-   higher-order call), and Tangent does not provide a backward pass that
-   consumes the returned checkpoints — that is up to the caller.
+   higher-order call).
 3. The bookkeeping utilities: `compute_checkpoint_positions`,
    `get_memory_savings`, `estimate_checkpoint_savings`, `should_checkpoint`,
-   `compute_optimal_checkpoints`. Note their "memory savings" figures count
-   *stored states* (relevant to `checkpointed_loop`), not the overall tape
-   memory of `grad(..., checkpoint=True)`.
+   `compute_optimal_checkpoints` (used by `checkpointed_loop`).
 
 **Does not work:**
 
 - **`tangent.grad_with_checkpointing`** raises `NotImplementedError` for any
-  function containing a loop. The AST transformation it was meant to perform
-  (rewriting arbitrary loops into checkpointed form with a recomputing
-  backward pass) was never implemented. For loop-free functions it simply
-  delegates to `tangent.grad`.
-- Checkpointing of `while` loops, non-`range` iterables, `range(a, b)` /
-  `range(a, b, step)`, nested loops, or loops whose length is not a literal
-  constant.
-- True O(√n) total-memory gradients (selective storage of loop-body
-  intermediates with recomputation). See
-  `docs/development/CHECKPOINTING_TODO.md` for the design notes on what this
-  would take.
+  function containing a loop; use `tangent.grad(f, checkpoint=True)` instead.
+  For loop-free functions it simply delegates to `tangent.grad`.
+- Checkpointing of `while` loops, non-`range` iterables, or loops whose
+  length is not a compile-time constant (they fall back to full taping).
+
 
 ## Quick start: automatic checkpointing in `grad`
 
@@ -76,10 +72,10 @@ df_opt = tangent.grad(f, checkpoint=True, optimized=True)  # explicit; also fine
 df2 = tangent.grad(f, checkpoint_config={'enabled': True, 'min_length': 500})
 ```
 
-The generated gradient stores the loop target only at ~√n checkpoint
-positions and reconstructs it (as the iteration index) elsewhere. Remember
-the measured benefit is modest (~3% overall) because body intermediates are
-still taped every iteration.
+The generated gradient runs the loop untaped and snapshots the loop-carried
+state at √n segment boundaries; the backward pass replays one segment at a
+time. Peak tape memory is one segment plus the snapshots — O(√n) instead of
+O(n).
 
 ## Manual forward-pass checkpointing
 
@@ -161,8 +157,9 @@ stats = tangent.get_memory_savings(1000)
 print(f"State-storage reduction: {stats['savings_percent']:.1f}%")  # ~96.9%
 ```
 
-This figure does **not** describe the tape memory of
-`grad(..., checkpoint=True)` (see above: ~2.8% overall there).
+This figure describes `checkpointed_loop`'s state storage. The tape memory
+of `grad(..., checkpoint=True)` shows a comparable reduction — see
+`benchmarks/checkpointing_memory.py` (96.8% measured).
 
 ### `should_checkpoint(seq_length, threshold=0.5)`
 
@@ -227,5 +224,7 @@ the correct fallback).
 2. **Gruslys, A., et al. (2016)**. Memory-Efficient Backpropagation Through
    Time. *NeurIPS 29*.
 
-For the implementation status and the design work required for full O(√n)
-checkpointing, see `docs/development/CHECKPOINTING_TODO.md`.
+The segment implementation lives in `tangent/grads.py`
+(`for_checkpointed`/`dfor_checkpointed`) and `tangent/reverse_ad.py`
+(`visit_For`, `_loop_state_names`); `tests/test_checkpointing_segments.py`
+pins both exactness and the memory reduction.

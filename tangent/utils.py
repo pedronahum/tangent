@@ -24,6 +24,7 @@ from __future__ import division
 
 from copy import copy as native_copy
 from numbers import Number
+import math
 import types
 
 import numpy
@@ -1421,3 +1422,57 @@ def list_init(xs):
     """Return all but the last element of `xs` (a new list, or an array slice)."""
     _check_poppable(xs, 'list_init')
     return xs[:-1]
+
+
+#
+# Segment (sqrt-n) checkpointing runtime (see reverse_ad.visit_For).
+#
+# The checkpointed primal runs the loop untaped, snapshotting the loop-carried
+# state every `segment_size(n)` iterations; the adjoint restores each snapshot
+# in reverse, replays just that segment with taping, and immediately consumes
+# the segment's tape. Peak tape memory drops from O(n) to O(sqrt(n)).
+#
+
+
+def segment_size(n):
+    """Checkpoint segment length for an n-iteration loop: ceil(sqrt(n))."""
+    if n <= 1:
+        return 1
+    return int(math.ceil(math.sqrt(n)))
+
+
+def segment_bounds(n, seg, s):
+    """Start index and length of the s-th segment *counting from the end*.
+
+    The adjoint pops snapshots LIFO, so segment 0 here is the last-executed
+    segment of the loop.
+    """
+    num_segments = -(-n // seg)
+    start = (num_segments - 1 - s) * seg
+    return start, min(seg, n - start)
+
+
+def num_segments(n, seg):
+    """Number of checkpoint segments for an n-iteration loop."""
+    return -(-n // seg)
+
+
+def snapshot(values):
+    """Copy loop-carried state (a tuple of variables) for a checkpoint.
+
+    The tape's `push` only copies its (single) argument at the top level; a
+    checkpoint carries a tuple of variables, each of which must be protected
+    from later in-place mutation (arrays via subscript stores, lists via
+    append).
+    """
+    out = []
+    for v in values:
+        if isinstance(v, numpy.ndarray):
+            out.append(v.copy())
+        elif isinstance(v, list):
+            out.append(list(v))
+        elif isinstance(v, dict):
+            out.append(dict(v))
+        else:
+            out.append(v)
+    return tuple(out)

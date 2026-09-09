@@ -736,9 +736,9 @@ def _grad_uncached(
     if checkpoint is True:
         checkpoint_config.setdefault('enabled', True)
 
-    # Checkpointing and optimization now coexist: dead code elimination pairs
-    # tape pushes with the pops that consume them (see
-    # optimization._tape_pairings), so the checkpoint dict push/pop statements
+    # Checkpointing and optimization coexist: dead code elimination pairs tape
+    # pushes with the pops that consume them (see optimization._tape_pairings),
+    # so the snapshot/iterable/count pushes of the segment-checkpointed loop
     # are either kept or removed together and the stack stays balanced.
 
     return _autodiff_uncached(
