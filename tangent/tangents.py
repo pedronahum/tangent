@@ -591,6 +591,40 @@ def tones(z, shape):
     d[z] = numpy.zeros(shape)
 
 
+# Op-tail forward rules, mirroring the new adjoints in grads.py.
+@tangent_(numpy.sort)
+def tsort(y, x, axis=-1):
+    d[y] = tangent.sort_like(d[x], x, axis)
+
+
+@tangent_(numpy.argsort)
+def targsort(y, x, axis=-1):
+    # Integer permutation output: no derivative flows through it.
+    d[y] = numpy.zeros_like(y)
+
+
+@tangent_(numpy.cumprod)
+def tcumprod(y, x):
+    # dy_i = y_i * cumsum(dx / x)_i; undefined where x has zeros, like the
+    # reverse rule.
+    d[y] = y * numpy.cumsum(d[x] / x)
+
+
+@tangent_(numpy.pad)
+def tpad(y, x, pad_width):
+    d[y] = numpy.pad(d[x], pad_width)
+
+
+@tangent_(numpy.take)
+def ttake(y, x, indices, axis=None):
+    d[y] = numpy.take(d[x], indices, axis)
+
+
+@tangent_(numpy.einsum)
+def teinsum(z, subscripts, x, y):
+    d[z] = numpy.einsum(subscripts, d[x], y) + numpy.einsum(subscripts, x, d[y])
+
+
 # Built-ins: forward-mode twins of the reverse-mode rules in grads.py, so the
 # same function never errors in one mode while working in the other.
 @tangent_(abs)

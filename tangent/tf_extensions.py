@@ -440,6 +440,12 @@ def drsqrt(y, x):
     d[x] = -0.5 * d[y] * tf.pow(tf.math.conj(y), tf.constant(3.0))
 
 
+@tangent_(tf_rsqrt)
+def trsqrt(y, x):
+    # d/dx x^(-1/2) = -y / (2x)
+    d[y] = -0.5 * d[x] * y / x
+
+
 @adjoint(tf.negative)
 def dtfnegative(y, x):
     # TODO: Remove the unbroadcast.

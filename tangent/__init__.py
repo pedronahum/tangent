@@ -63,6 +63,14 @@ from tangent.utils import num_segments
 from tangent.utils import segment_bounds
 from tangent.utils import segment_size
 from tangent.utils import snapshot
+from tangent.utils import cholesky_grad
+from tangent.utils import eigvalsh_grad
+from tangent.utils import einsum_grad
+from tangent.utils import sort_like
+from tangent.utils import uncumprod
+from tangent.utils import unpad
+from tangent.utils import unsort
+from tangent.utils import untake
 
 # NumPy activation functions for neural networks
 from tangent.grads import (

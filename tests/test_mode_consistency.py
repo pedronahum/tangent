@@ -23,8 +23,8 @@ from tangent.errors import ForwardNotImplementedError, ReverseNotImplementedErro
 from utils import numeric_grad
 
 
-def uses_sort(x):
-    return np.sum(np.sort(x))
+def uses_partition(x):
+    return np.sum(np.partition(x, 1))
 
 
 def uses_median(x):
@@ -63,17 +63,18 @@ class TestCleanErrorsForUnregisteredOps:
         # regression here silently reverts every clean error below to a crash.
         assert len(grads.UNIMPLEMENTED_ADJOINTS) > 300
         assert len(tangents.UNIMPLEMENTED_TANGENTS) > 300
-        assert np.sort in grads.UNIMPLEMENTED_ADJOINTS
+        assert np.partition in grads.UNIMPLEMENTED_ADJOINTS
         # Implemented ops must not be swept in.
         assert np.flip not in grads.UNIMPLEMENTED_ADJOINTS
         assert np.cumsum not in grads.UNIMPLEMENTED_ADJOINTS
+        assert np.sort not in grads.UNIMPLEMENTED_ADJOINTS  # implemented since
 
-    @pytest.mark.parametrize('fn', [uses_sort, uses_median])
+    @pytest.mark.parametrize('fn', [uses_partition, uses_median])
     def test_reverse_clean_error(self, fn):
         with pytest.raises(ReverseNotImplementedError):
             tangent.grad(fn)
 
-    @pytest.mark.parametrize('fn', [uses_sort, uses_median])
+    @pytest.mark.parametrize('fn', [uses_partition, uses_median])
     def test_forward_clean_error(self, fn):
         with pytest.raises(ForwardNotImplementedError):
             tangent.autodiff(fn, mode='forward')

@@ -125,7 +125,7 @@ forward-mode tangents; see the per-extension lists in
 
 | Backend | Module | Reverse-mode adjoints | Forward-mode tangents | Notes |
 |---|---|---|---|---|
-| NumPy | `tangent/grads.py` + `numpy_extended.py` | 80+ | 50+ | Core gradients plus extended ops (matmul, reductions, statistics, shape ops) |
+| NumPy | `tangent/grads.py` + `numpy_extended.py` | 90+ | 55+ | Core gradients plus extended ops (matmul, einsum, sort, reductions, statistics, shape ops, cholesky/eigvalsh) |
 | JAX | `tangent/jax_extensions.py` | 50+ | 45+ | `jax.numpy` ops and `jax.nn` activations; JAX is the reference for second-order tests |
 | TensorFlow 2.x | `tangent/tf_extensions.py` + `tf_extended.py` | 45+ | 20+ | Eager-mode TF; includes conv/pooling, linalg, and reductions |
 | PyTorch | `tangent/torch_extensions.py` | 45+ | 30+ | Functional `torch.*` API, verified against `torch.autograd` |

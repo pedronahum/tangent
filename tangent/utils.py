@@ -1425,6 +1425,140 @@ def list_init(xs):
 
 
 #
+# Runtime gradient helpers for NumPy ops whose adjoints need real logic.
+#
+
+
+def unsort(dy, x, axis=-1):
+    """Adjoint of `y = np.sort(x, axis)`: route dy back through the inverse
+    of the sorting permutation."""
+    perm = numpy.argsort(x, axis=axis)
+    inverse = numpy.argsort(perm, axis=axis)
+    return numpy.take_along_axis(dy, inverse, axis=axis)
+
+
+def sort_like(dx, x, axis=-1):
+    """JVP of `np.sort`: apply x's sorting permutation to the tangent."""
+    perm = numpy.argsort(x, axis=axis)
+    return numpy.take_along_axis(dx, perm, axis=axis)
+
+
+def uncumprod(dy, y, x):
+    """Adjoint of `y = np.cumprod(x)` (1-D or flattened semantics match
+    NumPy's default axis=None). Undefined where x contains zeros, like the
+    adjoint of `np.log` at 0."""
+    dy = numpy.asarray(dy)
+    return numpy.flip(numpy.cumsum(numpy.flip(dy * y))) / x
+
+
+def unpad(dy, pad_width, x):
+    """Adjoint of `y = np.pad(x, pad_width)` in (default) constant mode:
+    slice the padding back off."""
+    widths = numpy.asarray(pad_width)
+    if widths.ndim == 0:
+        widths = numpy.broadcast_to(widths, (numpy.ndim(x), 2))
+    elif widths.ndim == 1:
+        widths = numpy.broadcast_to(
+            widths[None, :] if widths.size == 2 else widths[:, None], (numpy.ndim(x), 2)
+        )
+    slices = tuple(
+        slice(int(before), int(before) + size) for (before, _), size in zip(widths, numpy.shape(x))
+    )
+    return numpy.asarray(dy)[slices]
+
+
+def untake(dy, indices, x, axis=None):
+    """Adjoint of `y = np.take(x, indices, axis)`: scatter-add dy back.
+
+    Supports axis=None (flat indexing) and an integer axis with 1-D indices,
+    matching the documented eligibility; other forms raise.
+    """
+    dx = numpy.zeros_like(numpy.asarray(x, dtype=numpy.asarray(dy).dtype))
+    indices = numpy.asarray(indices)
+    if axis is None:
+        flat = dx.ravel()
+        numpy.add.at(flat, indices.ravel(), numpy.asarray(dy).ravel())
+        return flat.reshape(dx.shape)
+    if indices.ndim != 1:
+        raise NotImplementedError(
+            'gradient of np.take with an integer axis supports 1-D indices only'
+        )
+    moved = numpy.moveaxis(dx, axis, 0)
+    numpy.add.at(moved, indices, numpy.moveaxis(numpy.asarray(dy), axis, 0))
+    return numpy.moveaxis(moved, 0, axis)
+
+
+def _parse_einsum_equation(equation, num_operands):
+    equation = equation.replace(' ', '')
+    if '...' in equation:
+        raise NotImplementedError('gradient of np.einsum does not support ellipsis')
+    if '->' not in equation:
+        raise NotImplementedError(
+            'gradient of np.einsum requires the explicit output form (use "->")'
+        )
+    lhs, out = equation.split('->')
+    subs = lhs.split(',')
+    if len(subs) != num_operands:
+        raise ValueError('einsum equation does not match the number of operands')
+    return subs, out
+
+
+def einsum_grad(equation, argnum, dy, x, y):
+    """Adjoint of `z = np.einsum(equation, x, y)` with respect to operand
+    `argnum` (0 or 1). Two-operand, explicit-output equations only.
+
+    The gradient is itself an einsum: contract dy with the *other* operand
+    over the target operand's indices that are visible elsewhere; indices
+    summed away inside the target (absent from both the output and the other
+    operand) come back by broadcasting.
+    """
+    subs, out = _parse_einsum_equation(equation, 2)
+    target_sub = subs[argnum]
+    other_sub = subs[1 - argnum]
+    other = y if argnum == 0 else x
+    target = x if argnum == 0 else y
+    if len(set(target_sub)) != len(target_sub):
+        raise NotImplementedError(
+            'gradient of np.einsum with a repeated index in one operand '
+            '(diagonal/trace) is not supported'
+        )
+    visible = set(out) | set(other_sub)
+    present = ''.join(idx for idx in target_sub if idx in visible)
+    dx = numpy.einsum('%s,%s->%s' % (out, other_sub, present), numpy.asarray(dy), other)
+    if present != target_sub:
+        # Indices summed inside the target broadcast back over their axes.
+        for pos, idx in enumerate(target_sub):
+            if idx not in visible:
+                dx = numpy.expand_dims(dx, pos)
+        dx = numpy.broadcast_to(dx, numpy.shape(target))
+    return dx
+
+
+def eigvalsh_grad(A, dw):
+    """Adjoint of `w = np.linalg.eigvalsh(A)`: dA = V diag(dw) V^T.
+
+    V are A's (orthonormal) eigenvectors; only the eigenvalues were consumed,
+    so no eigenvector sensitivity term appears.
+    """
+    _, V = numpy.linalg.eigh(A)
+    return (V * numpy.asarray(dw)) @ V.T
+
+
+def cholesky_grad(L, dL):
+    """Adjoint of `L = np.linalg.cholesky(A)`: map dL back to dA.
+
+    Standard reverse-mode formula (Murray 2016): with Phi taking the lower
+    triangle and halving the diagonal,
+        dA = invL.T @ Phi(L.T @ dL) @ invL, symmetrized.
+    """
+    P = numpy.tril(L.T @ dL)
+    P[numpy.diag_indices_from(P)] *= 0.5
+    invL = numpy.linalg.inv(L)
+    dA = invL.T @ P @ invL
+    return (dA + dA.T) * 0.5
+
+
+#
 # Segment (sqrt-n) checkpointing runtime (see reverse_ad.visit_For).
 #
 # The checkpointed primal runs the loop untaped, snapshotting the loop-carried

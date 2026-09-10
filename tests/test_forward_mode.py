@@ -53,9 +53,6 @@ def test_deriv_unary_tensor(func, t):
     # TODO: remove trace test exemption when tests are consolidated.
     if 'trace' in func.__name__:
         return
-    if any(n in func.__name__ for n in ('tfe_rsqrt',)):
-        utils.assert_forward_not_implemented(func, (0,))
-        return
     tfe_utils.test_forward_tensor(func, (0,), t)
 
 

@@ -19,14 +19,11 @@ over the abandoned upstream package.
   the `@` operator, pytree (container) arguments — tracked in
   `docs/features/PYTHON_FEATURE_SUPPORT.md` and enforced by
   `tests/test_feature_matrix.py`.
-- **Gradient checkpointing (limited)**: `grad(f, checkpoint=True)`
-  automatically checkpoints `for i in range(n)` loops (constant, zero-based
-  `n` ≥ 100) but only stores the loop target selectively — measured overall
-  tape-memory reduction is ~3%; also a manual `checkpointed_loop` helper for
-  O(√n)-memory forward passes (gradients do not flow through it). Automatic
-  checkpointing of arbitrary loops is not implemented
-  (`grad_with_checkpointing` raises `NotImplementedError`). See
-  `docs/checkpointing_user_guide.md`.
+- **Gradient checkpointing**: `grad(f, checkpoint=True)` performs segment
+  (√n) recomputation on eligible counted loops — O(√n) peak tape memory with
+  identical gradients (96.8% peak reduction measured). See
+  `docs/checkpointing_user_guide.md` and the "Real gradient checkpointing"
+  entry below.
 - **Optimizations**: dead-code elimination, common-subexpression elimination,
   algebraic simplification (SymPy), and a straight-line coarsening prototype.
 - **Tooling**: gradient-flow and computation-graph visualization,
@@ -47,6 +44,16 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Derivative coverage tail**: registered adjoints (and forward-mode rules
+  where mechanical) for `np.sort` (permutation-routing, closed under higher
+  order), `np.argsort` (non-differentiable, zero tangent), `np.cumprod`,
+  `np.pad` (constant mode), `np.take` (flat and 1-D-indices-with-axis forms,
+  with repeated-index accumulation), two-operand explicit-output `np.einsum`
+  (the gradient equation is rearranged at run time; ellipsis, implicit
+  output, and diagonal/trace forms raise a clean `NotImplementedError`),
+  `np.linalg.cholesky` and `np.linalg.eigvalsh`, plus a forward-mode rule for
+  TF's `rsqrt` (previously pinned as forward-unimplemented). All verified
+  against the finite-difference oracle.
 - **Compile-time scalability**: functions a few hundred statements long used
   to crash with `RecursionError` before they could be differentiated (the CFG
   dataflow walk recursed once per statement); the walk is now an iterative

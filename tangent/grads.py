@@ -602,6 +602,53 @@ def aflip(y, x, axis=None):
     d[x] = numpy.flip(d[y], axis)
 
 
+@adjoint(numpy.sort)
+def asort(y, x, axis=-1):
+    d[x] = tangent.unsort(d[y], x, axis)
+
+
+@adjoint(numpy.cumprod)
+def acumprod(y, x):
+    d[x] = tangent.uncumprod(d[y], y, x)
+
+
+@adjoint(numpy.pad)
+def apad(y, x, pad_width):
+    d[x] = tangent.unpad(d[y], pad_width, x)
+
+
+@adjoint(numpy.take)
+def atake(y, x, indices, axis=None):
+    d[x] = tangent.untake(d[y], indices, x, axis)
+
+
+# Two-operand, explicit-output einsum (`np.einsum('ij,jk->ik', a, b)`). The
+# heavy lifting - rearranging the equation for each operand's gradient - lives
+# in tangent.einsum_grad, which sees the equation string at run time.
+@adjoint(numpy.einsum)
+def aeinsum(z, subscripts, x, y):
+    d[x] = tangent.einsum_grad(subscripts, 0, d[z], x, y)
+    d[y] = tangent.einsum_grad(subscripts, 1, d[z], x, y)
+
+
+@adjoint(numpy.linalg.cholesky)
+def acholesky(y, x):
+    d[x] = tangent.cholesky_grad(y, d[y])
+
+
+# w = eigvalsh(A): dA = V @ diag(dw) V.T with V the eigenvectors of A.
+@adjoint(numpy.linalg.eigvalsh)
+def aeigvalsh(y, x):
+    d[x] = tangent.eigvalsh_grad(x, d[y])
+
+
+# argsort yields an integer permutation: nothing differentiable flows through
+# it (its forward twin in tangents.py returns integer zeros).
+from tangent import non_differentiable as _non_differentiable  # noqa: E402
+
+_non_differentiable.register_non_differentiable_functions(numpy.argsort)
+
+
 @adjoint(numpy.ravel)
 def aravel(y, x):
     d[x] = numpy.reshape(d[y], numpy.shape(x))
@@ -897,6 +944,32 @@ def apop_stack(z, stack, op_id):
 @adjoint(tangent.copy)
 def acopy(z, x):
     d[x] = tangent.copy(d[z])
+
+
+# The sort helpers are linear permutations of their gradient argument and
+# inverses of each other, so their adjoints form a closed pair - second and
+# higher derivatives through np.sort never leave the set. (The permutation is
+# locally constant in x, so no gradient flows to x.)
+@adjoint(tangent.unsort)
+def aunsort(z, dy, x, axis=-1):
+    d[dy] = tangent.sort_like(d[z], x, axis)
+
+
+@adjoint(tangent.sort_like)
+def asort_like(z, dx, x, axis=-1):
+    d[dx] = tangent.unsort(d[z], x, axis)
+
+
+# unpad/untake are linear in their gradient argument; their adjoints are the
+# original forward ops.
+@adjoint(tangent.unpad)
+def aunpad(z, dy, pad_width, x):
+    d[dy] = numpy.pad(d[z], pad_width)
+
+
+@adjoint(tangent.untake)
+def auntake(z, dy, indices, x, axis=None):
+    d[dy] = numpy.take(d[z], indices, axis)
 
 
 # List building. `xs.append(v)` is desugared to `xs = tangent.list_append(xs,
