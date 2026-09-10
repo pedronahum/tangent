@@ -14,61 +14,56 @@
 """Functions which perform compiler-style optimizations on the AST."""
 
 from __future__ import absolute_import
-from collections import defaultdict
+from collections import defaultdict, deque
 import gast
 
-from tangent import annotate
 from tangent import annotations as anno
 from tangent import cfg
 from tangent import transformers
 from tangent import utils
 
 
-def fixed_point(f):
+def fixed_point(once):
+    """Iterate a `node -> (node, changed)` pass until it reports no change.
+
+    Returns a function `node -> (node, any_change)`. Each pass reports
+    directly whether it changed anything (statements removed, nodes folded),
+    which replaces the previous convergence check of serializing the entire
+    AST with `gast.dump` twice per iteration - that made compile time grow
+    superlinearly with function size, since the fixpoints also nest.
+    """
 
     def _fp(node):
-        while True:
-            # Use gast.dump instead of to_source to avoid gast_to_ast conversion issues
-            # This is faster and avoids Python 3.8+ compatibility issues with type_comment
-            import gast
-
-            before = gast.dump(node)
-            node = f(node)
-            after = gast.dump(node)
-            if before == after:
-                break
-        return node
+        node, changed = once(node)
+        any_change = changed
+        while changed:
+            node, changed = once(node)
+        return node, any_change
 
     return _fp
 
 
-@fixed_point
 def optimize(node):
     """Perform a series of optimization passes.
 
     This function performs a series of optimizations (dead code elimination,
-    constant folding, variable folding) on the given AST.
-    It optimizes the code repeatedly until reaching a fixed point. The fixed
-    point is determine roughly by checking whether the number of lines of
-    generated source code changed after the latest pass.
+    constant folding, variable folding) on the given AST, repeated until a
+    full round reports that no pass changed anything. The passes create a
+    positive feedback loop: constant folding may create dead assignments,
+    dead code elimination removes them, and assignment propagation creates
+    more opportunities for both.
 
     Args:
       node: The AST to optimize.
     Returns:
       The optimized AST.
     """
-    # Phase 1: Basic optimizations
-    node = constant_folding(node)  # Fold constants first (may enable more DCE)
-    node = dead_code_elimination(node)  # Remove simple dead code
-    node = assignment_propagation(node)  # Propagate single-use assignments
-
-    # These create a positive feedback loop:
-    # - constant_folding may create dead assignments
-    # - dead_code_elimination removes them
-    # - assignment_propagation creates more opportunities
-    # - repeat until fixed point
-
-    return node
+    while True:
+        node, folded = _constant_folding_fp(node)  # May enable more DCE
+        node, removed = _dead_code_elimination_fp(node)
+        node, propagated = _assignment_propagation_fp(node)
+        if not (folded or removed or propagated):
+            return node
 
 
 def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
@@ -96,6 +91,7 @@ def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
     node = optimize(node)
 
     # Phase 2: Advanced DCE (if requested gradients provided)
+    advanced_dce_changed = False
     if requested_grads is not None:
         if verbose >= 2:
             print(f"[Optimization] Phase 2: Advanced DCE for {requested_grads}")
@@ -108,16 +104,23 @@ def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
             # which is also the last one. body[0] would hit the primal in split
             # mode and strip the tape pushes the adjoint pops rely on.
             if hasattr(node, 'body') and len(node.body) > 0:
+                # Advanced DCE only removes nodes, so a node-count comparison
+                # is an exact change detector - and Phase 3 (a full re-run of
+                # the standard fixed-point pipeline) is only worth its cost
+                # when Phase 2 actually changed something.
+                size_before = sum(1 for _ in gast.walk(node.body[-1]))
                 node.body[-1] = apply_dce(node.body[-1], requested_grads, verbose)
+                advanced_dce_changed = sum(1 for _ in gast.walk(node.body[-1])) != size_before
         except Exception as e:
             if verbose >= 1:
                 print(f"[Optimization] Warning: Advanced DCE failed: {e}")
 
-    # Phase 3: Standard optimizations again (fixed-point)
-    # Advanced DCE may create new opportunities for basic optimizations
-    if verbose >= 2:
-        print("[Optimization] Phase 3: Post-DCE cleanup")
-    node = optimize(node)
+    # Phase 3: Standard optimizations again, only when advanced DCE created
+    # new opportunities for them.
+    if advanced_dce_changed:
+        if verbose >= 2:
+            print("[Optimization] Phase 3: Post-DCE cleanup")
+        node = optimize(node)
 
     return node
 
@@ -414,9 +417,50 @@ def _tape_pairings(node):
     return pop_to_push, barriers
 
 
-@fixed_point
-def dead_code_elimination(node):
-    """Perform a simple form of dead code elimination on a Python AST.
+class _ReadEdges(gast.NodeVisitor):
+    """Per-statement read counts plus def-use edges, in one AST walk.
+
+    Requires `ReachingDefinitions` annotations. `n_read[d]` counts loads
+    resolving to definition-statement `d` (aggregated over all names `d`
+    defines, matching `annotate.Unused`: a tuple-unpack statement stays if any
+    of its targets is read). `suppliers[s][d]` counts how many loads inside
+    statement `s` resolve to `d` - when `s` is removed, those reads disappear,
+    which is what lets dead chains be peeled without re-running the dataflow
+    analysis.
+    """
+
+    def __init__(self):
+        self.n_read = defaultdict(int)
+        self.suppliers = defaultdict(lambda: defaultdict(int))
+        self.def_nodes = set()
+        self._stmts = []
+
+    def visit(self, node):
+        is_stmt = anno.hasanno(node, 'definitions_gen')
+        if is_stmt:
+            self.def_nodes.update(d[1] for d in anno.getanno(node, 'definitions_gen'))
+            self._stmts.append((node, anno.getanno(node, 'definitions_in')))
+        if isinstance(node, gast.Name) and isinstance(node.ctx, gast.Load) and self._stmts:
+            stmt, reaching = self._stmts[-1]
+            for def_ in reaching:
+                if def_[0] == node.id:
+                    self.n_read[def_[1]] += 1
+                    self.suppliers[stmt][def_[1]] += 1
+        super(_ReadEdges, self).visit(node)
+        if is_stmt:
+            self._stmts.pop()
+
+
+def _dead_code_elimination_once(node):
+    """One full cascade of dead code elimination; see `dead_code_elimination`.
+
+    Runs the reaching-definitions analysis once, then peels dead definitions
+    with a worklist: removing a zero-read definition releases the reads its
+    statement made, which can drop other definitions to zero reads. Removing
+    only zero-read definitions never re-routes a surviving load (a load's
+    reaching definitions all have at least one read - that load), so the
+    cascade computes the same result the old one-layer-per-analysis fixpoint
+    reached, at one dataflow analysis instead of one per layer.
 
     This method performs reaching definitions analysis on all function
     definitions. It then looks for the definition of variables that are not used
@@ -451,38 +495,102 @@ def dead_code_elimination(node):
     pop_to_push, tape_barriers = _tape_pairings(node)
     tape_stmts = set(pop_to_push) | set(pop_to_push.values()) | tape_barriers
 
-    to_remove = set(
-        def_[1]
-        for def_ in annotate.unused(node)
-        if not isinstance(def_[1], (gast.arguments, gast.For))
-        and def_[1] not in statements_in_handlers
-        and def_[1] not in tape_barriers
-        and not anno.getanno(def_[1], 'tangent_keep', False)
-    )
-    for n in list(to_remove):
-        if n in pop_to_push:
-            push = pop_to_push[n]
+    cfg.forward(node, cfg.ReachingDefinitions())
+    edges = _ReadEdges()
+    edges.visit(node)
+    n_read = edges.n_read
+    suppliers = edges.suppliers
+
+    # `transformers.Remove` silently refuses statements containing calls to
+    # generated functions (pri_call/adj_call annotations): removing them would
+    # drop the pushes inside the callee but not the corresponding pops. They
+    # must not be counted as removal candidates, or the pass would report a
+    # change that never happens and the fixed point would never be reached.
+    _call_protected_cache = {}
+
+    def _call_protected(d):
+        if d not in _call_protected_cache:
+            _call_protected_cache[d] = any(
+                anno.hasanno(sub, 'pri_call') or anno.hasanno(sub, 'adj_call')
+                for sub in gast.walk(d)
+            )
+        return _call_protected_cache[d]
+
+    def removable(d):
+        return (
+            not isinstance(d, (gast.arguments, gast.For))
+            and d not in statements_in_handlers
+            and d not in tape_barriers
+            and not anno.getanno(d, 'tangent_keep', False)
+            and not _call_protected(d)
+        )
+
+    removed = set()
+    worklist = deque(d for d in edges.def_nodes if n_read[d] == 0 and removable(d))
+    while worklist:
+        d = worklist.popleft()
+        if d in removed or n_read[d] > 0 or not removable(d):
+            continue
+        group = {d}
+        if d in pop_to_push:
+            push = pop_to_push[d]
             if push in statements_in_handlers or anno.getanno(push, 'tangent_keep', False):
-                # The push must stay, so its pop must stay too: removing only one
-                # half of a pair would unbalance the tape.
-                to_remove.discard(n)
-            else:
-                to_remove.add(push)
-        elif n not in tape_stmts:
+                # The push must stay, so its pop must stay too: removing only
+                # one half of a pair would unbalance the tape.
+                continue
+            group.add(push)
+        elif d not in tape_stmts:
             # Fallback for tape calls the structural analysis did not recognize:
             # chase the pairing annotations left by `annotate.find_stacks`. (For
             # recognized tape statements those annotations may be stale - op ids
             # duplicated by higher-order differentiation make find_stacks keep only
             # the last-seen counterpart - so they are only trusted here.)
-            for succ in gast.walk(n):
+            for succ in gast.walk(d):
                 if anno.getanno(succ, 'push', False):
-                    to_remove.add(anno.getanno(succ, 'push'))
-    # Never remove statements marked keep-alive (e.g. varargs pack/unpack),
-    # even if they were pulled in via a push annotation.
-    to_remove = set(n for n in to_remove if not anno.getanno(n, 'tangent_keep', False))
-    transformers.Remove(to_remove).visit(node)
+                    group.add(anno.getanno(succ, 'push'))
+        # Never remove statements marked keep-alive (e.g. varargs pack/unpack),
+        # even if they were pulled in via a push annotation.
+        group = set(g for g in group if not anno.getanno(g, 'tangent_keep', False))
+        for member in group:
+            if member in removed:
+                continue
+            removed.add(member)
+            # The member's reads disappear with it: release them, which may
+            # make its suppliers newly dead.
+            for supplier, count in suppliers.get(member, {}).items():
+                n_read[supplier] -= count
+                if n_read[supplier] == 0 and supplier not in removed and removable(supplier):
+                    worklist.append(supplier)
+
+    transformers.Remove(removed).visit(node)
     anno.clearanno(node)
-    return node
+    return node, bool(removed)
+
+
+_dead_code_elimination_fp = fixed_point(_dead_code_elimination_once)
+
+
+def dead_code_elimination(node):
+    """Perform dead code elimination on a Python AST, to a fixed point.
+
+    This method performs reaching definitions analysis on all function
+    definitions. It then looks for the definition of variables that are not
+    used elsewhere and removes those definitions.
+
+    This function takes into consideration push and pop statements: tape state
+    stays consistent only under BALANCED removal, so a pop statement is removed
+    together with the push statement it consumes (established by
+    `_tape_pairings`), and a tape operation whose counterpart cannot be
+    established is never removed. Note that this *requires dead code
+    elimination to be performed on the primal and adjoint simultaneously*.
+
+    Args:
+      node: The AST to optimize.
+
+    Returns:
+      The optimized AST.
+    """
+    return _dead_code_elimination_fp(node)[0]
 
 
 class ReadCounts(gast.NodeVisitor):
@@ -525,20 +633,8 @@ def read_counts(node):
     return rc.n_read
 
 
-@fixed_point
-def assignment_propagation(node):
-    """Perform assignment propagation.
-
-    Assignment propagation is not a compiler optimization as much as a
-    readability optimization. If a variable name is used only once, it gets
-    renamed when possible e.g. `y = x; z = y` will become `z = x`.
-
-    Args:
-      node: The AST to optimize.
-
-    Returns:
-      The optimized AST.
-    """
+def _assignment_propagation_once(node):
+    """One round of assignment propagation; see `assignment_propagation`."""
     n_reads = read_counts(node)
 
     to_remove = []
@@ -574,10 +670,45 @@ def assignment_propagation(node):
     # Remove the definitions we folded
     transformers.Remove(to_remove).visit(node)
     anno.clearanno(node)
-    return node
+    return node, bool(to_remove)
+
+
+_assignment_propagation_fp = fixed_point(_assignment_propagation_once)
+
+
+def assignment_propagation(node):
+    """Perform assignment propagation, to a fixed point.
+
+    Assignment propagation is not a compiler optimization as much as a
+    readability optimization. If a variable name is used only once, it gets
+    renamed when possible e.g. `y = x; z = y` will become `z = x`.
+
+    Args:
+      node: The AST to optimize.
+
+    Returns:
+      The optimized AST.
+    """
+    return _assignment_propagation_fp(node)[0]
 
 
 class ConstantFolding(gast.NodeTransformer):
+    """Fold constant expressions, tracking whether anything was rewritten.
+
+    Every rewrite site returns a *new* node object (a fresh Constant, a bare
+    operand, a fresh UnaryOp), so identity comparison in `visit` is an exact
+    change detector.
+    """
+
+    def __init__(self):
+        self.changed = False
+
+    def visit(self, node):
+        new_node = super(ConstantFolding, self).visit(node)
+        if new_node is not node:
+            self.changed = True
+        return new_node
+
     def visit_BinOp(self, node):
         self.generic_visit(node)
         left_val = node.left
@@ -638,9 +769,18 @@ class ConstantFolding(gast.NodeTransformer):
         return node
 
 
-@fixed_point
+def _constant_folding_once(node):
+    """One round of constant folding; see `constant_folding`."""
+    f = ConstantFolding()
+    node = f.visit(node)
+    return node, f.changed
+
+
+_constant_folding_fp = fixed_point(_constant_folding_once)
+
+
 def constant_folding(node):
-    """Perform constant folding.
+    """Perform constant folding, to a fixed point.
 
     This function also uses arithmetic identities (like multiplying with one or
     adding zero) to simplify statements. However, it doesn't inline constants in
@@ -652,5 +792,4 @@ def constant_folding(node):
     Returns:
       The optimized AST.
     """
-    f = ConstantFolding()
-    return f.visit(node)
+    return _constant_folding_fp(node)[0]

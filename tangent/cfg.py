@@ -20,6 +20,7 @@ CFG.
 """
 
 from __future__ import absolute_import
+import collections
 import functools
 import operator
 
@@ -208,31 +209,38 @@ class Forward(object):
         self.kill_label = label + '_kill'
 
     def visit(self, node):
-        if node.value:
-            if anno.hasanno(node.value, self.out_label):
-                before = hash(anno.getanno(node.value, self.out_label))
+        # Iterative worklist rather than recursion: the recursive version's
+        # depth grew with the length of the function's CFG, so functions a few
+        # hundred statements long crashed with a RecursionError before they
+        # could be differentiated. Worklist order does not affect the result
+        # (the analyses are monotone).
+        worklist = collections.deque([node])
+        while worklist:
+            node = worklist.popleft()
+            if node.value:
+                if anno.hasanno(node.value, self.out_label):
+                    before = hash(anno.getanno(node.value, self.out_label))
+                else:
+                    before = None
+                preds = [
+                    anno.getanno(pred.value, self.out_label)
+                    for pred in node.prev
+                    if anno.hasanno(pred.value, self.out_label)
+                ]
+                if preds:
+                    incoming = functools.reduce(self.op, preds[1:], preds[0])
+                else:
+                    incoming = frozenset()
+                anno.setanno(node.value, self.in_label, incoming, safe=False)
+                gen, kill = self.gen(node, incoming)
+                anno.setanno(node.value, self.gen_label, gen, safe=False)
+                anno.setanno(node.value, self.kill_label, kill, safe=False)
+                anno.setanno(node.value, self.out_label, (incoming - kill) | gen, safe=False)
+                if hash(anno.getanno(node.value, self.out_label)) != before:
+                    worklist.extend(node.next)
             else:
-                before = None
-            preds = [
-                anno.getanno(pred.value, self.out_label)
-                for pred in node.prev
-                if anno.hasanno(pred.value, self.out_label)
-            ]
-            if preds:
-                incoming = functools.reduce(self.op, preds[1:], preds[0])
-            else:
-                incoming = frozenset()
-            anno.setanno(node.value, self.in_label, incoming, safe=False)
-            gen, kill = self.gen(node, incoming)
-            anno.setanno(node.value, self.gen_label, gen, safe=False)
-            anno.setanno(node.value, self.kill_label, kill, safe=False)
-            anno.setanno(node.value, self.out_label, (incoming - kill) | gen, safe=False)
-            if hash(anno.getanno(node.value, self.out_label)) != before:
-                for succ in node.next:
-                    self.visit(succ)
-        else:
-            preds = [anno.getanno(pred.value, self.out_label) for pred in node.prev]
-            self.exit = functools.reduce(self.op, preds[1:], preds[0])
+                preds = [anno.getanno(pred.value, self.out_label) for pred in node.prev]
+                self.exit = functools.reduce(self.op, preds[1:], preds[0])
 
 
 def forward(node, analysis):

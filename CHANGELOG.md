@@ -47,6 +47,16 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Compile-time scalability**: functions a few hundred statements long used
+  to crash with `RecursionError` before they could be differentiated (the CFG
+  dataflow walk recursed once per statement); the walk is now an iterative
+  worklist, and a 400-statement chain compiles fine. The optimizer's
+  fixpoints report changes directly instead of serializing the entire AST
+  with `gast.dump` twice per iteration, dead-code elimination peels cascading
+  dead chains in a single dataflow analysis instead of one analysis per
+  layer, and the post-advanced-DCE cleanup round only runs when advanced DCE
+  changed something. Compilation of a 150-statement function dropped ~33%,
+  and the full test suite runs ~25% faster.
 - **Real gradient checkpointing**: `tangent.grad(f, checkpoint=True)` now
   implements segment (√n) recomputation — eligible loops run untaped with a
   snapshot of the loop-carried state every ceil(√n) iterations, and the
