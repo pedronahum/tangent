@@ -23,6 +23,10 @@ registration hooks for extending Tangent with new gradients and tensor types.
 
 ::: tangent.custom_vjp.stop_gradient
 
+## Working in notebooks and the REPL
+
+::: tangent.capture.function
+
 ## Shape checking
 
 ::: tangent.shape_check.check_shapes

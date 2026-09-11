@@ -44,6 +44,13 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Works in notebooks, the REPL, and dynamic code** (`@tangent.function`):
+  source-to-source AD needs the function's source, which `inspect.getsource`
+  cannot retrieve in the plain REPL, in `exec`-defined functions, or after the
+  source file moves. `@tangent.function` captures the source at definition
+  time; `tangent.grad(f, source=...)` and `@tangent.function(source=...)`
+  accept it explicitly. Captured source survives even deletion of the defining
+  file. The "source unavailable" error now points at these fixes.
 - **Compile-time shape checking** (`tangent.check_shapes`): abstractly
   evaluates a function on `ShapedArray` inputs (shape + dtype, no data),
   applying NumPy's real broadcasting and linear-algebra rules, and raises a

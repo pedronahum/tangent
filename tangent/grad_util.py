@@ -54,7 +54,6 @@ bX = bF(X, Y, bZ)
 from __future__ import absolute_import
 
 import enum
-import inspect
 import gast
 import numpy
 from tangent import annotations as anno
@@ -136,12 +135,12 @@ def autodiff_ast(
     # Parse the function, then lower it through the frontend pass pipeline
     # (see tangent/passes.py for the pass order and its rationale).
     node = quoting.parse_function(func)
-    # Fetch the source once and reuse it below. `inspect.getsource` raises
-    # OSError when the source is unavailable and TypeError for objects without
-    # code; in practice it cannot fail here since parse_function just fetched
-    # the same source, but the validators degrade gracefully without it.
+    # Fetch the source once and reuse it below, preferring source captured by
+    # @tangent.function / grad(source=...) so REPL/exec-defined functions work.
+    # It cannot fail here since parse_function just fetched the same source,
+    # but the validators degrade gracefully without it.
     try:
-        source = inspect.getsource(func)
+        source = quoting.get_function_source(func)
     except (OSError, TypeError):
         source = ''
     # Nested defs crash several of the desugaring passes and the reverse transform;

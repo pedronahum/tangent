@@ -36,7 +36,6 @@ from __future__ import absolute_import
 
 import functools
 import hashlib
-import inspect
 import threading
 import weakref
 from collections import OrderedDict
@@ -70,8 +69,11 @@ def _get_source_hash(func):
         pass
 
     try:
-        # Get function source code and hash it
-        source = inspect.getsource(func)
+        # Prefer source captured by @tangent.function / grad(source=...), so
+        # cache keys are stable for functions inspect.getsource cannot read.
+        from tangent import quoting
+
+        source = quoting.get_function_source(func)
         source_hash = hashlib.sha256(source.encode('utf-8')).hexdigest()[:16]
     except (OSError, TypeError):
         # If we can't get source (e.g., built-in function), use empty hash
@@ -348,10 +350,16 @@ def cached_autodiff(original_autodiff):
         checkpoint_config=None,
         optimizations=None,
         grad_config=None,
+        source=None,
     ):
 
         # Import here to avoid circular imports
         from tangent.grad_util import INPUT_DERIVATIVE
+
+        if source is not None:
+            from tangent import capture
+
+            capture.with_source(func, source)
 
         # Handle default value for input_derivative
         if input_derivative is None:
@@ -563,12 +571,18 @@ def cached_grad(original_grad):
         return wrapped_result
 
     @functools.wraps(original_grad)
-    def outer(func, *args, compile='python', **kwargs):
+    def outer(func, *args, compile='python', source=None, **kwargs):
         # `compile=` lowers the (possibly cached) Python gradient into a
         # backend compiler; the cache stores the plain Python function, so
         # different `compile=` values share one compilation of the adjoint.
+        # `source=` supplies the function's source for environments where
+        # inspect.getsource fails (REPL, exec); see tangent.capture.
         from tangent import lowering
 
+        if source is not None:
+            from tangent import capture
+
+            capture.with_source(func, source)
         df = wrapper(func, *args, **kwargs)
         try:
             df.__tangent_primal__ = func

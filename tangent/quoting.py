@@ -300,11 +300,25 @@ def to_source(node, indentation=' ' * 4):
     return '\n'.join(lines) + '\n'
 
 
+def get_function_source(fn):
+    """Return the source of `fn`, preferring source captured at definition.
+
+    `@tangent.function` and `tangent.grad(f, source=...)` stash the source on
+    the function as `_tangent_source` for environments where
+    `inspect.getsource` fails - the plain REPL, `exec`, some decorators. When
+    present it is used verbatim; otherwise we fall back to `inspect.getsource`.
+    """
+    captured = getattr(fn, '_tangent_source', None)
+    if captured is not None:
+        return captured
+    return inspect.getsource(fn)
+
+
 def parse_function(fn):
     """Get the source of a function and return its AST."""
     try:
-        return parse_string(inspect.getsource(fn))
-    except (IOError, OSError) as e:
+        return parse_string(get_function_source(fn))
+    except (IOError, OSError):
         # Use enhanced error handler
         from tangent.error_handlers import SourceCodeNotAvailableError
 

@@ -227,15 +227,22 @@ class SourceCodeNotAvailableError(TangentError):
 
         suggestion = '''Tangent requires access to function source code for differentiation.
 
+Quick fixes:
+  • Decorate the definition with @tangent.function to capture its source:
+        @tangent.function
+        def f(x): ...
+  • Or pass the source explicitly:
+        tangent.grad(f, source="def f(x):\\n    return x * x")
+
 Common causes:
 1. Function defined in Python REPL/interactive session
-   → Define functions in .py files and import them
+   → Use @tangent.function, or define functions in .py files and import them
 
 2. Function is a built-in or C extension
-   → Define a Python wrapper or custom gradient
+   → Define a Python wrapper or custom gradient (see @tangent.custom_vjp)
 
 3. Function is dynamically generated (exec, eval)
-   → Define functions normally using def
+   → Pass source= to grad, or attach it with @tangent.function(source=...)
 
 4. Function is imported from compiled bytecode (.pyc)
    → Ensure source .py files are available'''

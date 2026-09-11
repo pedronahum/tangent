@@ -112,3 +112,28 @@ df = tangent.grad(simulate, checkpoint=True)   # O(√n) peak tape memory
 ```
 
 See the [Gradient Checkpointing](checkpointing_user_guide.md) guide.
+
+
+## Notebooks, the REPL, and dynamic code
+
+Tangent reads your function's source. In a Jupyter notebook this works
+out of the box. In the plain Python REPL, in `exec`-generated code, or
+if the defining file may be moved or deleted, capture the source at
+definition time:
+
+```python
+@tangent.function        # grabs the source now
+def f(x):
+    return x * x
+
+tangent.grad(f)(3.0)
+```
+
+For code with no retrievable source at all, pass it explicitly:
+
+```python
+tangent.grad(f, source="def f(x):\n    return x * x")
+```
+
+`python -m tangent doctor` diagnoses source-retrieval problems (and the
+old-package collision).
