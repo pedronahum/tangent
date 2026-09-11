@@ -47,6 +47,11 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  # Renders :material-...: icon shortcodes (used by the landing-page cards)
+  # as inline SVGs; without it they appear as literal text.
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
