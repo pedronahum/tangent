@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-09-11)
 
 First version of this fork to be numbered ahead of Google's final PyPI release
 (0.1.9, December 2017), so that installs from this repository upgrade cleanly
