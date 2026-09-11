@@ -44,6 +44,15 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Distribution, docs site, and release pipeline**: the package is now
+  distributed on PyPI as **`tangent-ad`** (the import name stays `tangent`;
+  PyPI's `tangent` is the abandoned 2017 upstream release - uninstall it
+  before installing this). A documentation site built with Material for
+  MkDocs (landing page, getting-started guides, user guide, generated API
+  reference, benchmarks) deploys to GitHub Pages on every push, and pushing
+  a `vX.Y.Z` tag builds, verifies (twine + clean-venv wheel smoke test +
+  tag/version match), publishes to PyPI via Trusted Publishing, and creates
+  a GitHub Release. See RELEASING.md for the one-time PyPI/Pages setup.
 - **Derivative coverage tail**: registered adjoints (and forward-mode rules
   where mechanical) for `np.sort` (permutation-routing, closed under higher
   order), `np.argsort` (non-differentiable, zero tangent), `np.cumprod`,

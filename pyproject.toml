@@ -3,10 +3,13 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tangent"
+# Distribution name on PyPI. The IMPORT name stays `tangent` (like Pillow,
+# which distributes as `pillow` and imports as `PIL`): PyPI's `tangent` is
+# Google's unmaintained 0.1.9 from 2017 and cannot be claimed. Because both
+# distributions install a `tangent/` package, users upgrading from the old
+# release must `pip uninstall tangent` first.
+name = "tangent-ad"
 # Version lives in tangent/__init__.py (__version__); see [tool.setuptools.dynamic].
-# Note: PyPI's `tangent` is Google's unmaintained 0.1.9 from 2017. This fork's
-# version must stay ahead of it so `pip install git+...` upgrades cleanly.
 dynamic = ["version"]
 description = "Automatic differentiation using source code transformation for Python"
 readme = "README.md"
@@ -45,6 +48,8 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/pedronahum/tangent"
+Documentation = "https://pedronahum.github.io/tangent/"
+Changelog = "https://github.com/pedronahum/tangent/blob/master/CHANGELOG.md"
 Repository = "https://github.com/pedronahum/tangent"
 Issues = "https://github.com/pedronahum/tangent/issues"
 Upstream = "https://github.com/google/tangent"
@@ -67,6 +72,12 @@ tinygrad = ["tinygrad>=0.14"]
 symbolic = ["sympy>=1.12"]
 # Visualization tools (tangent.visualization).
 viz = ["matplotlib>=3.7", "networkx>=3.0"]
+# Documentation site (mkdocs.yml; built and deployed by .github/workflows/docs.yml).
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.24",
+    "pymdown-extensions>=10.0",
+]
 all = [
     "autograd>=1.2",
     "hypothesis>=6.0",

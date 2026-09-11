@@ -4,6 +4,7 @@
 [![CI](https://github.com/pedronahum/tangent/actions/workflows/ci.yml/badge.svg)](https://github.com/pedronahum/tangent/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-75%2C000%2B%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Docs](https://img.shields.io/badge/docs-pedronahum.github.io%2Ftangent-teal.svg)](https://pedronahum.github.io/tangent/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb)
 
 **A Python library for automatic differentiation that generates readable, inspectable gradient code — with NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad support.**
@@ -46,22 +47,27 @@ print(df(2.0))                    # f'(2) = 7.0
 
 ### Installation
 
-> **Note:** this fork is not on PyPI. The `tangent` package on PyPI is Google's
-> unmaintained 2017 release — always install from this repository as shown below.
+This fork is distributed on PyPI as **`tangent-ad`** (the *import* name stays
+`import tangent`, like Pillow's `pillow`/`PIL`). PyPI's `tangent` package is
+Google's unmaintained 2017 release — if you have it installed, run
+`pip uninstall tangent` first, since both provide the `tangent` module.
 
 ```bash
 # Core (NumPy gradients)
-pip install "tangent @ git+https://github.com/pedronahum/tangent.git"
+pip install tangent-ad
 
 # Optional backends are installed as extras:
-pip install "tangent[jax] @ git+https://github.com/pedronahum/tangent.git"       # JAX support
-pip install "tangent[tf] @ git+https://github.com/pedronahum/tangent.git"        # TensorFlow support
-pip install "tangent[torch] @ git+https://github.com/pedronahum/tangent.git"     # PyTorch support
-pip install "tangent[keras] @ git+https://github.com/pedronahum/tangent.git"     # Keras 3 (backend-agnostic keras.ops)
-pip install "tangent[tinygrad] @ git+https://github.com/pedronahum/tangent.git"  # tinygrad (method-based tensor API)
-pip install "tangent[viz] @ git+https://github.com/pedronahum/tangent.git"       # matplotlib + networkx visualization
-pip install "tangent[symbolic] @ git+https://github.com/pedronahum/tangent.git"  # SymPy-based algebraic optimizations
-pip install "tangent[all] @ git+https://github.com/pedronahum/tangent.git"       # everything above, plus pytest
+pip install "tangent-ad[jax]"       # JAX support
+pip install "tangent-ad[tf]"        # TensorFlow support
+pip install "tangent-ad[torch]"     # PyTorch support
+pip install "tangent-ad[keras]"     # Keras 3 (backend-agnostic keras.ops)
+pip install "tangent-ad[tinygrad]"  # tinygrad (method-based tensor API)
+pip install "tangent-ad[viz]"       # matplotlib + networkx visualization
+pip install "tangent-ad[symbolic]"  # SymPy-based algebraic optimizations
+pip install "tangent-ad[all]"       # everything above, plus the test tooling
+
+# Or straight from the repository:
+pip install "tangent-ad @ git+https://github.com/pedronahum/tangent.git"
 ```
 
 Python 3.9–3.13 are supported and tested in CI. Note the platform caveats in
@@ -175,7 +181,8 @@ bar.
 
 ## 🎨 Gallery of Gradients: See the Magic
 
-**The killer feature: readable gradient code.** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Gallery_of_Gradients.ipynb)
+**The killer feature: readable gradient code.** [![Docs](https://img.shields.io/badge/docs-pedronahum.github.io%2Ftangent-teal.svg)](https://pedronahum.github.io/tangent/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Gallery_of_Gradients.ipynb)
 
 Unlike black-box autodiff libraries, Tangent shows you **exactly** how gradients are computed. The gallery walks through 8 examples:
 
@@ -196,6 +203,7 @@ Each example shows: **original function → generated gradient code → why it l
 
 ## 🚀 Real-World Example: Building Energy Optimization
 
+[![Docs](https://img.shields.io/badge/docs-pedronahum.github.io%2Ftangent-teal.svg)](https://pedronahum.github.io/tangent/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb)
 
 Optimize building heating to minimize energy costs — a real-world differentiable simulation.

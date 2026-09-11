@@ -258,10 +258,10 @@ Maximum difference: 1.83e-06
 ## References
 
 **Benchmark implementation**:
-- [`benchmarks/verify_correctness.py`](../../benchmarks/verify_correctness.py) - Verification script
-- [`benchmarks/building_simulation_tangent.py`](../../benchmarks/building_simulation_tangent.py) - Tangent implementation
-- [`benchmarks/building_simulation_tensorflow.py`](../../benchmarks/building_simulation_tensorflow.py) - TensorFlow implementation
-- [`benchmarks/building_simulation_pytorch.py`](../../benchmarks/building_simulation_pytorch.py) - PyTorch implementation
+- [`benchmarks/verify_correctness.py`](https://github.com/pedronahum/tangent/blob/master/benchmarks/verify_correctness.py) - Verification script
+- [`benchmarks/building_simulation_tangent.py`](https://github.com/pedronahum/tangent/blob/master/benchmarks/building_simulation_tangent.py) - Tangent implementation
+- [`benchmarks/building_simulation_tensorflow.py`](https://github.com/pedronahum/tangent/blob/master/benchmarks/building_simulation_tensorflow.py) - TensorFlow implementation
+- [`benchmarks/building_simulation_pytorch.py`](https://github.com/pedronahum/tangent/blob/master/benchmarks/building_simulation_pytorch.py) - PyTorch implementation
 
 **Related documentation**:
 - [`FRAMEWORK_COMPARISON.md`](FRAMEWORK_COMPARISON.md) - Performance comparison
