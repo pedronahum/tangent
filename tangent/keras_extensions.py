@@ -49,6 +49,7 @@ import numpy as np
 from tangent import non_differentiable
 from tangent.elementwise_rules import prefix_vocab
 from tangent.elementwise_rules import register_elementwise
+from tangent.elementwise_rules import register_binary
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 
@@ -125,35 +126,18 @@ non_differentiable.register_non_differentiable_functions(
 
 
 # Basic arithmetic
-@adjoint(kops.add)
-def adjoint_add(z, x1, x2):
-    """Adjoint for keras.ops.add."""
-    d[x1] = tangent.unbroadcast(tangent.keras_seed(d[z], x1), x1)
-    d[x2] = tangent.unbroadcast(tangent.keras_seed(d[z], x2), x2)
-
-
-@adjoint(kops.subtract)
-def adjoint_subtract(z, x1, x2):
-    """Adjoint for keras.ops.subtract."""
-    dz = tangent.keras_seed(d[z], x1)
-    d[x1] = tangent.unbroadcast(dz, x1)
-    d[x2] = tangent.unbroadcast(-dz, x2)
-
-
-@adjoint(kops.multiply)
-def adjoint_multiply(z, x1, x2):
-    """Adjoint for keras.ops.multiply."""
-    dz = tangent.keras_seed(d[z], x1)
-    d[x1] = tangent.unbroadcast(dz * x2, x1)
-    d[x2] = tangent.unbroadcast(dz * x1, x2)
-
-
-@adjoint(kops.divide)
-def adjoint_divide(z, x1, x2):
-    """Adjoint for keras.ops.divide."""
-    dz = tangent.keras_seed(d[z], x1)
-    d[x1] = tangent.unbroadcast(dz / x2, x1)
-    d[x2] = tangent.unbroadcast(-dz * x1 / (x2 * x2), x2)
+# Binary elementwise ops: generated from the shared backend-neutral table
+# with the keras seed helper.
+register_binary(
+    'keras',
+    ops={
+        'add': kops.add,
+        'subtract': kops.subtract,
+        'multiply': kops.multiply,
+        'divide': kops.divide,
+    },
+    seed='tangent.keras_seed({g}, x)',
+)
 
 
 @adjoint(kops.power)
@@ -424,30 +408,6 @@ def adjoint_stack(dz, x, axis=0):
 #
 # Forward mode (tangent) definitions
 #
-
-
-@tangent_(kops.add)
-def tangent_add(z, x1, x2):
-    """Forward mode for keras.ops.add."""
-    d[z] = d[x1] + d[x2]
-
-
-@tangent_(kops.subtract)
-def tangent_subtract(z, x1, x2):
-    """Forward mode for keras.ops.subtract."""
-    d[z] = d[x1] - d[x2]
-
-
-@tangent_(kops.multiply)
-def tangent_multiply(z, x1, x2):
-    """Forward mode for keras.ops.multiply."""
-    d[z] = d[x1] * x2 + x1 * d[x2]
-
-
-@tangent_(kops.divide)
-def tangent_divide(z, x1, x2):
-    """Forward mode for keras.ops.divide."""
-    d[z] = (d[x1] * x2 - x1 * d[x2]) / (x2 * x2)
 
 
 # Unary elementwise tangents (exp, log, trig, ...) are generated alongside

@@ -56,6 +56,7 @@ from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import method_vocab
 from tangent.elementwise_rules import register_elementwise
+from tangent.elementwise_rules import register_binary
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -689,32 +690,18 @@ def adjoint_softsign(y, x):
 # --- Elementwise binary ---
 
 
-@adjoint(Tensor.add)
-def adjoint_add(z, x, y):
-    dz = tangent.tg_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz, x)
-    d[y] = tangent.unbroadcast(dz, y)
-
-
-@adjoint(Tensor.sub)
-def adjoint_sub(z, x, y):
-    dz = tangent.tg_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz, x)
-    d[y] = tangent.unbroadcast(-dz, y)
-
-
-@adjoint(Tensor.mul)
-def adjoint_mul(z, x, y):
-    dz = tangent.tg_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz * y, x)
-    d[y] = tangent.unbroadcast(dz * x, y)
-
-
-@adjoint(Tensor.div)
-def adjoint_div(z, x, y):
-    dz = tangent.tg_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz / y, x)
-    d[y] = tangent.unbroadcast(-dz * x / (y * y), y)
+# Binary elementwise ops: generated from the shared backend-neutral table
+# with tinygrad's seed helper.
+register_binary(
+    'tinygrad',
+    ops={
+        'add': Tensor.add,
+        'subtract': Tensor.sub,
+        'multiply': Tensor.mul,
+        'divide': Tensor.div,
+    },
+    seed='tangent.tg_seed({g}, x)',
+)
 
 
 @adjoint(Tensor.pow)
@@ -1004,26 +991,6 @@ def adjoint_flip(y, x, axis):
 # ============================================================================
 # Forward-mode (tangent) definitions
 # ============================================================================
-
-
-@tangent_(Tensor.add)
-def tangent_add(z, x, y):
-    d[z] = d[x] + d[y]
-
-
-@tangent_(Tensor.sub)
-def tangent_sub(z, x, y):
-    d[z] = d[x] - d[y]
-
-
-@tangent_(Tensor.mul)
-def tangent_mul(z, x, y):
-    d[z] = d[x] * y + x * d[y]
-
-
-@tangent_(Tensor.div)
-def tangent_div(z, x, y):
-    d[z] = (d[x] * y - x * d[y]) / (y * y)
 
 
 @tangent_(Tensor.pow)

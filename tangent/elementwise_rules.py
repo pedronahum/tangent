@@ -203,3 +203,86 @@ def register_elementwise(backend, ops, vocab, seed='{g}'):
             tangents_module.tangent_(func)(tangent_fn)
             grads.UNIMPLEMENTED_ADJOINTS.discard(func)
             tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)
+
+
+# ---------------------------------------------------------------------------
+# Binary elementwise ops: z = op(x, y)
+#
+# These are fully backend-neutral - their bodies use only tangent.unbroadcast
+# (backend-dispatched on the primal's type) and arithmetic operators, so ONE
+# canonical template per op registers against every backend's spelling of the
+# op (jnp.add, torch.add, tf.add, kops.add, Tensor.add, ...). They were
+# previously copy-pasted across all five extension modules; generating them
+# here makes drift impossible.
+# ---------------------------------------------------------------------------
+
+# rule name -> (adjoint body over d[z], x, y ; tangent body over d[x], d[y]).
+BINARY_RULES = {
+    # Adjoint bodies use `dz` - the (optionally seed-wrapped) incoming
+    # derivative d[z], bound once by the generator.
+    'add': (
+        'd[x] = tangent.unbroadcast(dz, x); d[y] = tangent.unbroadcast(dz, y)',
+        'd[z] = d[x] + d[y]',
+    ),
+    'subtract': (
+        'd[x] = tangent.unbroadcast(dz, x); d[y] = tangent.unbroadcast(-dz, y)',
+        'd[z] = d[x] - d[y]',
+    ),
+    'multiply': (
+        'd[x] = tangent.unbroadcast(dz * y, x); d[y] = tangent.unbroadcast(dz * x, y)',
+        'd[z] = d[x] * y + x * d[y]',
+    ),
+    'divide': (
+        'd[x] = tangent.unbroadcast(dz / y, x); d[y] = tangent.unbroadcast(-dz * x / (y * y), y)',
+        'd[z] = (d[x] * y - x * d[y]) / (y * y)',
+    ),
+}
+
+
+def _compile_binary_template(name, targets_body, params, filename):
+    src = 'def %s(%s):\n    %s\n' % (name, params, targets_body)
+    code = compile(src, filename, 'exec')
+    namespace = {}
+    exec(code, namespace)  # pylint: disable=exec-used
+    fn = namespace[name]
+    linecache.cache[filename] = (len(src), None, src.splitlines(True), filename)
+    return fn
+
+
+def register_binary(backend, ops, seed='{g}'):
+    """Generate and register adjoint + tangent templates for binary ops.
+
+    Args:
+      backend: Short backend name, for generated function/file names.
+      ops: Dict mapping a BINARY_RULES key to the backend's function object
+        (or a tuple of aliases, e.g. torch.divide and torch.true_divide).
+        None values are skipped.
+      seed: Format string over ``{g}`` wrapping the incoming derivative d[z]
+        in reverse mode (e.g. ``'tangent.torch_seed({g}, x)'``); the default
+        passes it through for backends whose tensors mix with float seeds.
+    """
+    for rule_name, funcs in ops.items():
+        if funcs is None:
+            continue
+        if not isinstance(funcs, tuple):
+            funcs = (funcs,)
+        adjoint_body, tangent_body = BINARY_RULES[rule_name]
+        adjoint_fn = _compile_binary_template(
+            'adjoint_%s_%s' % (backend, rule_name),
+            'dz = %s; %s' % (seed.format(g='d[z]'), adjoint_body),
+            'z, x, y',
+            '<tangent-binary>/%s_%s_adjoint.py' % (backend, rule_name),
+        )
+        tangent_fn = _compile_binary_template(
+            'tangent_%s_%s' % (backend, rule_name),
+            tangent_body,
+            'z, x, y',
+            '<tangent-binary>/%s_%s_tangent.py' % (backend, rule_name),
+        )
+        for func in funcs:
+            if func is None:
+                continue
+            grads.adjoint(func)(adjoint_fn)
+            tangents_module.tangent_(func)(tangent_fn)
+            grads.UNIMPLEMENTED_ADJOINTS.discard(func)
+            tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)

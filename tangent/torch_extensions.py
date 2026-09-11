@@ -43,6 +43,7 @@ from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import prefix_vocab
 from tangent.elementwise_rules import register_elementwise
+from tangent.elementwise_rules import register_binary
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -244,59 +245,18 @@ _utils.register_matmul_grad(TensorType, torch_matmul_grad_x, torch_matmul_grad_y
 
 
 # Basic arithmetic operations
-@adjoint(torch.add)
-def adjoint_add(z, x, y):
-    """Adjoint for torch.add."""
-    d[x] = tangent.unbroadcast(tangent.torch_seed(d[z], x), x)
-    d[y] = tangent.unbroadcast(tangent.torch_seed(d[z], y), y)
-
-
-@adjoint(torch.sub)
-def adjoint_sub(z, x, y):
-    """Adjoint for torch.sub."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz, x)
-    d[y] = tangent.unbroadcast(-dz, y)
-
-
-@adjoint(torch.subtract)
-def adjoint_subtract(z, x, y):
-    """Adjoint for torch.subtract (alias of sub)."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz, x)
-    d[y] = tangent.unbroadcast(-dz, y)
-
-
-@adjoint(torch.mul)
-def adjoint_mul(z, x, y):
-    """Adjoint for torch.mul."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz * y, x)
-    d[y] = tangent.unbroadcast(dz * x, y)
-
-
-@adjoint(torch.multiply)
-def adjoint_multiply(z, x, y):
-    """Adjoint for torch.multiply (alias of mul)."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz * y, x)
-    d[y] = tangent.unbroadcast(dz * x, y)
-
-
-@adjoint(torch.div)
-def adjoint_div(z, x, y):
-    """Adjoint for torch.div."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz / y, x)
-    d[y] = tangent.unbroadcast(-dz * x / (y * y), y)
-
-
-@adjoint(torch.divide)
-def adjoint_divide(z, x, y):
-    """Adjoint for torch.divide (alias of div)."""
-    dz = tangent.torch_seed(d[z], x)
-    d[x] = tangent.unbroadcast(dz / y, x)
-    d[y] = tangent.unbroadcast(-dz * x / (y * y), y)
+# Binary elementwise ops: generated from the shared backend-neutral table,
+# with the torch seed helper. Both short and long aliases are registered.
+register_binary(
+    'torch',
+    ops={
+        'add': torch.add,
+        'subtract': (torch.sub, torch.subtract),
+        'multiply': (torch.mul, torch.multiply),
+        'divide': (torch.div, torch.divide),
+    },
+    seed='tangent.torch_seed({g}, x)',
+)
 
 
 @adjoint(torch.pow)
@@ -614,30 +574,6 @@ adjoint(torch.concatenate)(adjoint_cat)
 #
 # Forward mode (tangent) definitions
 #
-
-
-@tangent_(torch.add)
-def tangent_add(z, x, y):
-    """Forward mode for torch.add."""
-    d[z] = d[x] + d[y]
-
-
-@tangent_(torch.sub)
-def tangent_sub(z, x, y):
-    """Forward mode for torch.sub."""
-    d[z] = d[x] - d[y]
-
-
-@tangent_(torch.mul)
-def tangent_mul(z, x, y):
-    """Forward mode for torch.mul."""
-    d[z] = d[x] * y + x * d[y]
-
-
-@tangent_(torch.div)
-def tangent_div(z, x, y):
-    """Forward mode for torch.div."""
-    d[z] = (d[x] * y - x * d[y]) / (y * y)
 
 
 @tangent_(torch.pow)

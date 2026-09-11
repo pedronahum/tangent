@@ -49,6 +49,7 @@ from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import prefix_vocab
 from tangent.elementwise_rules import register_elementwise
+from tangent.elementwise_rules import register_binary
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_init_grad
@@ -261,39 +262,17 @@ except (AttributeError, KeyError):
 
 
 # Basic arithmetic operations
-@adjoint(jnp.add)
-def adjoint_add(z, x, y):
-    """Adjoint for jnp.add: ∂L/∂x = ∂L/∂z, ∂L/∂y = ∂L/∂z"""
-    d[x] = tangent.unbroadcast(d[z], x)
-    d[y] = tangent.unbroadcast(d[z], y)
-
-
-@adjoint(jnp.subtract)
-def adjoint_subtract(z, x, y):
-    """Adjoint for jnp.subtract: ∂L/∂x = ∂L/∂z, ∂L/∂y = -∂L/∂z"""
-    d[x] = tangent.unbroadcast(d[z], x)
-    d[y] = tangent.unbroadcast(-d[z], y)
-
-
-@adjoint(jnp.multiply)
-def adjoint_multiply(z, x, y):
-    """Adjoint for jnp.multiply: ∂L/∂x = y·∂L/∂z, ∂L/∂y = x·∂L/∂z"""
-    d[x] = tangent.unbroadcast(d[z] * y, x)
-    d[y] = tangent.unbroadcast(d[z] * x, y)
-
-
-@adjoint(jnp.divide)
-def adjoint_divide(z, x, y):
-    """Adjoint for jnp.divide: ∂L/∂x = ∂L/∂z/y, ∂L/∂y = -x·∂L/∂z/y²"""
-    d[x] = tangent.unbroadcast(d[z] / y, x)
-    d[y] = tangent.unbroadcast(-d[z] * x / (y**2), y)
-
-
-@adjoint(jnp.true_divide)
-def adjoint_true_divide(z, x, y):
-    """Adjoint for jnp.true_divide (same as divide)"""
-    d[x] = tangent.unbroadcast(d[z] / y, x)
-    d[y] = tangent.unbroadcast(-d[z] * x / (y**2), y)
+# Binary elementwise ops: generated from the shared backend-neutral table
+# (add / subtract / multiply / divide + true_divide alias).
+register_binary(
+    'jax',
+    ops={
+        'add': jnp.add,
+        'subtract': jnp.subtract,
+        'multiply': jnp.multiply,
+        'divide': (jnp.divide, jnp.true_divide),
+    },
+)
 
 
 @adjoint(jnp.power)
@@ -702,30 +681,6 @@ def adjoint_jax_gelu(y, x, approximate=True):
 
 
 # Arithmetic Operations
-@tangent_(jnp.add)
-def tangent_jnp_add(z, x, y):
-    """Forward mode for jnp.add."""
-    d[z] = jnp.add(d[x], d[y])
-
-
-@tangent_(jnp.subtract)
-def tangent_jnp_subtract(z, x, y):
-    """Forward mode for jnp.subtract."""
-    d[z] = jnp.subtract(d[x], d[y])
-
-
-@tangent_(jnp.multiply)
-def tangent_jnp_multiply(z, x, y):
-    """Forward mode for jnp.multiply: d[z] = d[x]*y + x*d[y]."""
-    d[z] = jnp.add(jnp.multiply(d[x], y), jnp.multiply(x, d[y]))
-
-
-@tangent_(jnp.divide)
-def tangent_jnp_divide(z, x, y):
-    """Forward mode for jnp.divide: d[z] = (d[x]*y - x*d[y]) / y^2."""
-    d[z] = jnp.divide(
-        jnp.subtract(jnp.multiply(d[x], y), jnp.multiply(x, d[y])), jnp.multiply(y, y)
-    )
 
 
 @tangent_(jnp.true_divide)
