@@ -71,6 +71,13 @@ from tangent.utils import uncumprod
 from tangent.utils import unpad
 from tangent.utils import unsort
 from tangent.utils import untake
+from tangent.utils import unconcatenate
+from tangent.utils import unstack_list
+from tangent.custom_vjp import custom_vjp
+from tangent.custom_vjp import custom_bwd_call
+from tangent.custom_vjp import custom_jvp_call
+from tangent.custom_vjp import stop_gradient
+from tangent.utils import checkpoint
 
 # NumPy activation functions for neural networks
 from tangent.grads import (
@@ -106,6 +113,8 @@ from tangent.checkpoint_helpers import (
 
 # Imported last to avoid circular imports
 from tangent.grad_util import grad, autodiff, vjp, jvp
+from tangent.explain import explain, source_map
+from tangent import disk_cache
 from tangent.errors import *
 from tangent.function_cache import (
     clear_cache,

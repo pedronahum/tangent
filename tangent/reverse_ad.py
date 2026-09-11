@@ -483,14 +483,31 @@ class ReverseAD(object):
         Returns:
           bool: True if checkpointing should be used
         """
-        # Check if checkpointing is enabled
-        if not self.checkpoint_config.get('enabled', False):
+        forced = anno.getanno(node, 'force_checkpoint', False)
+
+        # Check if checkpointing is enabled (a `with tangent.checkpoint():`
+        # annotation forces it for its loops regardless)
+        if not forced and not self.checkpoint_config.get('enabled', False):
             return False
 
         # The adjoint replays segments by indexing the saved iterable
-        # (`target = _it[k]`), so the loop target must be a plain name.
+        # (`target = _it[k]`), so the loop target must be a plain name and the
+        # iterable a form that supports len() and indexing.
         if not isinstance(node.target, gast.Name):
             return False
+        if not isinstance(node.iter, (gast.Call, gast.Name)):
+            return False
+        if isinstance(node.iter, gast.Call) and not (
+            isinstance(node.iter.func, gast.Name) and node.iter.func.id == 'range'
+        ):
+            return False
+
+        if forced:
+            # The user opted in explicitly: no length threshold, and runtime
+            # bounds are fine (the segment machinery reads the length at run
+            # time; the constant-bound gate below exists only to estimate
+            # whether checkpointing is worth it).
+            return True
 
         # Try to estimate loop length
         loop_length = self._estimate_loop_length(node.iter)
@@ -1472,11 +1489,17 @@ def reverse_ad(
         raise TypeError
     # Activity analysis
     cfg.forward(node, cfg.Active(wrt))
-    if checkpoint_config and checkpoint_config.get('enabled', False):
+    _wants_checkpointing = (checkpoint_config and checkpoint_config.get('enabled', False)) or any(
+        anno.getanno(n, 'force_checkpoint', False)
+        for n in gast.walk(node)
+        if isinstance(n, (gast.For, gast.While))
+    )
+    if _wants_checkpointing:
         # Definitely-defined analysis: visit_For uses it to pick the
         # loop-carried state to snapshot for segment checkpointing (a variable
         # assigned in the body but not defined at loop entry is a
-        # per-iteration temporary that replay re-derives).
+        # per-iteration temporary that replay re-derives). Also run when a
+        # `with tangent.checkpoint():` annotation may be present.
         cfg.forward(node, cfg.Defined())
 
     ad = ReverseAD(wrt, preserve_result, check_dims, checkpoint_config, reconcile_seed)

@@ -8,6 +8,24 @@ pass (O(n) memory), checkpointing stores only a small number of "checkpoints"
 (O(√n) memory) and recomputes intermediate values during the backward pass as
 needed.
 
+## Annotating a loop directly
+
+The `with tangent.checkpoint():` annotation forces segment checkpointing for
+the loops inside it - no `checkpoint=True` needed, no length threshold, and
+**runtime loop bounds are allowed** (the user opted in explicitly)::
+
+    def simulate(x, n_steps):
+        state = np.zeros(1000)
+        with tangent.checkpoint():
+            for i in range(n_steps):      # n_steps known only at run time
+                state = step(state, x)
+        return np.sum(state)
+
+    df = tangent.grad(simulate)           # O(sqrt(n)) tape, exact gradients
+
+At run time the context manager is a no-op, so the annotated function behaves
+identically when called directly.
+
 ## What works today (and what doesn't)
 
 **Works:**

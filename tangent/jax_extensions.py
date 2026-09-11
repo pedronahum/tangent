@@ -974,3 +974,34 @@ _logging.getLogger('tangent').debug(
     jax.__version__,
     len([f for f in dir() if f.startswith('adjoint_')]),
 )
+
+
+# Under jax.jit the generated gradient runs on Tracer values, which are
+# virtual subclasses of the abstract `jax.Array` but NOT of the concrete
+# ArrayImpl the registrations above use. Mirror every ArrayImpl registration
+# onto jax.Array so tangent.utils' isinstance fallback resolves tracers
+# (tangent.grad(f, compile='jax')).
+def _mirror_registrations_onto_abstract():
+    abstract = jax.Array
+    if abstract is ArrayType:
+        return
+    single = (
+        _utils.unbroadcasters,
+        _utils.unreducers,
+        _utils.shape_functions,
+        _utils.grad_initializers,
+        _utils.matmul_grad_xs,
+        _utils.matmul_grad_ys,
+    )
+    for registry in single:
+        if ArrayType in registry and abstract not in registry:
+            registry[abstract] = registry[ArrayType]
+    for registry in (_utils.grad_adders, _utils.shape_checkers):
+        for (left, right), fn in list(registry.items()):
+            new_left = abstract if left is ArrayType else left
+            new_right = abstract if right is ArrayType else right
+            if (new_left, new_right) != (left, right) and (new_left, new_right) not in registry:
+                registry[(new_left, new_right)] = fn
+
+
+_mirror_registrations_onto_abstract()

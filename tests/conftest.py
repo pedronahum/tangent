@@ -27,6 +27,12 @@ import tfe_utils
 TEST_SEED = int(os.environ.get('TANGENT_TEST_SEED', '20260908'))
 np.random.seed(TEST_SEED)
 
+# The persistent disk cache must not leak between test runs (a disk hit skips
+# compilation, so compile-time warnings would not be re-emitted) or pollute
+# the developer's real ~/.cache. Tests that exercise the disk cache re-enable
+# it explicitly with monkeypatch.
+os.environ.setdefault('TANGENT_DISK_CACHE', '0')
+
 
 # Functions excluded from the parametrized gradient harness. Each entry carries
 # a reason. (Previously this was a silent blacklist that hid broken behavior -

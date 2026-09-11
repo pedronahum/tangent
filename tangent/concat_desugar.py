@@ -144,6 +144,13 @@ def _collect_literal_lists(func_ast):
         elif isinstance(node, gast.AugAssign):
             if isinstance(node.target, gast.Name):
                 mutated.add(node.target.id)
+        elif isinstance(node, gast.Call):
+            # A method call on the variable (xs.append(v), xs.pop(), ...) can
+            # mutate it - this pass runs before list_method_desugar rewrites
+            # those into rebindings, so without this check a dynamically built
+            # list was inlined as its initial `[]` literal.
+            if isinstance(node.func, gast.Attribute) and isinstance(node.func.value, gast.Name):
+                mutated.add(node.func.value.id)
 
     safe = {}
     for name, value in literal_value.items():

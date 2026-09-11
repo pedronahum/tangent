@@ -110,6 +110,13 @@ def append_args(node, node_list):
     return ArgAppend(node_list).visit(node)
 
 
+def is_checkpoint_statement(node):
+    """Whether a `with` statement is the `tangent.checkpoint()` annotation."""
+    return all(
+        anno.getanno(item.context_expr, 'func', None) is utils.checkpoint for item in node.items
+    )
+
+
 def is_insert_grad_of_statement(node):
     """Check whether a context manager calls `insert_grad_of`.
 

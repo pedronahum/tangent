@@ -247,29 +247,29 @@ def tangent_np_stack_seq(z, axis, *arrays):
     d[z] = tangent.np_stack_seq(axis, *d[arrays])
 
 
-# The list-argument forms are only reachable when the desugar pass could not
-# rewrite the call (e.g. the list is built dynamically). Raise a clear error
-# rather than silently producing zero gradients (which is what the previous
-# loop-style adjoint did: gradient templates cannot assign through a loop
-# variable).
+# The list-argument forms are reached when the desugar pass could not rewrite
+# the call into the varargs helpers - i.e. the list is built dynamically
+# (appends in a loop). List gradients are first-class now, so the adjoint
+# hands back a *list* of per-element gradients, which flows through the
+# list_append machinery like any other list.
 @adjoint(numpy.concatenate)
-def concatenate(dz, arrays, axis=0):
-    """Not differentiable: pass a list literal so it can be desugared."""
-    raise NotImplementedError(
-        'tangent can only differentiate numpy.concatenate/stack when the '
-        'list of arrays is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.'
-    )
+def concatenate(z, arrays, axis=0):
+    d[arrays] = tangent.unconcatenate(d[z], arrays, axis)
 
 
 @adjoint(numpy.stack)
-def stack(dz, arrays, axis=0):
-    """Not differentiable: pass a list literal so it can be desugared."""
-    raise NotImplementedError(
-        'tangent can only differentiate numpy.concatenate/stack when the '
-        'list of arrays is a literal. Bind the list to a variable assigned '
-        'once from a literal, or pass a list literal directly.'
-    )
+def stack(z, arrays, axis=0):
+    d[arrays] = tangent.unstack_list(d[z], axis)
+
+
+@tangent_(numpy.concatenate)
+def tconcatenate(z, arrays, axis=0):
+    d[z] = numpy.concatenate(d[arrays], axis)
+
+
+@tangent_(numpy.stack)
+def tstack(z, arrays, axis=0):
+    d[z] = numpy.stack(d[arrays], axis)
 
 
 # ============================================================================

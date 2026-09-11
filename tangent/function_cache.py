@@ -517,6 +517,18 @@ def cached_grad(original_grad):
                 print(f"[Cache] Retrieved cached gradient function for {func.__name__}")
             return cached_func
 
+        # Memory miss: try the persistent disk cache (generated source keyed
+        # by the same tuple), skipping the whole AD pipeline on a hit.
+        from tangent import disk_cache
+
+        disk_result = disk_cache.load(cache_key, func, verbose)
+        if disk_result is not None:
+            if verbose >= 1:
+                print(f"[Cache] Loaded gradient source from disk for {func.__name__}")
+            wrapped_disk = wrap_with_error_handler(disk_result)
+            _add_to_cache(cache_key, wrapped_disk)
+            return wrapped_disk
+
         # Cache miss - compute the gradient
         if verbose >= 1:
             print(f"[Cache] Computing new gradient function for {func.__name__}")
@@ -534,6 +546,7 @@ def cached_grad(original_grad):
             output_index=output_index,
             output_weights=output_weights,
         )
+        disk_cache.store(cache_key, result)
 
         # Wrap the gradient function to catch and enhance dict construction errors
         wrapped_result = wrap_with_error_handler(result)
@@ -549,4 +562,18 @@ def cached_grad(original_grad):
 
         return wrapped_result
 
-    return wrapper
+    @functools.wraps(original_grad)
+    def outer(func, *args, compile='python', **kwargs):
+        # `compile=` lowers the (possibly cached) Python gradient into a
+        # backend compiler; the cache stores the plain Python function, so
+        # different `compile=` values share one compilation of the adjoint.
+        from tangent import lowering
+
+        df = wrapper(func, *args, **kwargs)
+        try:
+            df.__tangent_primal__ = func
+        except (AttributeError, TypeError):
+            pass
+        return lowering.lower(df, compile)
+
+    return outer

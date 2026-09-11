@@ -13,6 +13,18 @@ registration hooks for extending Tangent with new gradients and tensor types.
 
 ::: tangent.grad_util.jvp
 
+## Custom gradients
+
+::: tangent.custom_vjp.custom_vjp
+
+::: tangent.custom_vjp.stop_gradient
+
+## Debugging
+
+::: tangent.explain.explain
+
+::: tangent.explain.source_map
+
 ## Extending Tangent
 
 ### Registering gradient templates
@@ -60,6 +72,8 @@ registries in `tangent.utils`:
 ## Utilities
 
 ::: tangent.backend_status
+
+::: tangent.utils.checkpoint
 
 `tangent.grads.UNIMPLEMENTED_ADJOINTS` / `tangent.tangents.UNIMPLEMENTED_TANGENTS`
 hold the ops known to lack a derivative in each mode; calls to them raise the

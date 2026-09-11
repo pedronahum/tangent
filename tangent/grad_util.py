@@ -621,13 +621,21 @@ def _autodiff_uncached(
             node = optimization.optimize(node)
 
     node = comments.remove_repeated_comments(node)
+    source = quoting.to_source(node)
     if verbose >= 1:
-        print(quoting.to_source(node))
+        print(source)
 
-    # Compile and return
-    module = compile_.compile_file(node, namespace)
+    # Compile and return. The generated source travels with the function
+    # (df.__tangent_source__): the persistent disk cache stores it, `compile=`
+    # lowers it, and tangent.explain()/the source map read it.
+    module = compile_.compile_file(source, namespace)
+    entry_names = [stmt.name for stmt in node.body]
     if mode == 'forward' or motion == 'joint':
-        return getattr(module, node.body[0].name)
+        df = getattr(module, node.body[0].name)
+        df.__tangent_source__ = source
+        df.__tangent_entries__ = entry_names
+        df.__tangent_motion__ = motion
+        return df
     else:
         # Compiling the top-level function in split mode makes no sense, but we use
         # it for testing; hence we don't care about the source being readable
@@ -646,6 +654,9 @@ def _autodiff_uncached(
                 (dx,) = dx
             return dx
 
+        df.__tangent_source__ = source
+        df.__tangent_entries__ = entry_names
+        df.__tangent_motion__ = motion
         return df
 
 

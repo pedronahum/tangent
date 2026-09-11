@@ -42,6 +42,7 @@ EXPECTED_REVERSE = [
     # break/continue are lowered into guard flags (break converts the loop to
     # an indexed while) after the iterator desugarings, before resolution.
     'loop_exit_desugar',
+    'checkpoint_annotation',
     'resolve_calls',
     'explicit_loop_indexes',
     'fence',
@@ -50,7 +51,7 @@ EXPECTED_REVERSE = [
 
 # Forward mode additionally lowers ternaries, after all other desugarings
 # and before call resolution.
-EXPECTED_FORWARD = EXPECTED_REVERSE[:12] + ['ifexp_desugar'] + EXPECTED_REVERSE[12:]
+EXPECTED_FORWARD = EXPECTED_REVERSE[:13] + ['ifexp_desugar'] + EXPECTED_REVERSE[13:]
 
 
 def test_reverse_pass_order():

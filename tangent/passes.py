@@ -43,6 +43,7 @@ import collections
 from tangent import anf as anf_
 from tangent import annotate
 from tangent import chained_assign_desugar
+from tangent import checkpoint_annotation
 from tangent import class_desugar
 from tangent import comprehension_desugar
 from tangent import concat_desugar
@@ -145,6 +146,12 @@ def _list_method_desugar(node, ctx):
     return list_method_desugar.desugar_list_methods(node)
 
 
+def _checkpoint_annotation(node, ctx):
+    """Unwrap `with tangent.checkpoint():` into force_checkpoint-annotated
+    loops, before the dataflow analyses (which treat `with` as opaque)."""
+    return checkpoint_annotation.strip_checkpoint_annotations(node)
+
+
 def _loop_exit_desugar(node, ctx):
     """Lower break/continue into guard flags (while-conversion for break).
 
@@ -219,6 +226,7 @@ _REGISTRY = [
     Pass('concat_desugar', _concat_desugar),
     Pass('list_method_desugar', _list_method_desugar),
     Pass('loop_exit_desugar', _loop_exit_desugar),
+    Pass('checkpoint_annotation', _checkpoint_annotation),
     Pass('ifexp_desugar', _ifexp_desugar, modes=frozenset(('forward',))),
     Pass('resolve_calls', _resolve_calls),
     Pass('explicit_loop_indexes', _explicit_loop_indexes),

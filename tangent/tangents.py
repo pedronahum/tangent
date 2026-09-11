@@ -563,6 +563,11 @@ def tastype(z, x, y):
     d[z] = tangent.astype(d[x], d[y])
 
 
+@tangent_(tangent.stop_gradient)
+def tstop_gradient(y, x):
+    d[y] = tangent.init_grad(y)
+
+
 # Non-differentiable shape/constructor functions (see non_differentiable.py):
 # they produce constants or metadata, so their tangents are zeros of the same
 # shape (and for len, the integer zero).

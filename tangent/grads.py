@@ -946,6 +946,11 @@ def acopy(z, x):
     d[x] = tangent.copy(d[z])
 
 
+@adjoint(tangent.stop_gradient)
+def astop_gradient(y, x):
+    d[x] = tangent.init_grad(x)
+
+
 # The sort helpers are linear permutations of their gradient argument and
 # inverses of each other, so their adjoints form a closed pair - second and
 # higher derivatives through np.sort never leave the set. (The permutation is

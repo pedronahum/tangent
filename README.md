@@ -27,7 +27,9 @@ Tangent performs **source-to-source** automatic differentiation: it transforms y
 - **🔍 Debuggable**: Step through gradient computation line by line
 - **🎨 Visual**: Interactive computation graphs and gradient flow diagrams
 - **🔧 Flexible**: One API across NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad
-- **🐍 Pythonic**: Control flow, closures, classes, comprehensions, and second and third derivatives
+- **🐍 Pythonic**: Control flow (`break`/`continue`/early `return`), closures, classes, list building, comprehensions, and second and third derivatives
+- **⚡ Compilable**: `grad(f, compile='jax')` runs the readable adjoint at `jax.grad`+`jit` speed; a persistent disk cache amortizes compilation across processes
+- **🧩 Extensible**: `@tangent.custom_vjp`, `stop_gradient`, `with tangent.checkpoint():`, and `tangent.explain()` for gradient forensics
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 

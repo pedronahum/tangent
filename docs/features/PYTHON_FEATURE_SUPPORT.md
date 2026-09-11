@@ -611,7 +611,7 @@ Comprehensive tests available:
 - **Fully Supported**: 34+ features (including early returns, tuples, membership/identity operators, f-strings, dict `.get()`, `sum(d.values())`, set literals, constant-range list/set/dict comprehensions, and subscript assignment such as `a[i] = x` / `a[sl] = x`)
 - **Partially Supported**: 1 feature (some loops)
 - **Not Supported**: 10+ features
-- **Overall Coverage**: ~62% of common Python features
+- **Overall Coverage**: the everyday numerical-Python surface is essentially complete (loops with break/continue/return, list building, dynamic comprehensions, closures, classes, containers in and out); the remaining rejections are deliberate (try/except, generators, recursion, nested defs)
 
 > Note: features that cannot be differentiated are rejected with a clear,
 > actionable error rather than silently returning a wrong gradient. Nested

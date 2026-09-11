@@ -138,7 +138,12 @@ def unbroadcast(array, like):
         # A zero gradient stays zero under any (linear) shape operation; passing
         # the sentinel through keeps add_grad's identity handling intact.
         return array
-    unbroadcaster = unbroadcasters[type(array)]
+    unbroadcaster = unbroadcasters.get(type(array))
+    if unbroadcaster is None:
+        unbroadcaster = _resolve_single_by_isinstance(unbroadcasters, array)
+        if unbroadcaster is None:
+            raise KeyError(type(array))
+        unbroadcasters[type(array)] = unbroadcaster
     if (
         type(array) is not type(like)
         and type(like) in unbroadcasters
@@ -218,7 +223,12 @@ def unreduce(array, shape, axis, keepdims):
     """
     if isinstance(array, ZeroGradient):
         return array
-    unreducer = unreducers[type(array)]
+    unreducer = unreducers.get(type(array))
+    if unreducer is None:
+        unreducer = _resolve_single_by_isinstance(unreducers, array)
+        if unreducer is None:
+            raise KeyError(type(array))
+        unreducers[type(array)] = unreducer
     return unreducer(array, shape, axis, keepdims)
 
 
@@ -246,8 +256,10 @@ def unreduce_like(array, original_array, axis, keepdims):
         unreducer = unreducers[otype]
         shape = shape_functions[otype]
     else:
-        unreducer = unreducers[atype]
-        shape = shape_functions[atype]
+        unreducer = unreducers.get(atype) or _resolve_single_by_isinstance(unreducers, array)
+        shape = shape_functions.get(atype) or _resolve_single_by_isinstance(shape_functions, array)
+        if unreducer is None or shape is None:
+            raise KeyError(atype)
     return unreducer(array, shape(original_array), axis, keepdims)
 
 
@@ -626,7 +638,13 @@ def init_grad(obj, allow_lazy_initializer=False):
         # TODO: fixes.py appears to pass None value and expect 0.0 back. Bug?
         return 0.0
 
-    initializer, supports_lazy_initializer = grad_initializers[type(obj)]
+    entry = grad_initializers.get(type(obj))
+    if entry is None:
+        entry = _resolve_single_by_isinstance(grad_initializers, obj)
+        if entry is None:
+            raise KeyError(type(obj))
+        grad_initializers[type(obj)] = entry
+    initializer, supports_lazy_initializer = entry
     if supports_lazy_initializer:
         if isinstance(obj, ZeroGradient):
             if allow_lazy_initializer:
@@ -771,7 +789,32 @@ def add_grad(left, right):
         return right
     if right_type is ZeroGradient:
         return left
-    return grad_adders[(left_type, right_type)](left, right)
+    adder = grad_adders.get((left_type, right_type))
+    if adder is None:
+        # Exact-type miss: resolve by isinstance and cache the concrete pair.
+        # Compiler wrappers substitute subclasses of the registered types at
+        # run time (jax.jit traces with Tracer subclasses, torch.compile with
+        # FakeTensor), so registrations on the public classes must apply.
+        adder = _resolve_pair_by_isinstance(grad_adders, left, right)
+        if adder is None:
+            raise KeyError((left_type, right_type))
+        grad_adders[(left_type, right_type)] = adder
+    return adder(left, right)
+
+
+def _resolve_pair_by_isinstance(registry, left, right):
+    for (lt, rt), fn in list(registry.items()):
+        if isinstance(lt, type) and isinstance(rt, type):
+            if isinstance(left, lt) and isinstance(right, rt):
+                return fn
+    return None
+
+
+def _resolve_single_by_isinstance(registry, value):
+    for t, fn in list(registry.items()):
+        if isinstance(t, type) and isinstance(value, t):
+            return fn
+    return None
 
 
 # The values are functions fn(dz, x, y) returning the partial gradient of
@@ -799,6 +842,10 @@ def matmul_grad_x(dz, x, y):
     """Partial gradient of z = x @ y with respect to x, backend-dispatched."""
     grad_fn = matmul_grad_xs.get(type(x))
     if grad_fn is None:
+        grad_fn = _resolve_single_by_isinstance(matmul_grad_xs, x)
+        if grad_fn is not None:
+            matmul_grad_xs[type(x)] = grad_fn
+    if grad_fn is None:
         raise NotImplementedError(
             'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
             'matmul function (e.g. x.matmul(y)) or register one with '
@@ -810,6 +857,10 @@ def matmul_grad_x(dz, x, y):
 def matmul_grad_y(dz, x, y):
     """Partial gradient of z = x @ y with respect to y, backend-dispatched."""
     grad_fn = matmul_grad_ys.get(type(y))
+    if grad_fn is None:
+        grad_fn = _resolve_single_by_isinstance(matmul_grad_ys, y)
+        if grad_fn is not None:
+            matmul_grad_ys[type(y)] = grad_fn
     if grad_fn is None:
         raise NotImplementedError(
             'No `@` (matmul) gradient registered for type %s. Use the backend\'s '
@@ -917,7 +968,12 @@ def shapes_match(a, b):
         # produce a clean error instead of a KeyError from the checker registry.
         return False
     else:
-        shape_checker = shape_checkers[(type(a), type(b))]
+        shape_checker = shape_checkers.get((type(a), type(b)))
+        if shape_checker is None:
+            shape_checker = _resolve_pair_by_isinstance(shape_checkers, a, b)
+            if shape_checker is None:
+                raise KeyError((type(a), type(b)))
+            shape_checkers[(type(a), type(b))] = shape_checker
         return shape_checker(a, b)
 
 
@@ -1156,6 +1212,34 @@ def transpose_inverse_axes(axes):
 non_differentiable.register_non_differentiable_functions(
     init_grad, array_size, Stack, transpose_inverse_axes
 )
+
+
+class _CheckpointContext(object):
+    """Runtime no-op for `with tangent.checkpoint():` (see reverse_ad)."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def checkpoint():
+    """Annotation: segment-checkpoint the loops inside this block.
+
+    Used as a context manager around a loop::
+
+        with tangent.checkpoint():
+            for i in range(n):
+                ...
+
+    In the primal it is a no-op. During reverse-mode differentiation it forces
+    segment (sqrt-n) checkpointing for the loops directly inside it,
+    regardless of the `min_length` threshold and without needing
+    `grad(..., checkpoint=True)` - and, because the user opted in explicitly,
+    it also applies to loops whose length is not a compile-time constant.
+    """
+    return _CheckpointContext()
 
 
 def insert_grad_of(var):
@@ -1532,6 +1616,20 @@ def einsum_grad(equation, argnum, dy, x, y):
                 dx = numpy.expand_dims(dx, pos)
         dx = numpy.broadcast_to(dx, numpy.shape(target))
     return dx
+
+
+def unconcatenate(dz, arrays, axis=0):
+    """Adjoint of `z = np.concatenate(arrays, axis)` for a dynamic list:
+    split the gradient back into one piece per input element."""
+    sizes = [numpy.shape(a)[axis] for a in arrays]
+    splits = list(numpy.cumsum(sizes)[:-1])
+    return list(numpy.split(numpy.asarray(dz), splits, axis=axis))
+
+
+def unstack_list(dz, axis=0):
+    """Adjoint of `z = np.stack(arrays, axis)`: unstack into a list."""
+    dz = numpy.asarray(dz)
+    return [numpy.squeeze(piece, axis=axis) for piece in numpy.split(dz, dz.shape[axis], axis)]
 
 
 def eigvalsh_grad(A, dw):
