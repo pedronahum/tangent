@@ -1,49 +1,14 @@
 # Changelog
 
-## 0.2.0 (2026-09-11)
+## 0.3.0 (2026-09-11)
 
-First version of this fork to be numbered ahead of Google's final PyPI release
-(0.1.9, December 2017), so that installs from this repository upgrade cleanly
-over the abandoned upstream package.
+Everything below shipped since the 0.2.0 release: differentiable ODEs and
+shape checking, backend-compiled adjoints, a persistent disk cache, custom
+gradient rules, while-loop and annotated checkpointing, SciPy support, a
+notebook/REPL front door, and IR-invariant verification.
 
-### Highlights since upstream 0.1.9
+### Added in 0.3.0
 
-- **New backends**: JAX, TensorFlow 2.x (eager), PyTorch, Keras 3
-  (backend-agnostic `keras.ops`), and tinygrad (method-based `Tensor.*` API,
-  including conv2d/max_pool2d/avg_pool2d/layernorm/batchnorm).
-- **Higher-order differentiation**: second and third derivatives, Hessian-vector
-  products, forward-over-reverse.
-- **Language coverage**: classes and inheritance, closures, lambdas,
-  comprehensions, `enumerate`/`zip`, f-strings, chained and augmented
-  assignment (including subscript targets), early returns, tuple unpacking,
-  the `@` operator, pytree (container) arguments — tracked in
-  `docs/features/PYTHON_FEATURE_SUPPORT.md` and enforced by
-  `tests/test_feature_matrix.py`.
-- **Gradient checkpointing**: `grad(f, checkpoint=True)` performs segment
-  (√n) recomputation on eligible counted loops — O(√n) peak tape memory with
-  identical gradients (96.8% peak reduction measured). See
-  `docs/checkpointing_user_guide.md` and the "Real gradient checkpointing"
-  entry below.
-- **Optimizations**: dead-code elimination, common-subexpression elimination,
-  algebraic simplification (SymPy), and a straight-line coarsening prototype.
-- **Tooling**: gradient-flow and computation-graph visualization,
-  gradient-function caching, clear rejection errors for non-differentiable
-  syntax, a finite-difference oracle for backend adjoints.
-- **Modernization**: Python 3.9–3.13, gast 0.6/0.7, NumPy 2.x, pyproject-based
-  packaging, GitHub Actions CI, 75k+ parameterized tests.
-
-### Added in 0.2.0
-
-- **Differentiable list building**: `xs.append(v)` and `v = xs.pop()` are now
-  differentiated (previously `.append()` was silently treated as
-  non-differentiable, returning zero gradients). They are desugared into
-  rebindings through three new primitives (`tangent.list_append` /
-  `list_last` / `list_init`) whose adjoints are written in terms of each
-  other, so forward mode and second/third derivatives work, including appends
-  inside dynamic-length loops. In-place mutations that cannot be expressed as
-  a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
-  an attribute/subscript) are rejected with a clear error instead of silently
-  dropping gradients.
 - **IR invariant verification** (`tangent/verify.py`): the frontend is a
   sequence of source-to-source passes, each assuming the previous ones'
   output shape - "works until two passes disagree." Each pass's output
@@ -142,6 +107,51 @@ over the abandoned upstream package.
   data-dependent scalar recurrence, compile and eval time reported
   separately; results in the Performance guide (tangent is 6x faster than
   eager torch on the recurrence at 1% of JAX's unroll-compile cost).
+
+## 0.2.0 (2026-09-11)
+
+First version of this fork to be numbered ahead of Google's final PyPI release
+(0.1.9, December 2017), so that installs from this repository upgrade cleanly
+over the abandoned upstream package.
+
+### Highlights since upstream 0.1.9
+
+- **New backends**: JAX, TensorFlow 2.x (eager), PyTorch, Keras 3
+  (backend-agnostic `keras.ops`), and tinygrad (method-based `Tensor.*` API,
+  including conv2d/max_pool2d/avg_pool2d/layernorm/batchnorm).
+- **Higher-order differentiation**: second and third derivatives, Hessian-vector
+  products, forward-over-reverse.
+- **Language coverage**: classes and inheritance, closures, lambdas,
+  comprehensions, `enumerate`/`zip`, f-strings, chained and augmented
+  assignment (including subscript targets), early returns, tuple unpacking,
+  the `@` operator, pytree (container) arguments — tracked in
+  `docs/features/PYTHON_FEATURE_SUPPORT.md` and enforced by
+  `tests/test_feature_matrix.py`.
+- **Gradient checkpointing**: `grad(f, checkpoint=True)` performs segment
+  (√n) recomputation on eligible counted loops — O(√n) peak tape memory with
+  identical gradients (96.8% peak reduction measured). See
+  `docs/checkpointing_user_guide.md` and the "Real gradient checkpointing"
+  entry below.
+- **Optimizations**: dead-code elimination, common-subexpression elimination,
+  algebraic simplification (SymPy), and a straight-line coarsening prototype.
+- **Tooling**: gradient-flow and computation-graph visualization,
+  gradient-function caching, clear rejection errors for non-differentiable
+  syntax, a finite-difference oracle for backend adjoints.
+- **Modernization**: Python 3.9–3.13, gast 0.6/0.7, NumPy 2.x, pyproject-based
+  packaging, GitHub Actions CI, 75k+ parameterized tests.
+
+### Added in 0.2.0
+
+- **Differentiable list building**: `xs.append(v)` and `v = xs.pop()` are now
+  differentiated (previously `.append()` was silently treated as
+  non-differentiable, returning zero gradients). They are desugared into
+  rebindings through three new primitives (`tangent.list_append` /
+  `list_last` / `list_init`) whose adjoints are written in terms of each
+  other, so forward mode and second/third derivatives work, including appends
+  inside dynamic-length loops. In-place mutations that cannot be expressed as
+  a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
+  an attribute/subscript) are rejected with a clear error instead of silently
+  dropping gradients.
 - **Distribution, docs site, and release pipeline**: the package is now
   distributed on PyPI as **`tangent-ad`** (the import name stays `tangent`;
   PyPI's `tangent` is the abandoned 2017 upstream release - uninstall it

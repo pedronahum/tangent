@@ -2,7 +2,7 @@
 
 [![Python 3.9–3.13](https://img.shields.io/badge/python-3.9%20--%203.13-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/pedronahum/tangent/actions/workflows/ci.yml/badge.svg)](https://github.com/pedronahum/tangent/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-75%2C000%2B%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-79%2C000%2B%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Docs](https://img.shields.io/badge/docs-pedronahum.github.io%2Ftangent-teal.svg)](https://pedronahum.github.io/tangent/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb)
@@ -31,6 +31,8 @@ Tangent performs **source-to-source** automatic differentiation: it transforms y
 - **⚡ Compilable**: `grad(f, compile='jax')` runs the readable adjoint at `jax.grad`+`jit` speed; a persistent disk cache amortizes compilation across processes
 - **🧩 Extensible**: `@tangent.custom_vjp`, `stop_gradient`, `with tangent.checkpoint():`, and `tangent.explain()` for gradient forensics
 - **🔬 Differentiable simulators**: `tangent.odeint` differentiates ODE solutions via the adjoint method (constant memory in step count)
+- **🛡️ Shape-checked**: `tangent.check_shapes(f, x)` catches rank/broadcast/matmul bugs at compile time, pointing at the offending line
+- **📓 Works anywhere**: `@tangent.function` captures source so gradients work in notebooks, the REPL, and `exec`-defined code; `python -m tangent doctor` diagnoses setup
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 
@@ -415,21 +417,20 @@ Documented honestly — see [Python Feature Support](docs/features/PYTHON_FEATUR
   value's structure at runtime). Third and higher derivatives through
   container *outputs* are untested territory.
 - **TF seed dtype** — see [Backend Support](#-backend-support).
-- **`jnp.concatenate`/`jnp.stack`** differentiate when given a list literal, or
-  a variable assigned exactly once to a literal and never mutated; dynamically
-  built lists raise `NotImplementedError`.
+- **SciPy** support (`scipy.special`, `scipy.linalg.solve`/`inv`) loads when
+  SciPy is installed; see [Backend Support](#-backend-support).
 - **Gradient checkpointing** (`tangent.grad(f, checkpoint=True)`) uses segment
   (√n) recomputation: eligible loops run untaped with state snapshots every
   ceil(√n) iterations, and the backward pass replays one segment at a time —
   peak tape memory drops from O(n) to O(√n) with *identical* gradients
   (measured: 49.2 MB → 1.6 MB, a 96.8% reduction, on a 2000-iteration loop
   carrying a 1000-float state; see `benchmarks/checkpointing_memory.py`).
-  Eligible today: `for i in range(...)` loops with constant bounds of ≥ 100
-  iterations (configurable); other loops fall back to full taping. First-order
-  reverse mode only — higher-order derivatives of a checkpointed gradient are
-  not supported. `tangent.grad_with_checkpointing` remains a
-  `NotImplementedError` stub, and `tangent.checkpointed_loop` a manual helper.
-  See the [Checkpointing User Guide](docs/checkpointing_user_guide.md).
+  Eligible `for` loops (constant bounds ≥ 100) use segment checkpointing;
+  `while` loops and data-dependent iteration use online (Stumm–Walther)
+  checkpointing under a fixed snapshot budget; `with tangent.checkpoint():`
+  annotates specific loops (any runtime bound). First-order reverse mode only —
+  higher-order derivatives of a checkpointed gradient are not supported. See
+  the [Checkpointing User Guide](docs/checkpointing_user_guide.md).
 
 ---
 
@@ -509,10 +510,10 @@ pytest tests/test_keras.py           # Keras tests (any backend)
 pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
-Current status: **75,000+ parameterized test cases pass, with zero failures
-and zero expected-failure (`xfail`) markers** (last local measurement: 75,981
-passed, 562 skipped, with NumPy, JAX, PyTorch-CPU, tinygrad, Keras 3 and
-SymPy installed; TensorFlow-dependent cases run in CI). CI runs the suite on
+Current status: **79,000+ parameterized test cases pass, with zero failures
+and zero expected-failure (`xfail`) markers** (last local measurement: 79,710
+passed, 55 skipped, with NumPy, JAX, PyTorch-CPU, tinygrad, Keras 3, SymPy,
+SciPy and TensorFlow all installed). CI runs the suite on
 Python 3.9–3.13 and exercises the cross-backend catalog against every
 installed backend.
 
@@ -540,7 +541,7 @@ tangent/
 │   ├── function_cache.py         # Gradient-function caching
 │   ├── optimizations/            # DCE, CSE, strength reduction, algebraic
 │   └── checkpointing_simple.py   # Manual forward-pass checkpointing helpers
-├── tests/                        # 84 test modules (75k+ cases)
+├── tests/                        # 90+ test modules (79k+ cases)
 │   ├── test_backend_coverage.py  # Cross-backend op catalog
 │   ├── test_torch.py             # PyTorch tests
 │   ├── test_keras.py             # Keras tests
