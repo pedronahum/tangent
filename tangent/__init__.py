@@ -227,6 +227,14 @@ try:
 except (ImportError, AttributeError) as e:
     _optional_backend_failed('tinygrad', e, ['tinygrad'], 'tinygrad')
 
+# SciPy special-function and linalg gradients (optional)
+try:
+    from tangent import scipy_extensions  # noqa: F401
+
+    _backend_status['scipy'] = 'available'
+except (ImportError, AttributeError) as e:
+    _optional_backend_failed('scipy', e, ['scipy'], 'scipy')
+
 # Extended NumPy gradients (only requires numpy, so a failure here is a bug)
 try:
     from tangent import numpy_extended

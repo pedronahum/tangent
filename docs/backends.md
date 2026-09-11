@@ -36,6 +36,13 @@ finite-difference oracles for every installed backend, and the elementwise
 rules are generated from one backend-neutral table
 (`tangent/elementwise_rules.py`) so definitions cannot drift.
 
+## SciPy
+
+With SciPy installed, `scipy.special` (erf/erfc, gammaln/gamma/digamma,
+expit/logit, xlogy, logsumexp) and `scipy.linalg` (solve, inv) differentiate
+too - the scientific/statistical function set. See the changelog for the full
+list.
+
 ## Backend notes
 
 - **The `@` operator** works for NumPy, JAX, TensorFlow, PyTorch and

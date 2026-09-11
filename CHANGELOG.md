@@ -44,6 +44,14 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **SciPy gradients** (`tangent/scipy_extensions.py`, optional): adjoints and
+  forward-mode tangents for `scipy.special` - the error-function family (erf,
+  erfc), the gamma family (gammaln, gamma, digamma/psi), the logistic pair
+  (expit, logit), xlogy, and the logsumexp reduction (adjoint routes through
+  the softmax) - plus `scipy.linalg.solve` (vector and matrix RHS) and
+  `scipy.linalg.inv`. Scientific and statistical code written against SciPy
+  now differentiates like NumPy code. All FD-verified; loaded silently when
+  SciPy is present.
 - **Works in notebooks, the REPL, and dynamic code** (`@tangent.function`):
   source-to-source AD needs the function's source, which `inspect.getsource`
   cannot retrieve in the plain REPL, in `exec`-defined functions, or after the
