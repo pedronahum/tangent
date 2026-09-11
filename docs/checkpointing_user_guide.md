@@ -8,6 +8,32 @@ pass (O(n) memory), checkpointing stores only a small number of "checkpoints"
 (O(√n) memory) and recomputes intermediate values during the backward pass as
 needed.
 
+## While-loops and data-dependent iteration
+
+For loops whose trip count is not known ahead of time - convergence loops,
+fixed-point iterations, adaptive solvers - Tangent uses **online**
+(Stumm-Walther) checkpointing: it keeps loop-carried-state snapshots under a
+fixed budget and thins them geometrically as the loop runs (keep every
+second snapshot, double the interval), so peak tape memory stays bounded by
+`2 * budget` snapshots however many iterations occur.
+
+    def solve(x, tol):
+        state = np.zeros(1000)
+        err = 1e9
+        with tangent.checkpoint():          # or grad(solve, checkpoint=True)
+            while err > tol:
+                new = step(state, x)
+                err = np.sum(np.abs(new - state))
+                state = new
+        return np.sum(state)
+
+    df = tangent.grad(solve)   # O(budget) tape, gradients exact
+
+The default budget is 32 snapshots (override with
+`checkpoint_config={'budget': N}`). Gradients are identical to the
+fully-taped path - the backward pass replays each segment once with taping.
+`break` inside the while-loop is supported (it lowers to guard flags first).
+
 ## Annotating a loop directly
 
 The `with tangent.checkpoint():` annotation forces segment checkpointing for
@@ -68,8 +94,7 @@ identically when called directly.
 - **`tangent.grad_with_checkpointing`** raises `NotImplementedError` for any
   function containing a loop; use `tangent.grad(f, checkpoint=True)` instead.
   For loop-free functions it simply delegates to `tangent.grad`.
-- Checkpointing of `while` loops, non-`range` iterables, or loops whose
-  length is not a compile-time constant (they fall back to full taping).
+- Checkpointing of non-`range` iterables (they fall back to full taping).
 
 
 ## Quick start: automatic checkpointing in `grad`

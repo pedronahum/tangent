@@ -44,6 +44,18 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Checkpointing for while-loops and data-dependent iteration**: online
+  (Stumm-Walther) checkpointing handles loops whose trip count is unknown at
+  compile time (convergence loops, fixed-point solvers). Loop-carried-state
+  snapshots are kept under a fixed budget and geometrically thinned as the
+  loop runs, so peak tape memory stays bounded by `2 * budget` snapshots for
+  any number of iterations (97%+ reduction measured on a 3500-iteration
+  solver), with gradients identical to the fully-taped path. Engaged by
+  `with tangent.checkpoint():` or `grad(..., checkpoint=True)`; `break`
+  inside the loop is supported. A latent bug was fixed en route: FixGrad
+  could zero-initialize the adjoint's seed parameter when its only use was
+  buried in nested loops, which now never happens (a parameter is always
+  defined).
 - **Compile the adjoint, don't just print it**: `tangent.grad(f,
   compile='jax'|'torch'|'tinygrad')` lowers the generated gradient into a
   backend compiler while keeping the readable source attached

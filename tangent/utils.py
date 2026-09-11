@@ -1689,6 +1689,38 @@ def num_segments(n, seg):
     return -(-n // seg)
 
 
+def online_store(snaps, i, snap, seg, budget=32):
+    """Online checkpoint thinning for loops of unknown length (while-loops).
+
+    Appends `(i, snap)` and, when the snapshot count exceeds `2 * budget`,
+    keeps every second entry and doubles the snapshot interval - the
+    geometric thinning of Stumm & Walther's online checkpointing. Kept
+    indices remain aligned: entries were spaced `seg` apart, so keeping every
+    other one spaces them `2 * seg` apart, exactly the new interval.
+
+    Returns the (possibly thinned) snapshot list and the new interval.
+    Memory stays bounded by `2 * budget` snapshots however long the loop
+    runs, and each segment is replayed at most once in the backward pass.
+    """
+    snaps.append((i, snap))
+    if len(snaps) > 2 * budget:
+        snaps = snaps[::2]
+        seg = seg * 2
+    return snaps, seg
+
+
+def online_segment(snaps, s, total):
+    """Bounds and state of the s-th segment *counting from the end*.
+
+    Returns (start, length, state): the iteration index the segment starts
+    at, how many iterations it spans, and the state snapshot to restore.
+    """
+    idx = len(snaps) - 1 - s
+    start, state = snaps[idx]
+    end = total if idx + 1 >= len(snaps) else snaps[idx + 1][0]
+    return start, end - start, state
+
+
 def snapshot(values):
     """Copy loop-carried state (a tuple of variables) for a checkpoint.
 

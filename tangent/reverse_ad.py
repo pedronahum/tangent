@@ -109,6 +109,20 @@ def get_push_pop_stack():
     return push, pop, op_id
 
 
+def _clean_copy(stmts):
+    """Deep-copy statements for a checkpointed template's untaped forward
+    sweep, stripping the dataflow annotations the copies inherited: stale
+    `defined`/`active` facts from the pre-AD analyses would otherwise poison
+    the convergence checks of the analyses that run later on the generated
+    primal (a hash collision with a stale out-set stops propagation early
+    and misreports loop-body temporaries as definitely defined)."""
+    copied = [copy.deepcopy(stmt) for stmt in stmts]
+    for stmt in copied:
+        for n in gast.walk(stmt):
+            anno.clearanno(n)
+    return copied
+
+
 class ReverseAD(object):
     """Generate a primal and adjoint for a given AST tree.
 
@@ -363,7 +377,7 @@ class ReverseAD(object):
                 # nothing to save by checkpointing.
                 use_checkpointing = False
             else:
-                orig_body = [copy.deepcopy(stmt) for stmt in node.body]
+                orig_body = _clean_copy(node.body)
 
         # Construct the primal and adjoint of the loop
         body, adjoint_body = self.visit_statements(node.body)
@@ -397,7 +411,8 @@ class ReverseAD(object):
                     ctx=gast.Store() if store else gast.Load(),
                 )
 
-            primal = template.replace(
+            temp_predefines = self._loop_temp_predefines(node)
+            primal = temp_predefines + template.replace(
                 grads.primals_checkpointed[gast.For],
                 orig_body=orig_body,
                 i=counter,
@@ -520,6 +535,17 @@ class ReverseAD(object):
         threshold = self.checkpoint_config.get('min_length', 100)
         return loop_length >= threshold
 
+    def _should_checkpoint_while(self, node):
+        """While-loops checkpoint under the annotation or the global flag.
+
+        There is no length to estimate (that is the point of the online
+        scheme), so the only gates are opt-in and having loop-carried state
+        worth snapshotting.
+        """
+        return anno.getanno(node, 'force_checkpoint', False) or self.checkpoint_config.get(
+            'enabled', False
+        )
+
     def _loop_state_names(self, node):
         """The loop-carried state to snapshot at segment boundaries.
 
@@ -530,13 +556,45 @@ class ReverseAD(object):
         target is re-derived by indexing the iterable. Sorted for
         deterministic generated code.
         """
-        if not anno.hasanno(node, 'defined_in'):
+        # The CFG builder anchors a For loop's dataflow facts on the For node
+        # itself but a While loop's on its test expression (see
+        # cfg.CFG.visit_While).
+        carrier = node.test if isinstance(node, gast.While) else node
+        if not anno.hasanno(carrier, 'defined_in'):
             return []
-        defined_in = anno.getanno(node, 'defined_in')
+        defined_in = anno.getanno(carrier, 'defined_in')
         updated = set()
         for stmt in node.body:
             updated |= set(ast_.get_updated(stmt))
-        return sorted((updated & set(defined_in)) - {node.target.id})
+        target_names = (
+            {node.target.id} if isinstance(getattr(node, 'target', None), gast.Name) else set()
+        )
+        return sorted((updated & set(defined_in)) - target_names)
+
+    def _loop_temp_predefines(self, node):
+        """`name = None` statements for body temporaries of a checkpointed loop.
+
+        In the standard (taped) templates these variables get None-predefines
+        from fixes.FixStack, triggered by their primal-side tape pushes. A
+        checkpointed loop's body temps are only pushed inside the adjoint's
+        replay, so FixStack never sees them - yet FixGrad's zero-inits
+        (`bx = tangent.init_grad(x)`) read them after the loop, which crashes
+        with UnboundLocalError when the loop ran zero times. init_grad(None)
+        is defined to return 0.0, so the predefines restore the standard
+        behavior exactly.
+        """
+        carrier = node.test if isinstance(node, gast.While) else node
+        defined_in = set(anno.getanno(carrier, 'defined_in', default=()))
+        updated = set()
+        for stmt in node.body:
+            updated |= set(ast_.get_updated(stmt))
+        target_names = (
+            {node.target.id} if isinstance(getattr(node, 'target', None), gast.Name) else set()
+        )
+        return [
+            quoting.quote('{} = None'.format(name))
+            for name in sorted(updated - defined_in - target_names)
+        ]
 
     def _estimate_loop_length(self, iter_node):
         """Try to statically determine loop length from range() calls.
@@ -572,11 +630,73 @@ class ReverseAD(object):
         if node.orelse:
             raise ValueError
 
+        # Online checkpointing needs the ORIGINAL (untaped) body for the
+        # forward sweep; decide and copy before visit_statements transforms
+        # the statements in place.
+        use_checkpointing = self._should_checkpoint_while(node)
+        if use_checkpointing:
+            state_names = self._loop_state_names(node)
+            if not state_names:
+                use_checkpointing = False
+            else:
+                orig_body = _clean_copy(node.body)
+
         body, adjoint_body = self.visit_statements(node.body)
 
         # We create a loop counter which will be pushed on the stack
         push, pop, op_id = get_push_pop()
         counter = self.namer.counter()
+
+        if use_checkpointing:
+            _, _, op_id_snaps = get_push_pop()
+            budget = int(self.checkpoint_config.get('budget', 32))
+
+            def name_node(id_, store=False):
+                return gast.Name(
+                    id=id_, ctx=gast.Store() if store else gast.Load(), annotation=None
+                )
+
+            def state_tuple(store):
+                return gast.Tuple(
+                    elts=[name_node(n, store) for n in state_names],
+                    ctx=gast.Store() if store else gast.Load(),
+                )
+
+            temp_predefines = self._loop_temp_predefines(node)
+            primal = temp_predefines + template.replace(
+                grads.primals_checkpointed[gast.While],
+                orig_body=orig_body,
+                i=counter,
+                test=node.test,
+                push=push,
+                _snaps=name_node(self.namer.unique('_ckpt_snaps')),
+                _seg=name_node(self.namer.unique('_ckpt_seg')),
+                _snap=name_node(self.namer.unique('_ckpt_snap')),
+                snap_save=state_tuple(store=False),
+                _budget=gast.Constant(value=budget, kind=None),
+                _stack=self.stack,
+                op_id_iter=op_id,
+                op_id_snaps=op_id_snaps,
+            )
+            adjoint = template.replace(
+                grads.adjoints_checkpointed[gast.While],
+                body=body,
+                adjoint_body=adjoint_body,
+                i=counter,
+                pop=pop,
+                _snaps=name_node(self.namer.unique('_ckpt_rsnaps')),
+                _s=name_node(self.namer.unique('_ckpt_s')),
+                _k=name_node(self.namer.unique('_ckpt_k')),
+                _k2=name_node(self.namer.unique('_ckpt_k2')),
+                _start=name_node(self.namer.unique('_ckpt_start')),
+                _len=name_node(self.namer.unique('_ckpt_len')),
+                _snapval=name_node(self.namer.unique('_ckpt_snapval')),
+                snap_restore=state_tuple(store=True),
+                _stack=self.stack,
+                op_id_iter=op_id,
+                op_id_snaps=op_id_snaps,
+            )
+            return primal, adjoint
 
         primal_template = grads.primals[gast.While]
         primal = template.replace(

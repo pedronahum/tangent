@@ -91,6 +91,16 @@ class FixGrad(transformers.TreeTransformer):
     def __init__(self):
         super(FixGrad, self).__init__()
         self.added = set()
+        # Adjoint-function parameters (notably the incoming seed) are defined
+        # on entry, so they must never be zero-initialized - doing so clobbers
+        # the seed. They can look "used before defined" to the local analysis
+        # when their only use is buried in the nested loops a checkpointed
+        # adjoint generates.
+        self._params = set()
+
+    def visit_FunctionDef(self, node):
+        self._params = {a.id for a in node.args.args}
+        return super(FixGrad, self).generic_visit(node)
 
     def _init(self, node):
         gradname = ast_.get_name(node)
@@ -115,6 +125,7 @@ class FixGrad(transformers.TreeTransformer):
                     (anno.hasanno(use, 'adjoint_var') or anno.hasanno(use, 'temp_adjoint_var'))
                     and use.id not in anno.getanno(node, 'defined_in')
                     and use.id not in self.added
+                    and use.id not in self._params
                 ):
                     self.added.add(use.id)
                     self.insert_top(self._init(use))

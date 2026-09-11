@@ -63,6 +63,8 @@ from tangent.utils import num_segments
 from tangent.utils import segment_bounds
 from tangent.utils import segment_size
 from tangent.utils import snapshot
+from tangent.utils import online_store
+from tangent.utils import online_segment
 from tangent.utils import cholesky_grad
 from tangent.utils import eigvalsh_grad
 from tangent.utils import einsum_grad

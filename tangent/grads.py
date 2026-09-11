@@ -217,6 +217,69 @@ def dfor_checkpointed(
             adjoint_body
 
 
+# Online (Stumm-Walther) checkpointing for while-loops: the trip count is
+# unknown, so snapshots of the loop-carried state are kept under a fixed
+# budget, geometrically thinned as the loop runs (tangent.online_store). The
+# adjoint restores each surviving snapshot in reverse, replays its segment
+# with the taped body - the loop condition is NOT re-evaluated during replay;
+# the recorded iteration counts drive it - and consumes the segment's tape.
+@primal_checkpointed(gast.While)
+def while_checkpointed(
+    orig_body,
+    i,
+    test,
+    push,
+    _snaps,
+    _seg,
+    _snap,
+    snap_save,
+    _budget,
+    _stack,
+    op_id_iter,
+    op_id_snaps,
+):
+    _snaps = []
+    _seg = 1
+    i = 0
+    while test:
+        if i % _seg == 0:
+            _snap = tangent.snapshot(snap_save)
+            _snaps, _seg = tangent.online_store(_snaps, i, _snap, _seg, _budget)
+        orig_body
+        i += 1
+    push(_stack, _snaps, op_id_snaps)
+    push(_stack, i, op_id_iter)
+
+
+@adjoint_checkpointed(gast.While)
+def dwhile_checkpointed(
+    body,
+    adjoint_body,
+    i,
+    pop,
+    _snaps,
+    _s,
+    _k,
+    _k2,
+    _start,
+    _len,
+    _snapval,
+    snap_restore,
+    _stack,
+    op_id_iter,
+    op_id_snaps,
+):
+    i = pop(_stack, op_id_iter)
+    _snaps = pop(_stack, op_id_snaps)
+    for _s in range(len(_snaps)):
+        _start, _len, _snapval = tangent.online_segment(_snaps, _s, i)
+        snap_restore = _snapval
+        for _k in range(_len):
+            body
+        for _k2 in range(_len):
+            adjoint_body
+
+
 @primal(gast.While)
 def while_(body, i, test, push, _stack, op_id):
     i = 0
