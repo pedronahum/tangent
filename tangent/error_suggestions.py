@@ -82,6 +82,24 @@ Workarounds:
   ✅ for i in range(len(ys)):  # append one element at a time
          xs.append(ys[i])
 ''',
+    'Class property access': '''@property and @classmethod are read as plain attributes, which are not
+differentiable (only instance *method calls* are inlined). Convert the
+property to a method and call it, or compute the value with a plain function.
+
+Workarounds:
+  ❌ class M:
+         @property
+         def scaled(self): return self.w * 2
+     ...
+     y = M(w).scaled
+  ✅ class M:
+         def scaled(self): return self.w * 2   # a method
+     ...
+     y = M(w).scaled()                          # called
+
+  ✅ def scaled(w): return w * 2            # or a plain function
+     y = scaled(w)
+''',
     'Set Comprehensions': '''Set comprehensions are not supported.
 
 Workaround:

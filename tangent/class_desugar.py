@@ -463,6 +463,82 @@ class ClassMethodInliner(gast.NodeTransformer):
         return substitutor.visit(expr)
 
 
+def _resolve_namespace(func):
+    namespace = dict(getattr(func, '__globals__', {}))
+    if getattr(func, '__closure__', None):
+        namespace.update(
+            dict(zip(func.__code__.co_freevars, (c.cell_contents for c in func.__closure__)))
+        )
+    return namespace
+
+
+def reject_property_access(node, func):
+    """Reject accessing an @property / @classmethod on a user class cleanly.
+
+    Method *calls* on instances are inlined, but a `@property` (or a bound
+    `@classmethod`) is read as a plain attribute - which is not
+    differentiable and otherwise surfaces deep in the reverse transform as an
+    opaque "attributes are not yet supported" error. Detect it here, with the
+    class resolved from the function's namespace, and raise a clear
+    TangentParseError with a workaround.
+    """
+    namespace = _resolve_namespace(func)
+
+    # Map instance variable name -> its class (var = ClassName(...)).
+    instance_class = {}
+    for stmt in gast.walk(node):
+        if (
+            isinstance(stmt, gast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], gast.Name)
+            and isinstance(stmt.value, gast.Call)
+            and isinstance(stmt.value.func, gast.Name)
+        ):
+            cls = namespace.get(stmt.value.func.id)
+            if isinstance(cls, type):
+                instance_class[stmt.targets[0].id] = cls
+
+    def _class_of(value):
+        # A value that is an instance of a user class: `var` bound to
+        # ClassName(...), or an inline `ClassName(...)`.
+        if isinstance(value, gast.Name):
+            return instance_class.get(value.id)
+        if (
+            isinstance(value, gast.Call)
+            and isinstance(value.func, gast.Name)
+            and isinstance(namespace.get(value.func.id), type)
+        ):
+            return namespace[value.func.id]
+        return None
+
+    for attr in gast.walk(node):
+        if not (isinstance(attr, gast.Attribute) and isinstance(attr.ctx, gast.Load)):
+            continue
+        # Instance attribute: reject @property reads.
+        cls = _class_of(attr.value)
+        if cls is not None and isinstance(getattr(cls, attr.attr, None), property):
+            _reject_class_member('property', attr.attr, cls.__name__)
+        # Class attribute (`ClassName.member`): reject @classmethod access.
+        if isinstance(attr.value, gast.Name):
+            base = namespace.get(attr.value.id)
+            if isinstance(base, type) and isinstance(
+                inspect.getattr_static(base, attr.attr, None), classmethod
+            ):
+                _reject_class_member('classmethod', attr.attr, base.__name__)
+
+
+def _reject_class_member(kind, name, class_name):
+    from tangent.errors import TangentParseError
+    from tangent import error_suggestions
+
+    feature = '@%s access' % kind
+    message = "%s ('%s.%s') is not supported" % (feature, class_name, name)
+    suggestion = error_suggestions.get_suggestion('Class property access')
+    if suggestion:
+        message = '%s\n\n💡 Suggestion:\n%s' % (message, suggestion)
+    raise TangentParseError(message)
+
+
 def inline_class_methods(node, func):
     """Inline class method calls in an AST.
 
@@ -473,6 +549,10 @@ def inline_class_methods(node, func):
     Returns:
         Transformed AST with class methods inlined
     """
+    # Reject @property / @classmethod reads with a clear, located error before
+    # inlining turns them into opaque attribute accesses.
+    reject_property_access(node, func)
+
     # Create a single inliner and run it multiple times to handle method chaining
     # The inliner maintains state about instance variables across passes
     inliner = ClassMethodInliner(func)
