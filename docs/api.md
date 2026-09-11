@@ -13,6 +13,10 @@ registration hooks for extending Tangent with new gradients and tensor types.
 
 ::: tangent.grad_util.jvp
 
+## Differentiable ODEs
+
+::: tangent.ode.odeint
+
 ## Custom gradients
 
 ::: tangent.custom_vjp.custom_vjp

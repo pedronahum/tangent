@@ -1014,6 +1014,16 @@ def astop_gradient(y, x):
     d[x] = tangent.init_grad(x)
 
 
+# Differentiable ODE integration (tangent/ode.py). The adjoint solves the
+# continuous adjoint ODE - constant memory in the step count - and routes
+# gradients to the initial state y0 and the parameter tuple args. func and ts
+# are non-differentiable here; a `d[args]` tuple is unpacked back to the
+# individual parameter gradients by the tuple machinery.
+@adjoint(tangent.odeint)
+def aodeint(ys, func, y0, ts, args, num_steps=10):
+    d[y0], d[args] = tangent.odeint_grad(d[ys], func, ys, y0, ts, args, num_steps)
+
+
 # The sort helpers are linear permutations of their gradient argument and
 # inverses of each other, so their adjoints form a closed pair - second and
 # higher derivatives through np.sort never leave the set. (The permutation is

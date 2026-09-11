@@ -30,6 +30,7 @@ Tangent performs **source-to-source** automatic differentiation: it transforms y
 - **🐍 Pythonic**: Control flow (`break`/`continue`/early `return`), closures, classes, list building, comprehensions, and second and third derivatives
 - **⚡ Compilable**: `grad(f, compile='jax')` runs the readable adjoint at `jax.grad`+`jit` speed; a persistent disk cache amortizes compilation across processes
 - **🧩 Extensible**: `@tangent.custom_vjp`, `stop_gradient`, `with tangent.checkpoint():`, and `tangent.explain()` for gradient forensics
+- **🔬 Differentiable simulators**: `tangent.odeint` differentiates ODE solutions via the adjoint method (constant memory in step count)
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 

@@ -84,6 +84,7 @@ nav:
       - Higher-Order Derivatives: higher-order.md
       - Backends: backends.md
       - Performance & Compilation: performance.md
+      - Differentiable ODEs: ode.md
       - Gradient Checkpointing: checkpointing_user_guide.md
       - Debugging Gradients: debugging.md
   - API Reference: api.md
