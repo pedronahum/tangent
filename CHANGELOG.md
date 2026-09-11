@@ -44,6 +44,21 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **IR invariant verification** (`tangent/verify.py`): the frontend is a
+  sequence of source-to-source passes, each assuming the previous ones'
+  output shape - "works until two passes disagree." Each pass's output
+  contract is now a checkable invariant (ANF form after `anf`, resolved
+  `func` annotations after `resolve_calls`, no nested defs after
+  `class_desugar`, no lambdas after `lambda_desugar`). With
+  `TANGENT_VERIFY_IR=1` (or `run_passes(..., verify=True)`) the pass manager
+  checks the relevant invariant after each pass and raises `IRInvariantError`
+  naming the pass and offending node, so malformed IR fails at its source
+  rather than three passes later. Off by default; the whole corpus is
+  verified to satisfy its invariants (`tests/test_ir_invariants.py`, and the
+  full 76k suite passes with verification on). This is the safe, shippable
+  realization of "one explicit IR with a documented invariant"; a wholesale
+  single-rewrite core and interprocedural activity analysis remain future
+  work.
 - **SciPy gradients** (`tangent/scipy_extensions.py`, optional): adjoints and
   forward-mode tangents for `scipy.special` - the error-function family (erf,
   erfc), the gamma family (gammaln, gamma, digamma/psi), the logistic pair

@@ -281,7 +281,7 @@ def get_passes(mode):
     return [p for p in _REGISTRY if mode in p.modes]
 
 
-def run_passes(node, func, source, mode):
+def run_passes(node, func, source, mode, verify=None):
     """Run the registered frontend passes for `mode` over a gast Module.
 
     Args:
@@ -289,11 +289,20 @@ def run_passes(node, func, source, mode):
       func: The original Python function being differentiated.
       source: Its source text ('' if unavailable).
       mode: 'forward' or 'reverse'.
+      verify: If True, check each pass's documented IR invariant after it runs
+          (see tangent/verify.py) and raise IRInvariantError on a violation.
+          Defaults to the `TANGENT_VERIFY_IR` environment variable.
 
     Returns:
       The lowered Module.
     """
+    from tangent import verify as verify_mod
+
+    if verify is None:
+        verify = verify_mod.enabled()
     ctx = PassContext(func=func, source=source, mode=mode)
     for p in get_passes(mode):
         node = p.fn(node, ctx)
+        if verify:
+            verify_mod.verify_after(p.name, node)
     return node
