@@ -86,6 +86,7 @@ nav:
       - Performance & Compilation: performance.md
       - Differentiable ODEs: ode.md
       - Gradient Checkpointing: checkpointing_user_guide.md
+      - Shape Checking: shape_check.md
       - Debugging Gradients: debugging.md
   - API Reference: api.md
   - Benchmarks:

@@ -35,6 +35,12 @@ class TangentParseError(SyntaxError):
     pass
 
 
+class ShapeError(ValueError):
+    """A rank/broadcast/matmul/reshape mismatch found by check_shapes."""
+
+    pass
+
+
 class ForwardNotImplementedError(NotImplementedError):
     """Error generated when encountering a @tangent_ yet to be implemented."""
 

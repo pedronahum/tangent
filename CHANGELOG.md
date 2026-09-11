@@ -44,6 +44,13 @@ over the abandoned upstream package.
   a rebinding (`extend`/`insert`/`remove`/`sort`/`reverse`, or append through
   an attribute/subscript) are rejected with a clear error instead of silently
   dropping gradients.
+- **Compile-time shape checking** (`tangent.check_shapes`): abstractly
+  evaluates a function on `ShapedArray` inputs (shape + dtype, no data),
+  applying NumPy's real broadcasting and linear-algebra rules, and raises a
+  `ShapeError` pointing at the offending source line on a rank/broadcast/
+  matmul/reshape mismatch - catching the class of bug finite differences only
+  reveal at run time. Rides NumPy's dispatch protocols; an unmodeled op yields
+  an unknown shape rather than a guess, so there are no false positives.
 - **Differentiable ODE integration** (`tangent.odeint`): integrate
   `dy/dt = func(y, t, *args)` and differentiate the solution w.r.t. the
   initial state and parameters via the continuous adjoint method (Chen et

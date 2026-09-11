@@ -67,6 +67,7 @@ from tangent.utils import online_store
 from tangent.utils import online_segment
 from tangent.ode import odeint
 from tangent.ode import odeint_grad
+from tangent.shape_check import check_shapes, ShapedArray
 from tangent.utils import cholesky_grad
 from tangent.utils import eigvalsh_grad
 from tangent.utils import einsum_grad
