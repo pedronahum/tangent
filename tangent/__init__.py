@@ -83,6 +83,8 @@ from tangent.custom_vjp import custom_vjp
 from tangent.custom_vjp import custom_bwd_call
 from tangent.custom_vjp import custom_jvp_call
 from tangent.custom_vjp import stop_gradient
+from tangent.custom_vjp import register_adjoint
+from tangent.custom_vjp import register_tangent
 from tangent.utils import checkpoint
 
 # NumPy activation functions for neural networks

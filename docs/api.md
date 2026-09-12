@@ -19,7 +19,14 @@ registration hooks for extending Tangent with new gradients and tensor types.
 
 ## Custom gradients
 
+See the [Custom Gradients guide](custom_gradients.md) for a walkthrough of when
+to use each of these.
+
 ::: tangent.custom_vjp.custom_vjp
+
+::: tangent.custom_vjp.register_adjoint
+
+::: tangent.custom_vjp.register_tangent
 
 ::: tangent.custom_vjp.stop_gradient
 
@@ -41,26 +48,29 @@ registration hooks for extending Tangent with new gradients and tensor types.
 
 ### Registering gradient templates
 
-Adjoints (reverse mode) and tangents (forward mode) are registered with
-decorators from `tangent.grads` and `tangent.tangents`:
+To teach Tangent the gradient of a library op it does not already know, use the
+public `tangent.register_adjoint` (reverse mode) and `tangent.register_tangent`
+(forward mode) decorators:
 
 ```python
-from tangent.grads import adjoint
-from tangent.tangents import tangent_
 import numpy as np
+import tangent
 
-@adjoint(np.sinc)                 # reverse rule: fills d[x] from d[y]
+@tangent.register_adjoint(np.sinc)   # reverse rule: fills d[x] from d[y]
 def asinc(y, x):
     d[x] = d[y] * (np.cos(np.pi * x) / x - y / x)
 
-@tangent_(np.sinc)                # forward rule: fills d[y] from d[x]
+@tangent.register_tangent(np.sinc)   # forward rule: fills d[y] from d[x]
 def tsinc(y, x):
     d[y] = d[x] * (np.cos(np.pi * x) / x - y / x)
 ```
 
 Inside a template, `d[v]` denotes the derivative associated with variable
 `v`; the template's parameter names bind to the call site's result and
-arguments in order.
+arguments in order. (These wrap the lower-level `tangent.grads.adjoint` /
+`tangent.tangents.tangent_` decorators that Tangent's own backend extensions
+use.) For your own Python functions, prefer
+[`custom_vjp`](custom_gradients.md), whose rule is plain Python.
 
 ### Runtime type registries
 

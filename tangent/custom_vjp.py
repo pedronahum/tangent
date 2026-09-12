@@ -38,6 +38,11 @@ re-provides the primal inputs and output, so there is no residual plumbing.
 
 ``tangent.stop_gradient(x)`` is the identity with a zero derivative in both
 modes - the standard way to freeze part of a computation.
+
+For a library op you do not own (rather than your own function), the low-level
+``tangent.register_adjoint`` / ``tangent.register_tangent`` decorators attach a
+gradient rule to an existing callable using Tangent's template DSL - see their
+docstrings.
 """
 
 from __future__ import absolute_import
@@ -146,3 +151,76 @@ def stop_gradient(x):
     differentiator - the standard way to freeze part of a computation.
     """
     return x
+
+
+# ---------------------------------------------------------------------------
+# Low-level rule registration.
+#
+# custom_vjp above is the ergonomic path for a function you own or a black box
+# you call: you write a plain-Python bwd/jvp over (g, ans, *args). The two
+# decorators below are the low-level path for adding a rule to a callable you
+# do NOT own - a library op such as numpy.hypot, or a backend function - using
+# Tangent's template DSL directly (the same mechanism the built-in backend
+# rules use). Prefer custom_vjp unless you specifically need to attach a rule
+# to an existing function object rather than wrap it.
+# ---------------------------------------------------------------------------
+
+
+def register_adjoint(func):
+    """Register a reverse-mode (adjoint) template for an existing callable.
+
+    Use this to teach Tangent the gradient of a function it cannot transform -
+    typically a library or backend op you do not own. For your own Python
+    functions, prefer `custom_vjp`, whose rule is plain Python.
+
+    The decorated function is an adjoint *template* written in Tangent's DSL:
+    its first parameter is the primal output, the rest are the primal inputs
+    (matched by position to the differentiated call), and it assigns each
+    input's gradient into `d[<param>]` from the output gradient `d[<output>]`::
+
+        @tangent.register_adjoint(numpy.hypot)
+        def hypot_adjoint(z, x, y):
+            d[x] = d[z] * x / z
+            d[y] = d[z] * y / z
+
+    Registering a rule shadows any built-in rule for `func`. The template must
+    have retrievable source (define it in a module, not the REPL), like any
+    function Tangent differentiates.
+
+    Returns:
+      A decorator that registers its argument as the adjoint template and
+      returns it unchanged.
+    """
+    from tangent import grads
+
+    def decorator(template):
+        grads.adjoints[func] = template
+        grads.UNIMPLEMENTED_ADJOINTS.discard(func)
+        return template
+
+    return decorator
+
+
+def register_tangent(func):
+    """Register a forward-mode (tangent) template for an existing callable.
+
+    The forward-mode counterpart of `register_adjoint`. The decorated template
+    receives the primal output followed by the primal inputs, and assigns the
+    output's tangent into `d[<output>]` from the input tangents `d[<input>]`::
+
+        @tangent.register_tangent(numpy.hypot)
+        def hypot_tangent(z, x, y):
+            d[z] = (x * d[x] + y * d[y]) / z
+
+    Returns:
+      A decorator that registers its argument as the tangent template and
+      returns it unchanged.
+    """
+    from tangent import tangents
+
+    def decorator(template):
+        tangents.tangents[func] = template
+        tangents.UNIMPLEMENTED_TANGENTS.discard(func)
+        return template
+
+    return decorator

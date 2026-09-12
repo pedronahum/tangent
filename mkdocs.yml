@@ -85,6 +85,7 @@ nav:
       - Backends: backends.md
       - Performance & Compilation: performance.md
       - Differentiable ODEs: ode.md
+      - Custom Gradients: custom_gradients.md
       - Gradient Checkpointing: checkpointing_user_guide.md
       - Shape Checking: shape_check.md
       - Debugging Gradients: debugging.md
