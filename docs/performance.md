@@ -78,3 +78,30 @@ naive adjoint), with optional SymPy-based algebraic simplification and CSE
 (`optimizations={'cse': True, 'algebraic': True}`). DCE is tape-aware: a
 push is only removed together with the pop that consumes it, so optimization
 never corrupts higher-order derivatives.
+
+## Shrinking the tape: `tape_liveness`
+
+Reverse mode saves each reassigned primal on the tape so the adjoint can read
+it back. Many of those reads are **shape-only**: the value is only ever the
+`like` of `unbroadcast` or the argument of `init_grad`, which consult its shape
+and dtype but never its data. `optimizations={'tape_liveness': True}` stores a
+lightweight shape carrier for exactly those entries instead of the whole array,
+shrinking that tape slot from O(size) to O(ndim):
+
+```python
+def loop(x):
+    s = x
+    for i in range(50):
+        a = s + 1.0            # `a` is read in reverse only for its shape
+        s = a * 0.5 + s * 0.5
+    return np.sum(s * s)
+
+df = tangent.grad(loop, optimizations={'tape_liveness': True})
+```
+
+On a 20,000-element array over 50 iterations this cuts peak gradient memory by
+~90%. The rewrite is proven safe by reaching-definition analysis - it converts
+a variable only when *every* pop-reached use is shape-only, so any value the
+adjoint reads arithmetically stays fully taped - and the gradient it produces
+is identical to the default. It is opt-in (off by default) and targets the
+NumPy execution path; it composes with `√n` checkpointing and `compile=`.

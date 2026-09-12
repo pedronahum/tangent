@@ -50,6 +50,8 @@ from tangent.utils import match_seed_grad
 from tangent.utils import seed_pytree
 from tangent.utils import Stack
 from tangent.utils import unbroadcast
+from tangent.utils import taped_shape
+from tangent.utils import TapedShape
 from tangent.utils import unreduce
 from tangent.utils import unreduce_like
 from tangent.utils import unrepeat

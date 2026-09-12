@@ -66,7 +66,7 @@ def optimize(node):
             return node
 
 
-def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
+def optimize_with_advanced_dce(node, requested_grads=None, verbose=0, tape_liveness=False):
     """Enhanced optimization pipeline with advanced DCE.
 
     This combines Tangent's standard optimizations with the advanced DCE
@@ -76,11 +76,16 @@ def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
     1. Standard optimizations (constant folding, basic DCE, assignment propagation)
     2. Advanced DCE (activity analysis + control flow-aware)
     3. Standard optimizations again (to clean up after advanced DCE)
+    4. Tape-liveness (opt-in): store only the shape of primals the adjoint
+       reads for shape
 
     Args:
       node: The AST to optimize
       requested_grads: List of parameter names for gradient computation (optional)
       verbose: Verbosity level
+      tape_liveness: Whether to run the tape-liveness rewrite (opt-in). Stores a
+        shape carrier instead of the full array for tape entries the adjoint
+        consumes only for shape.
 
     Returns:
       The optimized AST
@@ -121,6 +126,18 @@ def optimize_with_advanced_dce(node, requested_grads=None, verbose=0):
         if verbose >= 2:
             print("[Optimization] Phase 3: Post-DCE cleanup")
         node = optimize(node)
+
+    # Phase 4 (opt-in): tape-liveness. Runs last, once the surviving tape
+    # pushes are settled, and only shrinks shape-only entries to carriers.
+    if tape_liveness:
+        try:
+            from tangent.optimizations.tape_liveness import store_shapes_only
+
+            if store_shapes_only(node) and verbose >= 2:
+                print("[Optimization] Phase 4: Tape-liveness stored shape-only entries as carriers")
+        except Exception as e:  # never let an optimization break compilation
+            if verbose >= 1:
+                print(f"[Optimization] Warning: Tape-liveness failed: {e}")
 
     return node
 

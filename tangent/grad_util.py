@@ -614,7 +614,12 @@ def _autodiff_uncached(
                 print(
                     f"[Optimization] Using unified pipeline with advanced DCE for {requested_grads}"
                 )
-            node = optimization.optimize_with_advanced_dce(node, requested_grads, verbose)
+            node = optimization.optimize_with_advanced_dce(
+                node,
+                requested_grads,
+                verbose,
+                tape_liveness=optimizations.get('tape_liveness', False),
+            )
         else:
             # Use standard optimizations only
             node = optimization.optimize(node)

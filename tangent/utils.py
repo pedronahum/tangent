@@ -621,6 +621,49 @@ def register_init_grad(t, init_grad_function):
     grad_initializers[t] = (init_grad_function, True)
 
 
+class TapedShape(object):
+    """A tape stand-in that carries only a value's shape and dtype.
+
+    Reverse mode saves a primal on the tape whenever the adjoint needs it. For
+    variables the adjoint consumes *only for shape* - as the ``like`` of
+    ``unbroadcast`` or the argument of ``init_grad`` - saving the whole array
+    wastes memory: the shape and dtype are all that is ever read back. The
+    tape-liveness optimization pushes ``taped_shape(v)`` (this object) instead
+    of ``v``, shrinking that tape entry from O(size) to O(ndim).
+
+    It exposes ``.shape`` and ``.dtype`` so ``numpy.shape`` reads it directly
+    (that is how the NumPy unbroadcaster consults its ``like``), and it is
+    registered with ``init_grad`` so a reset off such a restored value produces
+    the correct zero. It is never used as the *gradient* operand of any op, so
+    it needs no arithmetic behavior.
+    """
+
+    __slots__ = ('shape', 'dtype')
+
+    def __init__(self, shape, dtype):
+        self.shape = tuple(shape)
+        self.dtype = dtype
+
+    def __repr__(self):
+        return 'TapedShape(shape=%s, dtype=%s)' % (self.shape, self.dtype)
+
+
+def taped_shape(x):
+    """Capture just the shape and dtype of ``x`` as a lightweight tape entry."""
+    shape = numpy.shape(x)
+    return TapedShape(shape, getattr(x, 'dtype', numpy.dtype(float)))
+
+
+def _init_grad_taped_shape(ts):
+    """Zero gradient for a shape-only tape entry: a real zero of that shape."""
+    if ts.shape == ():
+        return 0.0
+    return numpy.zeros(ts.shape, ts.dtype)
+
+
+register_init_grad(TapedShape, _init_grad_taped_shape)
+
+
 def init_grad(obj, allow_lazy_initializer=False):
     """Initialize the gradient for an object.
 
