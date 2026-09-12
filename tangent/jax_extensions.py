@@ -329,17 +329,18 @@ def adjoint_softplus(y, x):
 
 
 # Reduction operations
-@adjoint(jnp.sum)
-def adjoint_sum(y, x, axis=None, keepdims=False):
-    """Adjoint for jnp.sum: ∂L/∂x = unreduce(∂L/∂z)"""
-    d[x] = tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keepdims)
-
-
-@adjoint(jnp.mean)
-def adjoint_mean(y, x, axis=None, keepdims=False):
-    """Adjoint for jnp.mean: ∂L/∂x = unreduce(∂L/∂z) / size"""
-    n = tangent.size(x, axis)
-    d[x] = tangent.unreduce(d[y], tangent.shape_as_list(x), axis, keepdims) / n
+# sum / mean: adjoint AND forward-mode tangent generated together from the
+# unified catalog (the adjoint template is shared; the forward bodies below
+# spell jnp's dtype= passthrough). max / min stay hand-written (extremal mask).
+op_catalog.register_reductions(
+    'jax',
+    ops={'sum': jnp.sum, 'mean': jnp.mean},
+    forward={
+        'sum': 'd[y] = jnp.sum(d[x], axis=axis, dtype=dtype, keepdims=keepdims)',
+        'mean': 'd[y] = jnp.mean(d[x], axis=axis, dtype=dtype, keepdims=keepdims)',
+    },
+    tangent_params='axis=None, dtype=None, keepdims=False',
+)
 
 
 @adjoint(jnp.max)
@@ -695,18 +696,6 @@ def tangent_jnp_power(z, x, y):
 
 
 # Reduction Operations
-@tangent_(jnp.sum)
-def tangent_jnp_sum(y, x, axis=None, dtype=None, keepdims=False):
-    """Forward mode for jnp.sum."""
-    d[y] = jnp.sum(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
-
-
-@tangent_(jnp.mean)
-def tangent_jnp_mean(y, x, axis=None, dtype=None, keepdims=False):
-    """Forward mode for jnp.mean."""
-    d[y] = jnp.mean(d[x], axis=axis, dtype=dtype, keepdims=keepdims)
-
-
 @tangent_(jnp.max)
 def tangent_jnp_max(y, x, axis=None, keepdims=False):
     """Forward mode for jnp.max."""

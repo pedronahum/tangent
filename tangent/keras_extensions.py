@@ -176,19 +176,18 @@ op_catalog.register(
 
 
 # Reductions
-@adjoint(kops.sum)
-def adjoint_sum(y, x, axis=None, keepdims=False):
-    """Adjoint for keras.ops.sum."""
-    d[x] = tangent.unreduce(tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims)
-
-
-@adjoint(kops.mean)
-def adjoint_mean(y, x, axis=None, keepdims=False):
-    """Adjoint for keras.ops.mean."""
-    n = tangent.size(x, axis)
-    d[x] = (
-        tangent.unreduce(tangent.keras_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) / n
-    )
+# sum / mean: adjoint AND forward-mode tangent generated together from the
+# unified catalog (shared adjoint template; kops forward spelling below).
+# max / min / prod stay hand-written (extremal / product mask).
+op_catalog.register_reductions(
+    'keras',
+    ops={'sum': kops.sum, 'mean': kops.mean},
+    forward={
+        'sum': 'd[y] = kops.sum(d[x], axis=axis, keepdims=keepdims)',
+        'mean': 'd[y] = kops.mean(d[x], axis=axis, keepdims=keepdims)',
+    },
+    seed='tangent.keras_seed({g}, x)',
+)
 
 
 @adjoint(kops.max)
@@ -401,18 +400,6 @@ def adjoint_stack(dz, x, axis=0):
 
 # Unary elementwise tangents (exp, log, trig, ...) are generated alongside
 # their adjoints by the register_elementwise call above.
-
-
-@tangent_(kops.sum)
-def tangent_sum(y, x, axis=None, keepdims=False):
-    """Forward mode for keras.ops.sum."""
-    d[y] = kops.sum(d[x], axis=axis, keepdims=keepdims)
-
-
-@tangent_(kops.mean)
-def tangent_mean(y, x, axis=None, keepdims=False):
-    """Forward mode for keras.ops.mean."""
-    d[y] = kops.mean(d[x], axis=axis, keepdims=keepdims)
 
 
 @tangent_(kops.matmul)

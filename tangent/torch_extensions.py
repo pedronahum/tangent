@@ -296,19 +296,18 @@ op_catalog.register(
 
 
 # Reduction operations
-@adjoint(torch.sum)
-def adjoint_sum(y, x, axis=None, keepdims=False):
-    """Adjoint for torch.sum."""
-    d[x] = tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims)
-
-
-@adjoint(torch.mean)
-def adjoint_mean(y, x, axis=None, keepdims=False):
-    """Adjoint for torch.mean."""
-    n = tangent.size(x, axis)
-    d[x] = (
-        tangent.unreduce(tangent.torch_seed(d[y], x), tangent.shape_as_list(x), axis, keepdims) / n
-    )
+# sum / mean: adjoint AND forward-mode tangent generated together from the
+# unified catalog (shared adjoint template; torch's dim=/keepdim= forward
+# spelling below). max / min stay hand-written (extremal mask).
+op_catalog.register_reductions(
+    'torch',
+    ops={'sum': torch.sum, 'mean': torch.mean},
+    forward={
+        'sum': 'd[y] = torch.sum(d[x], dim=axis, keepdim=keepdims)',
+        'mean': 'd[y] = torch.mean(d[x], dim=axis, keepdim=keepdims)',
+    },
+    seed='tangent.torch_seed({g}, x)',
+)
 
 
 @adjoint(torch.max)
@@ -573,18 +572,6 @@ def tangent_pow(y, x, n):
 
 # Unary elementwise tangents (exp, log, trig, ...) are generated alongside
 # their adjoints by the register_elementwise call above.
-
-
-@tangent_(torch.sum)
-def tangent_sum(y, x, axis=None, keepdims=False):
-    """Forward mode for torch.sum."""
-    d[y] = torch.sum(d[x], dim=axis, keepdim=keepdims)
-
-
-@tangent_(torch.mean)
-def tangent_mean(y, x, axis=None, keepdims=False):
-    """Forward mode for torch.mean."""
-    d[y] = torch.mean(d[x], dim=axis, keepdim=keepdims)
 
 
 @tangent_(torch.matmul)

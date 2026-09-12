@@ -40,12 +40,15 @@ from tangent import elementwise_rules as _er
 # kind of op it is. Kept in sync with the tables in elementwise_rules.
 UNARY_RULES = frozenset(_er.FORMULAS) | frozenset(_er.ZERO_FORMULA_OPS)
 BINARY_RULES = frozenset(_er.BINARY_RULES)
+REDUCTION_RULES = frozenset(_er.REDUCTION_RULES)
 
 RULE_FAMILY = {}
 for _name in UNARY_RULES:
     RULE_FAMILY[_name] = 'unary'
 for _name in BINARY_RULES:
     RULE_FAMILY[_name] = 'binary'
+for _name in REDUCTION_RULES:
+    RULE_FAMILY[_name] = 'reduction'
 
 
 def rule_names():
@@ -88,8 +91,13 @@ def register(backend, ops, vocab=None, seed='{g}'):
             )
         if family == 'unary':
             unary_ops[rule_name] = funcs
-        else:
+        elif family == 'binary':
             binary_ops[rule_name] = funcs
+        else:
+            raise ValueError(
+                'Reduction rule %r must be registered with register_reductions(), '
+                'not register() - it needs an explicit forward-mode body.' % rule_name
+            )
 
     if unary_ops:
         if vocab is None:
@@ -97,3 +105,14 @@ def register(backend, ops, vocab=None, seed='{g}'):
         _er.register_elementwise(backend, unary_ops, vocab, seed=seed)
     if binary_ops:
         _er.register_binary(backend, binary_ops, seed=seed)
+
+
+def register_reductions(backend, ops, forward, **kwargs):
+    """Register a backend's sum / mean reductions through the catalog.
+
+    Thin passthrough to ``elementwise_rules.register_reductions`` that keeps
+    reductions inside the one catalog surface. The reduction adjoint is
+    generated from a shared template; ``forward`` carries the backend-specific
+    forward-mode bodies (see that function for the full argument list).
+    """
+    _er.register_reductions(backend, ops, forward, **kwargs)

@@ -31,14 +31,18 @@ class TestClassification:
     def test_every_rule_has_exactly_one_family(self):
         # RULE_FAMILY partitions the union of the underlying tables; nothing is
         # missing and nothing is double-classified.
-        assert set(op_catalog.RULE_FAMILY) == op_catalog.UNARY_RULES | op_catalog.BINARY_RULES
+        all_rules = op_catalog.UNARY_RULES | op_catalog.BINARY_RULES | op_catalog.REDUCTION_RULES
+        assert set(op_catalog.RULE_FAMILY) == all_rules
         assert op_catalog.UNARY_RULES.isdisjoint(op_catalog.BINARY_RULES)
+        assert op_catalog.REDUCTION_RULES.isdisjoint(op_catalog.UNARY_RULES)
+        assert op_catalog.REDUCTION_RULES.isdisjoint(op_catalog.BINARY_RULES)
 
     def test_family_tables_match_elementwise_rules(self):
         # The catalog is a view over the elementwise_rules tables; if a rule is
         # added there it must appear here in the right family.
         assert op_catalog.UNARY_RULES == frozenset(er.FORMULAS) | frozenset(er.ZERO_FORMULA_OPS)
         assert op_catalog.BINARY_RULES == frozenset(er.BINARY_RULES)
+        assert op_catalog.REDUCTION_RULES == frozenset(er.REDUCTION_RULES)
 
     def test_rule_names_is_sorted_and_complete(self):
         assert op_catalog.rule_names() == sorted(op_catalog.RULE_FAMILY)
@@ -46,6 +50,8 @@ class TestClassification:
     def test_family_of(self):
         assert op_catalog.family_of('exp') == 'unary'
         assert op_catalog.family_of('multiply') == 'binary'
+        assert op_catalog.family_of('sum') == 'reduction'
+        assert op_catalog.family_of('mean') == 'reduction'
 
     def test_family_of_unknown_raises(self):
         with pytest.raises(KeyError):
@@ -65,6 +71,33 @@ class TestRegisterRouting:
     def test_unary_rule_without_vocab_raises(self):
         with pytest.raises(ValueError, match='vocab'):
             op_catalog.register('fakebackend', {'exp': object()})
+
+    def test_register_rejects_reduction_rules(self):
+        # Reductions need an explicit forward-mode body, so register() must
+        # refuse them and point the caller at register_reductions().
+        with pytest.raises(ValueError, match='register_reductions'):
+            op_catalog.register('fakebackend', {'sum': object()}, vocab=lambda fn, a: a)
+
+    def test_register_reductions_generates_both_directions(self):
+        from tangent import grads
+        from tangent import tangents as tangents_module
+
+        sum_op, mean_op = object(), object()
+        op_catalog.register_reductions(
+            'fakebackend',
+            ops={'sum': sum_op, 'mean': mean_op},
+            forward={
+                'sum': 'd[y] = fake_sum(d[x], axis=axis, keepdims=keepdims)',
+                'mean': 'd[y] = fake_mean(d[x], axis=axis, keepdims=keepdims)',
+            },
+        )
+        for op in (sum_op, mean_op):
+            assert op in grads.adjoints
+            assert op in tangents_module.tangents
+
+    def test_register_reductions_requires_forward_body(self):
+        with pytest.raises(KeyError, match='forward'):
+            op_catalog.register_reductions('fakebackend', ops={'sum': object()}, forward={})
 
     def test_binary_only_needs_no_vocab(self):
         # A backend registering only binary ops must not be forced to pass a

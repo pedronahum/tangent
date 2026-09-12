@@ -286,3 +286,99 @@ def register_binary(backend, ops, seed='{g}'):
             tangents_module.tangent_(func)(tangent_fn)
             grads.UNIMPLEMENTED_ADJOINTS.discard(func)
             tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)
+
+
+# ---------------------------------------------------------------------------
+# Reductions: y = reduce(x, axis, keepdims)  (sum / mean)
+#
+# The *adjoint* of a reduction is backend-neutral in structure - broadcast the
+# incoming derivative back over the reduced axes (tangent.unreduce), divided by
+# the reduced size for mean - so the reverse-mode body is generated from one
+# template, parameterized only by the backend's seed helper and its shape/size
+# helper spellings. The *forward-mode* body must call the backend's own
+# reduction on the tangent input, and backends genuinely disagree on the
+# spelling (torch's dim=/keepdim=, jax's dtype= passthrough, tinygrad's
+# method-style d[x].sum(...)), so each backend passes its two forward bodies
+# explicitly. Generating both directions from one call keeps them in lockstep:
+# a backend cannot register a reduction's adjoint without its tangent.
+#
+# max / min / prod stay hand-written: their adjoints carry a per-backend
+# extremal-mask (keras_max_mask, the jnp.equal masks, ...) that is not shared.
+# ---------------------------------------------------------------------------
+
+# rule -> factor applied to the unreduced seed. sum broadcasts the seed as-is;
+# mean divides by the number of reduced elements.
+REDUCTION_RULES = ('sum', 'mean')
+
+
+def register_reductions(
+    backend,
+    ops,
+    forward,
+    seed='{g}',
+    shape='tangent.shape_as_list',
+    size='tangent.size',
+    keepdims='keepdims',
+    tangent_params=None,
+):
+    """Generate and register adjoint + tangent templates for sum / mean.
+
+    Args:
+      backend: Short backend name, for generated function/file names.
+      ops: Dict mapping a REDUCTION_RULES key ('sum'/'mean') to the backend
+        function object (or a tuple of aliases). None values are skipped.
+      forward: Dict mapping the same rule names to the forward-mode body
+        string (e.g. ``'d[y] = torch.sum(d[x], dim=axis, keepdim=keepdims)'``).
+        Passed explicitly because the native reduction spelling diverges per
+        backend. Every rule in ``ops`` must have a ``forward`` entry.
+      seed: Format string over ``{g}`` wrapping the incoming derivative d[y]
+        in reverse mode (e.g. ``'tangent.tg_seed({g}, x)'``).
+      shape: Spelling of the shape-as-list helper (tinygrad uses tg_shape).
+      size: Spelling of the reduced-size helper (tinygrad uses tg_size).
+      keepdims: The primal's keepdims keyword name ('keepdims', or tinygrad's
+        'keepdim'); used both in the generated signatures and bodies.
+      tangent_params: Signature tail (after ``y, x``) for the forward
+        templates; defaults to ``'axis=None, <keepdims>=False'``. JAX passes
+        a ``dtype=None`` passthrough here.
+
+    Raises:
+      KeyError: if ``ops`` names a rule outside REDUCTION_RULES, or a rule in
+        ``ops`` has no matching ``forward`` body.
+    """
+    sig_tail = tangent_params or 'axis=None, %s=False' % keepdims
+    seed_expr = seed.format(g='d[y]')
+    unreduce = 'tangent.unreduce(%s, %s(x), axis, %s)' % (seed_expr, shape, keepdims)
+    adjoint_bodies = {
+        'sum': 'd[x] = %s' % unreduce,
+        'mean': 'n = %s(x, axis)\n    d[x] = %s / n' % (size, unreduce),
+    }
+
+    for rule_name, funcs in ops.items():
+        if funcs is None:
+            continue
+        if rule_name not in REDUCTION_RULES:
+            raise KeyError('Unknown reduction rule %r; known: %s' % (rule_name, REDUCTION_RULES))
+        if rule_name not in forward:
+            raise KeyError('No forward-mode body for reduction rule %r' % rule_name)
+        if not isinstance(funcs, tuple):
+            funcs = (funcs,)
+
+        adjoint_fn = _compile_binary_template(
+            'adjoint_%s_%s' % (backend, rule_name),
+            adjoint_bodies[rule_name],
+            'y, x, axis=None, %s=False' % keepdims,
+            '<tangent-reduction>/%s_%s_adjoint.py' % (backend, rule_name),
+        )
+        tangent_fn = _compile_binary_template(
+            'tangent_%s_%s' % (backend, rule_name),
+            forward[rule_name],
+            'y, x, %s' % sig_tail,
+            '<tangent-reduction>/%s_%s_tangent.py' % (backend, rule_name),
+        )
+        for func in funcs:
+            if func is None:
+                continue
+            grads.adjoint(func)(adjoint_fn)
+            tangents_module.tangent_(func)(tangent_fn)
+            grads.UNIMPLEMENTED_ADJOINTS.discard(func)
+            tangents_module.UNIMPLEMENTED_TANGENTS.discard(func)

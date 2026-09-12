@@ -732,15 +732,22 @@ def adjoint_clamp(y, x, min_=None, max_=None):
 # --- Reductions ---
 
 
-@adjoint(Tensor.sum)
-def adjoint_sum(y, x, axis=None, keepdim=False):
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim)
-
-
-@adjoint(Tensor.mean)
-def adjoint_mean(y, x, axis=None, keepdim=False):
-    n = tangent.tg_size(x, axis)
-    d[x] = tangent.unreduce(tangent.tg_seed(d[y], x), tangent.tg_shape(x), axis, keepdim) / n
+# sum / mean: adjoint AND forward-mode tangent generated together from the
+# unified catalog. tinygrad's method-style forward spelling and its keepdim
+# (singular) / tg_shape / tg_size helpers are passed through. max / min /
+# prod stay hand-written (extremal / product mask).
+op_catalog.register_reductions(
+    'tinygrad',
+    ops={'sum': Tensor.sum, 'mean': Tensor.mean},
+    forward={
+        'sum': 'd[y] = d[x].sum(axis=axis, keepdim=keepdim)',
+        'mean': 'd[y] = d[x].mean(axis=axis, keepdim=keepdim)',
+    },
+    seed='tangent.tg_seed({g}, x)',
+    shape='tangent.tg_shape',
+    size='tangent.tg_size',
+    keepdims='keepdim',
+)
 
 
 @adjoint(Tensor.max)
@@ -996,16 +1003,6 @@ def tangent_softmax(y, x, axis=-1):
 def tangent_log_softmax(y, x, axis=-1):
     # dy = dx - sum(softmax(x) * dx); exp(y) is softmax(x).
     d[y] = d[x] - (y.exp() * d[x]).sum(axis=axis, keepdim=True)
-
-
-@tangent_(Tensor.sum)
-def tangent_sum(y, x, axis=None, keepdim=False):
-    d[y] = d[x].sum(axis=axis, keepdim=keepdim)
-
-
-@tangent_(Tensor.mean)
-def tangent_mean(y, x, axis=None, keepdim=False):
-    d[y] = d[x].mean(axis=axis, keepdim=keepdim)
 
 
 @tangent_(Tensor.matmul)
