@@ -21,7 +21,7 @@ try:
     import tangent
     from tangent import non_differentiable
     from tangent.elementwise_rules import prefix_vocab
-    from tangent.elementwise_rules import register_elementwise
+    from tangent import op_catalog
     from tangent.grads import adjoint
     from tangent.tangents import tangent_
 
@@ -37,10 +37,11 @@ except ImportError:
 # ============================================================================
 
 # Unary elementwise ops: generated (adjoint AND tangent per op) from the
-# backend-neutral rule table. Spellings that moved between TF versions
-# (tf.math.ceil, tf.math.reciprocal, ...) are guarded with getattr so
-# whichever exists is registered.
-register_elementwise(
+# unified op catalog. Binary ops (add/subtract/multiply/divide) stay
+# hand-written for TF and are intentionally not routed through the catalog.
+# Spellings that moved between TF versions (tf.math.ceil, tf.math.reciprocal,
+# ...) are guarded with getattr so whichever exists is registered.
+op_catalog.register(
     'tf',
     ops={
         'abs': tf.abs,

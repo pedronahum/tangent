@@ -55,8 +55,7 @@ import numpy as np
 from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import method_vocab
-from tangent.elementwise_rules import register_elementwise
-from tangent.elementwise_rules import register_binary
+from tangent import op_catalog
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -612,14 +611,18 @@ utils.register_method_resolver(
 
 # --- Elementwise unary ---
 
-# Simple unary elementwise ops: generated (adjoint AND tangent per op) from
-# the backend-neutral rule table, using tinygrad's method-style spelling
-# ((x).cos() instead of mod.cos(x)). Activations with extra parameters or
-# tinygrad-specific formulas (leaky_relu, elu, gelu, silu, softplus,
-# softsign) stay hand-written below.
-register_elementwise(
+# Elementwise ops: generated (adjoint AND tangent per op) from the unified
+# op catalog, using tinygrad's method-style spelling ((x).cos() instead of
+# mod.cos(x)). Unary and binary rules are registered from one flat dict.
+# Activations with extra parameters or tinygrad-specific formulas
+# (leaky_relu, elu, gelu, silu, softplus, softsign) stay hand-written below.
+op_catalog.register(
     'tinygrad',
     ops={
+        'add': Tensor.add,
+        'subtract': Tensor.sub,
+        'multiply': Tensor.mul,
+        'divide': Tensor.div,
         'exp': Tensor.exp,
         'exp2': Tensor.exp2,
         'log': Tensor.log,
@@ -688,20 +691,6 @@ def adjoint_softsign(y, x):
 
 
 # --- Elementwise binary ---
-
-
-# Binary elementwise ops: generated from the shared backend-neutral table
-# with tinygrad's seed helper.
-register_binary(
-    'tinygrad',
-    ops={
-        'add': Tensor.add,
-        'subtract': Tensor.sub,
-        'multiply': Tensor.mul,
-        'divide': Tensor.div,
-    },
-    seed='tangent.tg_seed({g}, x)',
-)
 
 
 @adjoint(Tensor.pow)

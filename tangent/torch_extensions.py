@@ -42,8 +42,7 @@ import numpy as np
 from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import prefix_vocab
-from tangent.elementwise_rules import register_elementwise
-from tangent.elementwise_rules import register_binary
+from tangent import op_catalog
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_shape_function
@@ -245,20 +244,6 @@ _utils.register_matmul_grad(TensorType, torch_matmul_grad_x, torch_matmul_grad_y
 
 
 # Basic arithmetic operations
-# Binary elementwise ops: generated from the shared backend-neutral table,
-# with the torch seed helper. Both short and long aliases are registered.
-register_binary(
-    'torch',
-    ops={
-        'add': torch.add,
-        'subtract': (torch.sub, torch.subtract),
-        'multiply': (torch.mul, torch.multiply),
-        'divide': (torch.div, torch.divide),
-    },
-    seed='tangent.torch_seed({g}, x)',
-)
-
-
 @adjoint(torch.pow)
 def adjoint_pow(y, x, n):
     """Adjoint for torch.pow."""
@@ -269,7 +254,7 @@ def adjoint_pow(y, x, n):
 # backend-neutral rule table. Long-name aliases (torch.negative, torch.asin,
 # ...) are distinct function objects, so they are registered alongside the
 # short spellings.
-register_elementwise(
+op_catalog.register(
     'torch',
     ops={
         'exp': torch.exp,
@@ -300,6 +285,10 @@ register_elementwise(
         'ceil': torch.ceil,
         'round': torch.round,
         'sign': torch.sign,
+        'add': torch.add,
+        'subtract': (torch.sub, torch.subtract),
+        'multiply': (torch.mul, torch.multiply),
+        'divide': (torch.div, torch.divide),
     },
     vocab=prefix_vocab('torch', mask_pos='(({arg}) > 0)'),
     seed='tangent.torch_seed({g}, x)',

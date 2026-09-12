@@ -48,8 +48,7 @@ import numpy as np
 from tangent import non_differentiable
 from tangent import utils
 from tangent.elementwise_rules import prefix_vocab
-from tangent.elementwise_rules import register_elementwise
-from tangent.elementwise_rules import register_binary
+from tangent import op_catalog
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 from tangent.utils import register_init_grad
@@ -261,33 +260,24 @@ except (AttributeError, KeyError):
 # ============================================================================
 
 
-# Basic arithmetic operations
-# Binary elementwise ops: generated from the shared backend-neutral table
-# (add / subtract / multiply / divide + true_divide alias).
-register_binary(
-    'jax',
-    ops={
-        'add': jnp.add,
-        'subtract': jnp.subtract,
-        'multiply': jnp.multiply,
-        'divide': (jnp.divide, jnp.true_divide),
-    },
-)
-
-
 @adjoint(jnp.power)
 def adjoint_power(y, x, n):
     """Adjoint for jnp.power: ∂L/∂x = n·x^(n-1)·∂L/∂z"""
     d[x] = tangent.unbroadcast(d[y] * n * jnp.power(x, n - 1), x)
 
 
-# Unary elementwise ops: generated (adjoint AND tangent per op) from the
-# backend-neutral rule table. jnp exposes several NumPy-style aliases as
-# distinct objects in some versions, so both spellings are registered where
-# they exist.
-register_elementwise(
+# Elementwise ops: generated (adjoint AND tangent per op) from the unified
+# op catalog. Unary and binary rules are registered from one flat dict; the
+# catalog routes each rule to the right template generator. jnp exposes
+# several NumPy-style aliases as distinct objects in some versions, so both
+# spellings are registered where they exist.
+op_catalog.register(
     'jax',
     ops={
+        'add': jnp.add,
+        'subtract': jnp.subtract,
+        'multiply': jnp.multiply,
+        'divide': (jnp.divide, jnp.true_divide),
         'exp': jnp.exp,
         'expm1': jnp.expm1,
         'exp2': jnp.exp2,

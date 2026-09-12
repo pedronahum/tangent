@@ -48,8 +48,7 @@ except ImportError:
 import numpy as np
 from tangent import non_differentiable
 from tangent.elementwise_rules import prefix_vocab
-from tangent.elementwise_rules import register_elementwise
-from tangent.elementwise_rules import register_binary
+from tangent import op_catalog
 from tangent.grads import adjoint
 from tangent.tangents import tangent_
 
@@ -125,33 +124,23 @@ non_differentiable.register_non_differentiable_functions(
 # ============================================================================
 
 
-# Basic arithmetic
-# Binary elementwise ops: generated from the shared backend-neutral table
-# with the keras seed helper.
-register_binary(
-    'keras',
-    ops={
-        'add': kops.add,
-        'subtract': kops.subtract,
-        'multiply': kops.multiply,
-        'divide': kops.divide,
-    },
-    seed='tangent.keras_seed({g}, x)',
-)
-
-
 @adjoint(kops.power)
 def adjoint_power(z, x1, x2):
     """Adjoint for keras.ops.power (gradient wrt the base only)."""
     d[x1] = tangent.unbroadcast(tangent.keras_seed(d[z], x1) * x2 * kops.power(x1, x2 - 1), x1)
 
 
-# Unary elementwise ops: generated (adjoint AND tangent per op) from the
-# backend-neutral rule table. Optional spellings are guarded with getattr
-# so older Keras versions simply skip them.
-register_elementwise(
+# Elementwise ops: generated (adjoint AND tangent per op) from the unified
+# op catalog. Unary and binary rules are registered from one flat dict.
+# Optional spellings are guarded with getattr so older Keras versions simply
+# skip them.
+op_catalog.register(
     'keras',
     ops={
+        'add': kops.add,
+        'subtract': kops.subtract,
+        'multiply': kops.multiply,
+        'divide': kops.divide,
         'exp': kops.exp,
         'exp2': getattr(kops, 'exp2', None),
         'expm1': getattr(kops, 'expm1', None),
