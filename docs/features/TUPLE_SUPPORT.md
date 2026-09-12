@@ -213,8 +213,8 @@ Tangent is on par with other major autodiff frameworks for tuple support.
 ## Related Documentation
 
 - [Python Feature Support](PYTHON_FEATURE_SUPPORT.md) - Complete feature matrix
-- [Multi-Output Gradients](../../tests/test_tuple_returns.py) - Test suite for tuple returns
-- [Tuple Unpacking Tests](../../tests/test_tuple_unpacking_detailed.py) - Comprehensive unpacking tests
+- [Multi-Output Gradients](https://github.com/pedronahum/tangent/blob/master/tests/test_tuple_returns.py) - Test suite for tuple returns
+- [Tuple Unpacking Tests](https://github.com/pedronahum/tangent/blob/master/tests/test_tuple_unpacking_detailed.py) - Comprehensive unpacking tests
 
 ## Summary
 

@@ -17,26 +17,26 @@ This enables clean, concise code for conditional logic in differentiable functio
 
 ## What Was Implemented
 
-### 1. Fence Validation ([fence.py](../../tangent/fence.py))
+### 1. Fence Validation ([fence.py](https://github.com/pedronahum/tangent/blob/master/tangent/fence.py))
 - Changed `visit_IfExp` from rejecting to allowing conditional expressions
 
-### 2. Naming Support ([naming.py](../../tangent/naming.py))
+### 2. Naming Support ([naming.py](https://github.com/pedronahum/tangent/blob/master/tangent/naming.py))
 - Added `CMPOP_NAMES` dictionary mapping comparison operators to readable names
 - Added `name_Compare()` method to handle comparison expressions like `x > 0`
 - Added `name_IfExp()` method to generate names for ternary expressions
 
-### 3. Reverse-Mode AD Support ([reverse_ad.py](../../tangent/reverse_ad.py))
+### 3. Reverse-Mode AD Support ([reverse_ad.py](https://github.com/pedronahum/tangent/blob/master/tangent/reverse_ad.py))
 - Added `visit_IfExp()` method that:
   - Visits both branches to compute their primals and adjoints
   - Handles nested ternary expressions correctly
   - Stores the condition on the stack for the backward pass
   - Routes gradients to the chosen branch in the adjoint
 
-### 4. Constant Node Support ([reverse_ad.py](../../tangent/reverse_ad.py))
+### 4. Constant Node Support ([reverse_ad.py](https://github.com/pedronahum/tangent/blob/master/tangent/reverse_ad.py))
 - Added `visit_Constant()` method to handle Python 3.8+ constant nodes
 - Returns zero gradient for constants (correct mathematical behavior)
 
-### 5. Gradient Templates ([grads.py](../../tangent/grads.py))
+### 5. Gradient Templates ([grads.py](https://github.com/pedronahum/tangent/blob/master/tangent/grads.py))
 - Added primal template for IfExp (saves and pushes condition)
 - Added adjoint template for IfExp (routes gradient to chosen branch)
 
@@ -143,17 +143,17 @@ print(df(-1.0))  # -1.0 (derivative of -x)
 
 ## Files Modified
 
-1. **[tangent/fence.py](../../tangent/fence.py)** (1 line changed)
+1. **[tangent/fence.py](https://github.com/pedronahum/tangent/blob/master/tangent/fence.py)** (1 line changed)
    - Line 256: Changed from `self._reject(node, ...)` to `self._allow_and_continue(node)`
 
-2. **[tangent/naming.py](../../tangent/naming.py)** (32 lines added)
+2. **[tangent/naming.py](https://github.com/pedronahum/tangent/blob/master/tangent/naming.py)** (32 lines added)
    - Lines 358-389: Added comparison operator names and naming methods
 
-3. **[tangent/reverse_ad.py](../../tangent/reverse_ad.py)** (82 lines added)
+3. **[tangent/reverse_ad.py](https://github.com/pedronahum/tangent/blob/master/tangent/reverse_ad.py)** (82 lines added)
    - Lines 542-620: Added `visit_IfExp` method
    - Lines 754-756: Added `visit_Constant` method
 
-4. **[tangent/grads.py](../../tangent/grads.py)** (16 lines added)
+4. **[tangent/grads.py](https://github.com/pedronahum/tangent/blob/master/tangent/grads.py)** (16 lines added)
    - Lines 224-239: Added primal and adjoint templates
 
 ## Mathematical Correctness

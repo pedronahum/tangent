@@ -19,9 +19,9 @@ literal it denotes:
 the loop variable is substituted, the clause is a closed constant expression).
 
 The unrolling lives in
-[`tangent/comprehension_desugar.py`](../../tangent/comprehension_desugar.py)
+[`tangent/comprehension_desugar.py`](https://github.com/pedronahum/tangent/blob/master/tangent/comprehension_desugar.py)
 (which also handles set/dict comprehensions) and is exercised by
-[`tests/test_comprehensions.py`](../../tests/test_comprehensions.py).
+[`tests/test_comprehensions.py`](https://github.com/pedronahum/tangent/blob/master/tests/test_comprehensions.py).
 
 ## Dynamic iterables are rejected
 
@@ -36,7 +36,7 @@ tangent.grad(f)   # TangentParseError: List comprehensions over dynamic
                   # iterables are not supported
 ```
 
-The language fence ([`tangent/fence.py`](../../tangent/fence.py)) raises a
+The language fence ([`tangent/fence.py`](https://github.com/pedronahum/tangent/blob/master/tangent/fence.py)) raises a
 `TangentParseError` pointing at the comprehension, with workarounds in the
 message.
 
@@ -76,5 +76,5 @@ for v in xs:
 
 ## Related
 
-- [PYTHON_FEATURE_SUPPORT.md](PYTHON_FEATURE_SUPPORT.md#comprehensions) — full feature matrix
+- [PYTHON_FEATURE_SUPPORT.md](PYTHON_FEATURE_SUPPORT.md#comprehensions-partial) — full feature matrix
 - [FOR_LOOP_SUPPORT.md](FOR_LOOP_SUPPORT.md) — explicit loop support

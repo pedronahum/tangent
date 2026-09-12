@@ -43,8 +43,8 @@
 ### Documentation
 - [`FRAMEWORK_COMPARISON.md`](FRAMEWORK_COMPARISON.md) - Detailed analysis of Tangent vs TensorFlow vs PyTorch
 - [`BUILDING_SIMULATION_BENCHMARK.md`](BUILDING_SIMULATION_BENCHMARK.md) - Tangent optimization analysis
-- [`STRENGTH_REDUCTION_COMPLETE.md`](../optimizations/STRENGTH_REDUCTION_COMPLETE.md) - Strength reduction implementation details
-- [`SYMBOLIC_OPTIMIZATIONS_COMPLETE.md`](../optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md) - CSE and algebraic simplification details
+- [`STRENGTH_REDUCTION_COMPLETE.md`](https://github.com/pedronahum/tangent/blob/master/docs/optimizations/STRENGTH_REDUCTION_COMPLETE.md) - Strength reduction implementation details
+- [`SYMBOLIC_OPTIMIZATIONS_COMPLETE.md`](https://github.com/pedronahum/tangent/blob/master/docs/optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md) - CSE and algebraic simplification details
 
 ---
 

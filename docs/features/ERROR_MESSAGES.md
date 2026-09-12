@@ -288,6 +288,6 @@ python examples/demo_error_messages.py
 ## See Also
 
 - [Python Feature Support](PYTHON_FEATURE_SUPPORT.md) - Complete feature matrix
-- [Dict Construction Bug](../bugs/DICT_CONSTRUCTION_BUG.md) - Detailed bug report
+- [Dict Construction Bug](https://github.com/pedronahum/tangent/blob/master/docs/bugs/DICT_CONSTRUCTION_BUG.md) - Detailed bug report
 - [Error Handlers](https://github.com/pedronahum/tangent/blob/master/tangent/error_handlers.py) - Advanced error handling
 - [Error Suggestions](https://github.com/pedronahum/tangent/blob/master/tangent/error_suggestions.py) - Suggestion database

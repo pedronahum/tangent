@@ -175,9 +175,9 @@ x > 0 and x < 10 or x > 20 and x < 30
 
 Boolean operator support required three small changes:
 
-1. **Fence validation** ([fence.py:158-159](../../tangent/fence.py#L158-L159)): Enabled the `Not` operator
-2. **Naming support** ([naming.py:384-394](../../tangent/naming.py#L384-L394)): Added naming for `BoolOp` nodes in ANF transformation
-3. **Reverse-mode AD** ([reverse_ad.py:859-861](../../tangent/reverse_ad.py#L859-L861)): Marked boolean operations as non-differentiable
+1. **Fence validation** ([fence.py:158-159](https://github.com/pedronahum/tangent/blob/master/tangent/fence.py#L158-L159)): Enabled the `Not` operator
+2. **Naming support** ([naming.py:384-394](https://github.com/pedronahum/tangent/blob/master/tangent/naming.py#L384-L394)): Added naming for `BoolOp` nodes in ANF transformation
+3. **Reverse-mode AD** ([reverse_ad.py:859-861](https://github.com/pedronahum/tangent/blob/master/tangent/reverse_ad.py#L859-L861)): Marked boolean operations as non-differentiable
 
 ## Limitations
 
