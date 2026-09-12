@@ -76,6 +76,23 @@ def test_compile_unknown_rejected():
         tangent.grad(cached_fn, compile='cuda')
 
 
+def test_compile_tinygrad_matches_python():
+    # The adjoint of tinygrad code is itself a tinygrad graph, so compile=
+    # 'tinygrad' wraps it in TinyJit; the result must match the plain Python
+    # gradient. (Guarded locally rather than at module scope so this runs
+    # independently of whether jax is installed.)
+    tg = pytest.importorskip('tinygrad', reason='tinygrad not installed')
+    Tensor = tg.Tensor
+
+    def tg_loss(x):
+        return Tensor.sum(Tensor.tanh(x) ** 2)
+
+    x = Tensor(np.array([0.5, -1.0, 2.0], dtype='float32'))
+    plain = tangent.grad(tg_loss)(x).numpy()
+    jitted = tangent.grad(tg_loss, compile='tinygrad')(x).numpy()
+    np.testing.assert_allclose(jitted, plain, rtol=1e-5, atol=1e-6)
+
+
 jax = pytest.importorskip('jax', reason='jax not installed')
 import jax.numpy as jnp  # noqa: E402
 
