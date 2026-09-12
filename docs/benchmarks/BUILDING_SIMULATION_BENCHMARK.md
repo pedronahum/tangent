@@ -7,6 +7,20 @@ Successfully implemented and benchmarked Tangent's automatic differentiation on 
 **Benchmark**: Building thermal simulation with floor heating, fluid flow, and heat transfer
 **Source**: Based on https://github.com/PassiveLogic/differentiable-swift-examples/
 
+!!! note "Reproducing these numbers"
+    Every figure on this page comes from two scripts, so they cannot drift
+    apart:
+
+    ```
+    python benchmarks/building_simulation_tangent.py     # optimization stack
+    python benchmarks/building_simulation_compare.py      # vs TensorFlow / PyTorch
+    ```
+
+    **Measured:** 2026-09-12, Python 3.12 / Linux aarch64, NumPy 2.5, PyTorch
+    2.14 (CPU), TensorFlow 2.x, CPU only, 100 trials × 20 timesteps. Absolute
+    times are host-specific; the ratios are the point, and re-running the
+    scripts refreshes the tables below.
+
 ---
 
 ## Implementation
@@ -64,55 +78,62 @@ result_quanta = (quanta * np.array([0.0, 0.0, 1, 1, 1]) +
 
 ## Benchmark Results
 
-### Performance Summary
+### Optimization stack (Tangent, NumPy)
 
-| Configuration | Forward Time | Gradient Time | Overhead |
-|--------------|-------------|---------------|----------|
-| **Tangent (No Opt)** | 0.000293s | 0.010028s | 34.21× |
-| **Tangent (DCE)** | 0.000295s | 0.005133s | 17.38× |
-| **Tangent (All Opts)** | 0.000299s | 0.004267s | 14.27× |
-
-### Optimization Impact
+| Configuration | Forward | Gradient | Overhead |
+|--------------|---------|----------|----------|
+| **Tangent (No Opt)** | 0.000187s | 0.008708s | 46.7× |
+| **Tangent (DCE)** | 0.000188s | 0.003329s | 17.7× |
+| **Tangent (All Opts)** | 0.000189s | 0.003316s | 17.5× |
 
 | Comparison | Speedup |
 |-----------|---------|
-| **DCE vs No Optimization** | **1.95×** |
-| **All Opts vs No Optimization** | **2.35×** |
-| **All Opts vs DCE** | **1.20×** |
+| **DCE vs No Optimization** | **2.62×** |
+| **All Opts vs No Optimization** | **2.63×** |
+| **All Opts vs DCE** | **1.00×** |
+
+### Versus TensorFlow and PyTorch
+
+Same simulation, gradient of the loss, best steady-state of 100 trials:
+
+| Framework | Forward | Gradient | Overhead |
+|-----------|---------|----------|----------|
+| **Tangent (All Opts)** | 0.000194s | 0.003323s | 17.1× |
+| PyTorch | 0.003540s | 0.004258s | 1.2× |
+| TensorFlow | 0.001326s | 0.005262s | 4.0× |
+
+| Tangent vs | Gradient | Forward pass |
+|-----------|----------|--------------|
+| **PyTorch** | **1.28× faster** | 18.2× faster |
+| **TensorFlow** | **1.58× faster** | 6.8× faster |
 
 ---
 
 ## Analysis
 
-### 1. DCE Provides Significant Speedup (1.95×)
+### 1. DCE is the dominant optimization (2.62×)
 
-Dead Code Elimination (DCE) removes:
-- Unused forward pass computations
-- Redundant gradient accumulations
-- Unnecessary push/pop operations for unused variables
+Dead Code Elimination removes unused forward computations, redundant gradient
+accumulations, and the tape push/pop pairs for values the backward sweep never
+reads. It alone drops the gradient from ~47× the forward cost to ~18×.
 
-**Result**: Gradient computation drops from 34× overhead to 17× overhead relative to forward pass.
+### 2. Symbolic optimizations add essentially nothing here (1.00×)
 
-### 2. Symbolic Optimizations Add Incremental Benefit (1.20×)
+On this workload, layering Strength Reduction + CSE + Algebraic Simplification
+on top of DCE produced **no measurable speedup** (3.329ms → 3.316ms, within
+noise). These passes help expression-heavy scalar code (see the CSE/algebraic
+micro-benchmarks), but this simulation's cost is dominated by array operations
+that DCE has already pruned - so they are off by default, and this benchmark is
+the honest reason why. (Earlier revisions of this page reported a 1.20× gain
+here from a single earlier run; a fresh measurement does not reproduce it.)
 
-Strength Reduction + CSE + Algebraic Simplification provide an additional **20% speedup** on top of DCE:
+### 3. Total optimization benefit: 2.63×
 
-- **Strength Reduction**: Converts power operations to multiplications
-  - Example: `x ** 2` → `x * x` (10 cycles → 1 cycle)
-
-- **CSE**: Eliminates redundant computations in backward pass
-  - Example: `bc * x` computed multiple times → computed once
-
-- **Algebraic Simplification**: Applies mathematical identities
-  - Example: `x * 1.0` → `x`
-
-**Result**: Final gradient computation overhead of **14.27×** relative to forward pass.
-
-### 3. Total Optimization Benefit: 2.35×
-
-Combined optimization stack provides **2.35× speedup** over unoptimized gradients:
-- From 0.010028s to 0.004267s per gradient computation
-- Reduces overhead from 34× to 14× relative to forward pass
+The optimized gradient is **2.63× faster** than the unoptimized one
+(8.708ms → 3.316ms), essentially all of it from DCE. Against the frameworks a
+user would switch from, the optimized Tangent gradient is faster than both
+eager PyTorch (1.28×) and TensorFlow (1.58×) on this CPU workload, and its
+forward pass - plain NumPy, no graph or tape to build - is many times faster.
 
 ---
 
@@ -174,7 +195,7 @@ def grad_simulate(sim_params, bslab_temp):
     # No unnecessary gradient accumulations
 ```
 
-**Impact**: **1.95× speedup** (10.028ms → 5.133ms)
+**Impact**: **2.62× speedup** (8.708ms → 3.329ms) - the whole optimization win on this workload.
 
 ---
 
@@ -192,7 +213,8 @@ resistance = x * x  # Multiplication (1 cycle)
 area_factor = volume * 0.5  # Multiplication (1 cycle)
 ```
 
-**Impact**: Part of **1.20× additional speedup** on top of DCE
+**Impact**: No measurable gain on *this* array-dominated workload; helps
+expression-heavy scalar code. Off by default.
 
 ---
 
@@ -214,7 +236,8 @@ bc2 = _cse_temp_0
 bc3 = _cse_temp_0
 ```
 
-**Impact**: Part of **1.20× additional speedup** on top of DCE
+**Impact**: No measurable gain on *this* workload (DCE already pruned the
+redundancy); pays off on code with repeated subexpressions. Off by default.
 
 ---
 
@@ -326,11 +349,13 @@ def loss_calc(pred, gt):
 
 1. **Tangent successfully handles complex simulations**: 20-timestep thermal simulation with multiple state updates.
 
-2. **Optimizations provide significant speedup**: **2.35× total improvement** over unoptimized gradients.
+2. **Optimizations provide a real speedup**: **2.63× total improvement** over unoptimized gradients.
 
-3. **DCE is the most impactful optimization**: **1.95× speedup** alone, eliminating dead forward pass code.
+3. **DCE is the impactful optimization**: **2.62× speedup** alone, eliminating dead forward-pass code and unread tape entries - essentially the entire win here.
 
-4. **Symbolic optimizations add value**: Additional **1.20× speedup** from strength reduction + CSE + algebraic simplification.
+4. **Symbolic optimizations are workload-dependent**: no measurable gain on this array-dominated simulation (they help expression-heavy scalar code), which is why they are off by default.
+
+5. **Faster than the eager frameworks**: the optimized gradient beats eager PyTorch (1.28×) and TensorFlow (1.58×) on this CPU workload.
 
 5. **Tangent-compatible code patterns exist**: Can work around limitations like `.copy()` with array arithmetic.
 
@@ -394,8 +419,7 @@ Measure:
 
 ---
 
-**Implementation Date**: November 2025
 **Status**: ✅ Complete
-**Lines of Code**: 399
-**Performance**: 2.35× speedup with full optimizations
-**Baseline**: 10.028ms → **Optimized**: 4.267ms per gradient
+**Performance**: 2.63× speedup from optimizations (all from DCE)
+**Baseline**: 8.708ms → **Optimized**: 3.316ms per gradient
+**Numbers last measured**: 2026-09-12 (regenerate with the two scripts above)

@@ -10,41 +10,24 @@ This document presents a comprehensive comparison of automatic differentiation f
 
 ---
 
+!!! info "Where the numbers live"
+    This page explains *how* the three approaches differ. For measured,
+    reproducible figures see the
+    [Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md) (this same
+    thermal simulation, with the optimization stack and the vs-TF/PyTorch
+    table) and the [Framework Gradient Benchmarks](FRAMEWORK_BENCHMARKS.md)
+    (MLP / conv / scalar vs jax, torch, autograd, finite differences). Keeping
+    all numbers in those two generated docs is what stops them drifting.
+
 ## Results Summary
 
-### Performance Comparison
-
-| Framework | Forward Time | Gradient Time | Overhead |
-|-----------|-------------|---------------|----------|
-| **Tangent (All Optimizations)** | **0.000305s** | **0.004237s** | 13.89× |
-| **TensorFlow** | 0.000867s | 0.004309s | 4.97× |
-| **PyTorch** | 0.003483s | 0.006729s | 1.93× |
-
-### Key Findings
-
-1. **Tangent has the fastest forward pass**: 0.305ms per iteration
-   - 2.84× faster than TensorFlow
-   - 11.4× faster than PyTorch
-
-2. **Tangent and TensorFlow have similar gradient times**: ~4.2-4.3ms
-   - Tangent: 4.237ms
-   - TensorFlow: 4.309ms
-   - Difference: 1.7% (within measurement variance)
-
-3. **Tangent is competitive with TensorFlow for gradient computation**:
-   - Tangent: 4.237ms
-   - TensorFlow: 4.309ms
-   - Tangent is actually **1.7% faster** than TensorFlow
-
-4. **Both Tangent and TensorFlow outperform PyTorch**:
-   - Tangent is **1.59× faster** than PyTorch for gradients
-   - TensorFlow is **1.56× faster** than PyTorch for gradients
-
-5. **PyTorch has the lowest overhead** (1.93×):
-   - PyTorch's backward pass adds only 93% overhead over forward
-   - TensorFlow's backward adds 397% overhead
-   - Tangent's backward adds 1289% overhead
-   - **But**: PyTorch's forward pass is much slower, so absolute time matters more
+On the thermal simulation (CPU, most recent run), the optimized Tangent
+gradient is **faster than both eager PyTorch (~1.3×) and TensorFlow (~1.6×)**,
+and its forward pass - plain NumPy, with no graph or tape to build - is several
+times faster than either. PyTorch has the lowest backward/forward *overhead
+ratio*, but the highest absolute time, because its forward pass is the slowest.
+See the [Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md) for
+the exact per-framework table.
 
 ---
 
@@ -70,13 +53,12 @@ This document presents a comprehensive comparison of automatic differentiation f
 
 ### Gradient Computation Performance
 
-**Why Tangent and TensorFlow are similar (~4.2-4.3ms)**:
-- Both use optimized computation graphs
+**Why Tangent and TensorFlow are close**:
 - Both avoid redundant computations
 - TensorFlow uses XLA compilation (behind `@tf.function`)
-- Tangent uses symbolic optimizations (DCE, CSE, strength reduction)
+- Tangent uses tape-aware DCE (its dominant optimization on this workload)
 
-**Why PyTorch is slower (6.7ms)**:
+**Why PyTorch is slower here**:
 - Eager mode backward pass
 - More dynamic graph construction overhead
 - Less opportunity for optimization
@@ -88,48 +70,38 @@ This document presents a comprehensive comparison of automatic differentiation f
 ### Tangent
 
 **Strengths**:
-- ✅ **Fastest forward pass** (0.305ms)
-- ✅ **Competitive gradient computation** (4.237ms, 1.7% faster than TensorFlow!)
+- ✅ **Fastest forward pass** - source-to-source to pure NumPy, no graph/tape build
+- ✅ **Competitive gradient computation** - beats eager PyTorch and TensorFlow here
 - ✅ **Source-to-source transformation** - generates readable Python code
-- ✅ **Symbolic optimizations** provide significant speedup (2.35× over unoptimized)
+- ✅ **Tape-aware DCE** provides the bulk of the optimization speedup
 - ✅ **Pure Python/NumPy** - no special runtime required
 - ✅ **Supports arbitrary Python code** (with some limitations)
 
 **Weaknesses**:
-- ❌ **High overhead ratio** (13.89×) - backward pass is 13× slower than forward
-- ❌ **Limited tensor library support** (NumPy only, some JAX support)
+- ❌ **High backward/forward overhead ratio** - the backward pass dominates
+- ❌ **Limited tensor library support** (NumPy focus; JAX/Torch/TF/Keras/tinygrad extensions)
 - ❌ **Source transformation limitations** (can't use `.copy()`, some dynamic patterns)
-- ❌ **No GPU acceleration** in this benchmark
-- ❌ **Compilation time** (not measured here, but exists)
+- ❌ **No GPU acceleration** in this benchmark (use `compile='jax'` to lower onto XLA)
+- ❌ **Compilation time** - a one-time source-transform bill (amortized by the disk cache)
 
-**Optimization Impact**:
-| Configuration | Gradient Time | Speedup |
-|--------------|---------------|---------|
-| No optimization | 10.028ms | Baseline |
-| DCE only | 5.133ms | 1.95× |
-| **All optimizations** | **4.267ms** | **2.35×** |
-
-**Optimizations enabled**:
-- Dead Code Elimination (DCE): Removes unused forward pass code
-- Strength Reduction: Converts `x**2` → `x*x`, `x/const` → `x*(1/const)`
-- Common Subexpression Elimination (CSE): Removes redundant computations
-- Algebraic Simplification: Applies mathematical identities
+See the [Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md) for the
+measured optimization-stack breakdown (DCE is ~2.6× and does essentially all of
+the work; the symbolic passes add nothing on this array-heavy workload).
 
 ### TensorFlow
 
 **Strengths**:
-- ✅ **Fast gradient computation** (4.309ms)
-- ✅ **Graph optimization** via XLA compiler
-- ✅ **Low overhead ratio** (4.97×) - reasonable backward/forward ratio
+- ✅ **Fast gradient computation** via XLA graph optimization
+- ✅ **Low backward/forward overhead ratio**
 - ✅ **Production-ready** with extensive ecosystem
 - ✅ **GPU/TPU support** (not tested here)
 - ✅ **Extensive library support**
 
 **Weaknesses**:
-- ❌ **Slower forward pass** than Tangent (0.867ms vs 0.305ms)
+- ❌ **Slower forward pass** than Tangent (graph/runtime overhead)
 - ❌ **Graph mode complexity** (`@tf.function` can be tricky)
 - ❌ **Less flexible** than eager execution for debugging
-- ❌ **Slower than Tangent** by 1.7% for gradients
+- ❌ **Slower than optimized Tangent** for gradients on this CPU workload
 
 **Implementation notes**:
 - Uses `@tf.function` decorator for graph compilation
@@ -140,18 +112,17 @@ This document presents a comprehensive comparison of automatic differentiation f
 ### PyTorch
 
 **Strengths**:
-- ✅ **Lowest overhead ratio** (1.93×) - backward adds minimal overhead
+- ✅ **Lowest backward/forward overhead ratio** - backward adds minimal overhead
 - ✅ **Eager execution** - easy to debug
 - ✅ **Pythonic API** - most intuitive for Python developers
 - ✅ **Dynamic computational graphs** - maximum flexibility
 - ✅ **Strong ecosystem** (torchvision, etc.)
 
 **Weaknesses**:
-- ❌ **Slowest absolute performance** for both forward (3.483ms) and gradient (6.729ms)
+- ❌ **Slowest absolute performance** for both forward and gradient on this CPU workload
 - ❌ **Eager mode overhead** - trades performance for flexibility
 - ❌ **No automatic optimization** - relies on manual JIT compilation
-- ❌ **1.59× slower than Tangent** for gradients
-- ❌ **1.56× slower than TensorFlow** for gradients
+- ❌ **Slower than optimized Tangent** for gradients here (see the canonical table)
 
 **Why PyTorch is slower**:
 - Eager execution requires building computation graph during forward pass
@@ -266,7 +237,7 @@ gradient = torch.autograd.grad(result, inputs, retain_graph=True)
 ### Tangent Tuning
 
 **What worked**:
-- ✅ Enabling all optimizations: 2.35× speedup
+- ✅ Enabling optimization (DCE): ~2.6× speedup - essentially the whole win
 - ✅ Replacing `.copy()` with array arithmetic
 - ✅ Using `+ 0.0` instead of `.copy()` for array duplication
 
@@ -301,15 +272,14 @@ gradient = torch.autograd.grad(result, inputs, retain_graph=True)
 
 ### Main Takeaways
 
-1. **Tangent is production-ready for scientific computing**:
-   - Competitive with TensorFlow (actually 1.7% faster!)
-   - 1.59× faster than PyTorch
-   - Fastest forward pass by far (2.84-11.4× faster)
+1. **Tangent is competitive for scientific computing**:
+   - Faster than eager TensorFlow and PyTorch for gradients on this CPU workload
+   - Fastest forward pass by far (plain NumPy, no graph/tape build)
 
 2. **Optimization matters for Tangent**:
-   - 2.35× speedup from optimization stack
-   - DCE alone provides 1.95× speedup
-   - Symbolic optimizations add another 20%
+   - ~2.6× speedup from optimization, essentially all from tape-aware DCE
+   - Symbolic optimizations add nothing on this array-heavy workload (they help
+     expression-heavy scalar code)
 
 3. **Framework choice depends on use case**:
    - **Tangent**: Best for pure Python/NumPy code, scientific computing, when you need readable generated code
@@ -345,19 +315,19 @@ gradient = torch.autograd.grad(result, inputs, retain_graph=True)
 
 ### Surprising Results
 
-1. **Tangent faster than TensorFlow** for gradients (by 1.7%):
-   - Expected TensorFlow to win due to mature XLA compiler
-   - Tangent's symbolic optimizations are highly effective
+1. **Tangent faster than eager TensorFlow** for gradients here:
+   - Expected TensorFlow to win due to its mature XLA compiler
+   - Tape-aware DCE on the generated code is highly effective
    - Source-to-source transformation avoids some runtime overhead
 
-2. **Tangent's forward pass is 2.84× faster than TensorFlow**:
+2. **Tangent's forward pass is several times faster** than both frameworks:
    - Pure NumPy with no framework wrapping
    - No graph construction or bookkeeping
    - Direct execution of optimized code
 
-3. **PyTorch's low overhead ratio (1.93×)**:
+3. **PyTorch's low backward/forward overhead ratio**:
    - Backward pass adds minimal overhead
-   - But absolute performance suffers from slow forward pass
+   - But absolute performance suffers from a slow forward pass
    - Trade-off: flexibility vs performance
 
 ### Future Work

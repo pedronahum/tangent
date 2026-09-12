@@ -1,7 +1,7 @@
 ================================================================================
 TANGENT FRAMEWORK COMPARISON BENCHMARK RESULTS
 ================================================================================
-Date: 2025-11-04 13:32:34
+Date: 2026-09-12 22:31:54
 Benchmark: Building Thermal Simulation
 Trials: 100
 Timesteps: 20
@@ -12,37 +12,37 @@ PERFORMANCE RESULTS
 --------------------------------------------------------------------------------
 Framework                           Forward (s)     Gradient (s)    Overhead  
 --------------------------------------------------------------------------------
-Tangent (All Optimizations)         0.000378        0.005529        14.62     ×
-TensorFlow                          0.001835        0.008029        4.37      ×
-PyTorch                             0.006065        0.011731        1.93      ×
+Tangent (All Optimizations)         0.000194        0.003323        17.11     ×
+PyTorch                             0.003540        0.004258        1.20      ×
+TensorFlow                          0.001326        0.005262        3.97      ×
 --------------------------------------------------------------------------------
 
 SPEEDUP ANALYSIS (Gradient Computation)
 --------------------------------------------------------------------------------
 
 Tangent (baseline):
-  Forward time:  0.000378 seconds
-  Gradient time: 0.005529 seconds
-  Overhead:      14.62×
+  Forward time:  0.000194 seconds
+  Gradient time: 0.003323 seconds
+  Overhead:      17.11×
 
 Tangent vs TensorFlow:
-  Tangent is 1.45× faster for gradients
-  Tangent is 4.85× faster for forward pass
-  (TensorFlow is 45.2% faster)
+  Tangent is 1.58× faster for gradients
+  Tangent is 6.83× faster for forward pass
+  (TensorFlow is 58.3% faster)
 
 Tangent vs PyTorch:
-  Tangent is 2.12× faster for gradients
-  Tangent is 16.04× faster for forward pass
-  (Tangent is 112.2% faster overall)
+  Tangent is 1.28× faster for gradients
+  Tangent is 18.23× faster for forward pass
+  (Tangent is 28.1% faster overall)
 
 --------------------------------------------------------------------------------
 
 RELATIVE SPEEDUPS
 --------------------------------------------------------------------------------
-Baseline (slowest): PyTorch - 0.011731s
+Baseline (slowest): TensorFlow - 0.005262s
 
-Tangent (All Optimizations)         2.12× faster than PyTorch
-TensorFlow                          1.46× faster than PyTorch
+Tangent (All Optimizations)         1.58× faster than TensorFlow
+PyTorch                             1.24× faster than TensorFlow
 
 ================================================================================
 OPTIMIZATION DETAILS

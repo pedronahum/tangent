@@ -59,10 +59,9 @@ the implementation lives in `tangent/optimizations/dce.py`.
 
 ## 🏆 Benchmarks
 
+- [Framework Gradient Benchmarks](benchmarks/FRAMEWORK_BENCHMARKS.md) - MLP / conv / scalar vs jax, torch, autograd, finite differences
 - [Framework Comparison](benchmarks/FRAMEWORK_COMPARISON.md) - Tangent vs TensorFlow vs PyTorch
-- [Benchmark Summary](benchmarks/BENCHMARK_SUMMARY.md) - Executive summary of benchmark results
-- [Benchmark Results Summary](benchmarks/BENCHMARK_RESULTS_SUMMARY.md) - Quick reference guide
-- [Building Simulation Benchmark](benchmarks/BUILDING_SIMULATION_BENCHMARK.md) - Thermal simulation benchmark details
+- [Building Simulation Benchmark](benchmarks/BUILDING_SIMULATION_BENCHMARK.md) - Thermal simulation: optimization stack + vs TF/PyTorch
 - [Correctness Verification](benchmarks/CORRECTNESS_VERIFICATION.md) - Mathematical correctness validation
 - [Performance Improvement Strategies](benchmarks/PERFORMANCE_IMPROVEMENT_STRATEGIES.md) - Future optimization opportunities
 
@@ -87,7 +86,7 @@ and README over these):
 
 1. **New to Tangent?** Start with the [README](../README.md)
 2. **What can I differentiate?** See the [Python Feature Support Guide](features/PYTHON_FEATURE_SUPPORT.md)
-3. **Performance?** See the [Benchmark Summary](benchmarks/BENCHMARK_SUMMARY.md)
+3. **Performance?** See the [Framework Gradient Benchmarks](benchmarks/FRAMEWORK_BENCHMARKS.md)
 4. **Examples?** Browse [../examples/](../examples/README.md) and the notebooks in [../notebooks/](../notebooks/)
 
 ---

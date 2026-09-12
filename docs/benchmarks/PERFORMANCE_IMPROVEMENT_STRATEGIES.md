@@ -2,10 +2,10 @@
 
 ## Current State
 
-**Gradient Computation**:
-- Tangent: 4.300ms
-- TensorFlow: 4.315ms
-- **Status**: Essentially tied (0.4% difference, within measurement variance)
+**Gradient Computation** (building thermal simulation, CPU): the optimized
+Tangent gradient is faster than eager TensorFlow and PyTorch. For the current
+measured figures see
+[Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md).
 
 **Forward Pass**:
 - Tangent: 0.315ms (2.77× faster than TensorFlow) ✅
@@ -418,8 +418,8 @@ result = grad_f(x_gpu)
 ## Realistic Performance Targets
 
 ### Current State
-- Tangent: 4.300ms (gradient)
-- TensorFlow: 4.315ms
+See [Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md) for the
+current measured gradient times across Tangent / TensorFlow / PyTorch.
 
 ### With Top 3 Optimizations
 

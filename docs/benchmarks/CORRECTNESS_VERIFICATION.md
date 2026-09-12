@@ -129,13 +129,15 @@ All three frameworks produce **mathematically equivalent results**:
 
 ### 📊 Performance vs Correctness
 
-| Framework | Correctness | Gradient Speed | Forward Speed |
-|-----------|------------|---------------|---------------|
-| **Tangent** | ✅ Verified | 4.237ms (fastest) | 0.305ms (fastest) |
-| **TensorFlow** | ✅ Verified | 4.309ms | 0.867ms |
-| **PyTorch** | ✅ Verified | 6.729ms | 3.483ms |
+| Framework | Correctness | Relative speed (this workload) |
+|-----------|------------|--------------------------------|
+| **Tangent** | ✅ Verified | fastest forward pass; fastest gradient |
+| **TensorFlow** | ✅ Verified | slower forward and gradient |
+| **PyTorch** | ✅ Verified | slowest absolute forward and gradient |
 
-**Winner**: Tangent achieves **both correctness and performance**! 🏆
+All three agree numerically, so framework choice rests on performance and
+usability, not correctness. For the measured timings see the
+[Building Simulation Benchmark](BUILDING_SIMULATION_BENCHMARK.md).
 
 ---
 
