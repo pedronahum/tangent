@@ -472,5 +472,83 @@ def test_elementwise_support_set_is_exact():
     )
 
 
+class TestBackendHandoff:
+    """Coarsening a jax / torch primal emits one VJP expression in that
+    backend's ops, so `compile=` can fuse it. The gradient must match a NumPy
+    finite-difference oracle, and TF/Keras primals must fall back safely."""
+
+    CO = {'coarsening': True}
+
+    @staticmethod
+    def _fd(f, x, h=1e-6):
+        return (f(x + h) - f(x - h)) / (2 * h)
+
+    def test_numpy_still_coarsens(self):
+        def f(x):
+            a = np.sin(x)
+            b = np.exp(a)
+            return np.sqrt(b)
+
+        g = tangent.grad(f, optimizations=self.CO)(0.7)
+        assert abs(float(g) - self._fd(f, 0.7)) < 1e-4
+
+    def test_jax_backend_handoff(self):
+        jnp = pytest.importorskip('jax.numpy')
+
+        def f(x):
+            a = jnp.sin(x)
+            b = jnp.exp(a)
+            return jnp.sqrt(b)
+
+        def fnp(x):
+            return np.sqrt(np.exp(np.sin(x)))
+
+        g = tangent.grad(f, optimizations=self.CO)(jnp.asarray(0.7))
+        assert abs(float(g) - self._fd(fnp, 0.7)) < 1e-4
+        # The coarsened adjoint is a single expression (one statement per input).
+        assert 'def d' in tangent.grad(f, optimizations=self.CO).__tangent_source__
+
+    def test_jax_compiled_fuses(self):
+        jax = pytest.importorskip('jax')
+        jnp = pytest.importorskip('jax.numpy')
+
+        def f(x):
+            a = jnp.sin(x)
+            return jnp.exp(a)
+
+        def fnp(x):
+            return np.exp(np.sin(x))
+
+        g = tangent.grad(f, optimizations=self.CO, compile='jax')(jnp.asarray(0.7))
+        assert abs(float(g) - self._fd(fnp, 0.7)) < 1e-4
+
+    def test_torch_backend_handoff(self):
+        torch = pytest.importorskip('torch')
+
+        def f(x):
+            a = torch.sin(x)
+            return torch.sqrt(torch.exp(a))
+
+        def fnp(x):
+            return np.sqrt(np.exp(np.sin(x)))
+
+        g = tangent.grad(f, optimizations=self.CO)(torch.tensor(0.7))
+        assert abs(float(g) - self._fd(fnp, 0.7)) < 1e-4
+
+    def test_tensorflow_falls_back_but_correct(self):
+        tf = pytest.importorskip('tensorflow')
+
+        def f(x):
+            a = tf.sin(x)
+            return tf.sqrt(tf.exp(a))
+
+        def fnp(x):
+            return np.sqrt(np.exp(np.sin(x)))
+
+        # Coarsening is declined for TF; the standard pipeline still differentiates.
+        g = tangent.grad(f, optimizations=self.CO)(tf.constant(0.7))
+        assert abs(float(g) - self._fd(fnp, 0.7)) < 1e-4
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

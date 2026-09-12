@@ -323,42 +323,74 @@ def jvp(func, wrt=(0,), optimized=True, check_dims=True, preserve_result=False, 
     )
 
 
-# Elementwise functions that the straight-line coarsening pass can emit by
-# bare name (see tangent/optimizations/coarsening.py), mapped to their NumPy
-# implementations so a lowered adjoint can execute in a plain namespace.
-_COARSEN_ELEMENTWISE_NUMPY = {
-    'sin': numpy.sin,
-    'cos': numpy.cos,
-    'tan': numpy.tan,
-    'exp': numpy.exp,
-    'log': numpy.log,
-    'sqrt': numpy.sqrt,
-    'abs': numpy.abs,
-    'sinh': numpy.sinh,
-    'cosh': numpy.cosh,
-    'tanh': numpy.tanh,
-    'asin': numpy.arcsin,
-    'acos': numpy.arccos,
-    'atan': numpy.arctan,
+# Bare elementwise names the straight-line coarsening pass can emit (see
+# tangent/optimizations/coarsening.py's SymPy->AST lowering). The coarsened
+# vector-Jacobian product references these unqualified; the generated namespace
+# binds them to a concrete backend's implementations, chosen from the backend
+# the *primal* uses. inverse-trig names carry both spellings (NumPy/JAX's
+# arcsin, PyTorch's asin) so a single resolver serves every backend.
+_COARSEN_BARE_NAMES = (
+    'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'abs', 'sinh', 'cosh', 'tanh',
+    'asin', 'acos', 'atan',
+)
+_COARSEN_NAME_ALIASES = {
+    'asin': ('arcsin', 'asin'),
+    'acos': ('arccos', 'acos'),
+    'atan': ('arctan', 'atan'),
 }
 
-# Module prefixes that mark a non-NumPy backend. Coarsening lowers expressions
-# to bare elementwise names that execute as NumPy, so it is only correct for
-# primals that themselves use NumPy (or bare math) elementwise ops.
-_NON_NUMPY_PREFIXES = frozenset(('jnp', 'jax', 'torch', 'tf', 'tensorflow', 'kops', 'keras'))
+# Prefixes that identify the backend a primal is written against. jax and torch
+# are supported for coarsening: their elementwise VJP is emitted as one
+# expression in the backend's own ops, which `compile='jax'` / torch.compile
+# then fuse into a single kernel. TensorFlow / Keras are not coarsened (their
+# elementwise VJP semantics are not validated here); such primals fall back to
+# the standard per-op reverse pipeline.
+_COARSEN_BACKEND_PREFIXES = frozenset(('jnp', 'jax', 'torch'))
+_COARSEN_UNSUPPORTED_PREFIXES = frozenset(('tf', 'tensorflow', 'kops', 'keras'))
 
 
-def _coarsening_backend_safe(func_ast):
-    """True if every call in func_ast is a bare name or an np.* attribute."""
+def _resolve_coarsen_name(module, bare):
+    """Resolve a bare elementwise name to `module`'s implementation, or None."""
+    for candidate in _COARSEN_NAME_ALIASES.get(bare, (bare,)):
+        fn = getattr(module, candidate, None)
+        if fn is not None:
+            return fn
+    return None
+
+
+def _coarsen_namespace(module):
+    """Bare elementwise name -> `module`'s function, for names the module has."""
+    ns = {}
+    for bare in _COARSEN_BARE_NAMES:
+        fn = _resolve_coarsen_name(module, bare)
+        if fn is not None:
+            ns[bare] = fn
+    return ns
+
+
+def _coarsen_backend_module(func_ast, namespace):
+    """The backend module the primal's elementwise ops use.
+
+    Returns the module (e.g. numpy, jax.numpy, torch) to bind the coarsened
+    adjoint's bare names against, or False if the primal uses a backend
+    coarsening does not support (TensorFlow / Keras), in which case the caller
+    falls back to the standard pipeline.
+    """
+    prefixes = set()
     for node in gast.walk(func_ast):
         if not isinstance(node, gast.Call):
             continue
         base = node.func
         while isinstance(base, gast.Attribute):
             base = base.value
-        if isinstance(base, gast.Name) and base.id in _NON_NUMPY_PREFIXES:
-            return False
-    return True
+        if isinstance(base, gast.Name):
+            prefixes.add(base.id)
+    if prefixes & _COARSEN_UNSUPPORTED_PREFIXES:
+        return False
+    for prefix in ('jnp', 'jax', 'torch'):
+        if prefix in prefixes and prefix in namespace:
+            return namespace[prefix]
+    return numpy  # NumPy or bare-math elementwise calls
 
 
 def _try_coarsened_grad(func, wrt, verbose=0):
@@ -385,14 +417,15 @@ def _try_coarsened_grad(func, wrt, verbose=0):
     ):
         return None
     func_ast = node.body[0]
-    if not _coarsening_backend_safe(func_ast):
-        return None
     adj_ast = apply_coarsening(func_ast)
     if adj_ast is None:
         return None
 
-    # Mirror autodiff_tree's namespace, then expose the bare elementwise names
-    # the lowered adjoint uses (e.g. `cos` rather than `numpy.cos`).
+    # Mirror autodiff_tree's namespace, then bind the bare elementwise names the
+    # lowered adjoint uses (e.g. `cos`) to the backend the primal is written
+    # against. For a jax / torch primal this makes the whole coarsened VJP one
+    # expression in that backend's ops, so `compile='jax'` / torch.compile fuse
+    # it into a single kernel; for NumPy it stays plain NumPy.
     unwrapped = unwrap_function(func)
     namespace = {'tangent': tangent, 'numpy': numpy}
     namespace.update(unwrapped.__globals__)
@@ -405,10 +438,24 @@ def _try_coarsened_grad(func, wrt, verbose=0):
                 )
             )
         )
-    namespace.update(_COARSEN_ELEMENTWISE_NUMPY)
+
+    backend_module = _coarsen_backend_module(func_ast, namespace)
+    if backend_module is False:
+        return None  # unsupported backend (TF/Keras): fall back to standard AD
+    elementwise = _coarsen_namespace(backend_module)
+    # Every bare elementwise name the coarsened adjoint calls must resolve in
+    # the chosen backend, or the generated code would hit a NameError; if any is
+    # missing, fall back rather than emit broken code.
+    for call in gast.walk(adj_ast):
+        if isinstance(call, gast.Call) and isinstance(call.func, gast.Name):
+            if call.func.id not in elementwise:
+                return None
+    namespace.update(elementwise)
 
     if verbose >= 1:
-        print('[Coarsening] Using straight-line coarsening for %s' % func.__name__)
+        backend_name = getattr(backend_module, '__name__', str(backend_module))
+        print('[Coarsening] Using straight-line coarsening for %s (backend: %s)'
+              % (func.__name__, backend_name))
         print(quoting.to_source(adj_ast))
 
     module = compile_.compile_file(gast.Module(body=[adj_ast]), namespace)
@@ -424,6 +471,10 @@ def _try_coarsened_grad(func, wrt, verbose=0):
             (selected,) = selected
         return selected
 
+    # Expose the coarsened adjoint's source for inspection/explain, matching the
+    # standard path's `__tangent_source__`.
+    df.__tangent_source__ = quoting.to_source(adj_ast)
+    df.__tangent_primal__ = func
     return df
 
 

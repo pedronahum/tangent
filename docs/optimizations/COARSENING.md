@@ -48,18 +48,42 @@ df = tangent.grad(f, optimizations={'coarsening': True})
 ```
 
 When enabled for a reverse-mode gradient, Tangent first checks whether `f` is
-a coarsenable straight-line segment of NumPy elementwise arithmetic. If so it
-emits the single symbolic VJP; otherwise it transparently falls back to the
-standard per-op pipeline. Anything that is not coarsenable — control flow,
-reductions such as `np.sum`, non-NumPy backends (`jnp`/`torch`/`tf`/`kops`),
-varargs, multi-output configurations (`output_index`/`output_weights`), or
-`preserve_result` — takes the fallback path, so enabling the option never
-changes correctness.
+a coarsenable straight-line segment of elementwise arithmetic. If so it emits
+the single symbolic VJP; otherwise it transparently falls back to the standard
+per-op pipeline. Anything that is not coarsenable — control flow, reductions
+such as `np.sum`, TensorFlow/Keras primals, varargs, multi-output
+configurations (`output_index`/`output_weights`), or `preserve_result` — takes
+the fallback path, so enabling the option never changes correctness.
 
-Because the lowered adjoint references elementwise primitives by bare name
-(`cos`, `sin`, ...), the compile namespace is extended with their NumPy
-implementations, and the gradient cache is bypassed when coarsening is
-requested (the cache key does not encode the `optimizations` dict).
+## Backend kernel handoff
+
+The lowered adjoint references elementwise primitives by bare name (`cos`,
+`sin`, ...), and the compile namespace binds those names to the backend the
+**primal** is written against:
+
+- **NumPy** primals bind to `numpy.*` and run as plain NumPy.
+- **JAX** (`jnp.*`) and **PyTorch** (`torch.*`) primals bind to that backend's
+  ops. Because the coarsened VJP is a *single expression* per input in the
+  backend's own ops, pairing it with `compile='jax'` (or `torch.compile`) hands
+  the whole segment to the backend as one fused kernel — the point of
+  coarsening for array backends:
+
+  ```python
+  import jax.numpy as jnp
+  import tangent
+
+  def f(x):
+      a = jnp.sin(x)
+      return jnp.sqrt(jnp.exp(a))
+
+  df = tangent.grad(f, optimizations={'coarsening': True}, compile='jax')
+  ```
+
+- **TensorFlow / Keras** primals are not coarsened (their elementwise VJP
+  semantics are not validated here) and fall back to the standard pipeline.
+
+The gradient cache is bypassed when coarsening is requested (the cache key does
+not encode the `optimizations` dict).
 
 ## Direct use
 
@@ -76,9 +100,10 @@ adj_ast = apply_coarsening(func_ast)   # None if not coarsenable
 
 ## Limitations and future work
 
-- **NumPy only.** The lowered adjoint uses bare elementwise names bound to
-  NumPy; other backends fall back to the standard pipeline. Making the
-  lowering backend-aware (JAX/PyTorch/TensorFlow/Keras) is the main follow-up.
+- **JAX / PyTorch / NumPy.** The lowered adjoint binds its bare elementwise
+  names to the primal's backend, so JAX and PyTorch primals get a single fused
+  VJP kernel under `compile=`. TensorFlow / Keras are not yet coarsened
+  (their elementwise VJP semantics are unvalidated) and fall back.
 - **Narrow elementwise op set.** Coarsened ops are `sin`, `cos`, `tan`, `exp`,
   `log`, `sqrt`, `arcsin`, `arccos`, `arctan`. Others (`abs`, `sinh`, `cosh`,
   `tanh`) fall back because their derivatives reintroduce a function the

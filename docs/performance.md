@@ -105,3 +105,25 @@ a variable only when *every* pop-reached use is shape-only, so any value the
 adjoint reads arithmetically stays fully taped - and the gradient it produces
 is identical to the default. It is opt-in (off by default) and targets the
 NumPy execution path; it composes with `√n` checkpointing and `compile=`.
+
+## Fusing a straight-line segment: `coarsening`
+
+For a straight-line stretch of elementwise arithmetic, `optimizations={'coarsening': True}`
+differentiates the whole segment once symbolically (SymPy) and emits a single
+vector-Jacobian-product expression per input instead of one adjoint statement
+per primitive. Bound to the primal's backend, that one expression is handed to
+JAX or PyTorch as a **single fused kernel** under `compile=`:
+
+```python
+def f(x):
+    a = jnp.sin(x)
+    return jnp.sqrt(jnp.exp(a))
+
+df = tangent.grad(f, optimizations={'coarsening': True}, compile='jax')
+```
+
+It is opt-in and applies only to coarsenable segments (elementwise straight-line
+code on NumPy/JAX/PyTorch); anything else - control flow, reductions,
+TensorFlow/Keras - falls back to the standard pipeline unchanged. See the
+[coarsening deep-dive](https://github.com/pedronahum/tangent/blob/master/docs/optimizations/COARSENING.md)
+for the supported op set.
