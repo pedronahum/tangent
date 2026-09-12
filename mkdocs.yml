@@ -91,6 +91,7 @@ nav:
       - Debugging Gradients: debugging.md
   - API Reference: api.md
   - Benchmarks:
+      - Framework Gradient Benchmarks: benchmarks/FRAMEWORK_BENCHMARKS.md
       - Framework Comparison: benchmarks/FRAMEWORK_COMPARISON.md
       - Building Simulation: benchmarks/BUILDING_SIMULATION_BENCHMARK.md
       - Correctness Verification: benchmarks/CORRECTNESS_VERIFICATION.md
