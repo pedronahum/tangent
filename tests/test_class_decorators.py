@@ -68,8 +68,15 @@ class TestRejectedCleanly:
 
 class TestStillWorks:
     def test_staticmethod_differentiates(self):
-        # A @staticmethod is a plain function; it must still work.
+        # A @staticmethod is a plain function; it must still work. The generated
+        # primal/adjoint must not carry the @staticmethod decorator (a
+        # module-level staticmethod object is not callable before Python 3.10).
         assert tangent.grad(staticmethod_access)(3.0) == pytest.approx(6.0)
+
+    def test_staticmethod_differentiates_forward(self):
+        # Same, in forward mode: the generated tangent must not carry the
+        # @staticmethod decorator either.
+        assert tangent.jvp(staticmethod_access)(3.0, 1.0) == pytest.approx(6.0)
 
     def test_plain_class_method_call_unaffected(self):
         # The clean-rejection check must not disturb ordinary differentiable

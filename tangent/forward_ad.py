@@ -175,6 +175,13 @@ class ForwardAD(transformers.TreeTransformer):
         func = anno.getanno(node, 'func')
         node.name = naming.tangent_name(func, self.wrt)
 
+        # Drop any decorators the original carried: the generated tangent is a
+        # free-standing module-level function, so method decorators like
+        # @staticmethod / @classmethod (or any user decorator) do not belong on
+        # it. Left in place, `@staticmethod def _t...` binds a staticmethod
+        # object at module scope, which is not callable before Python 3.10.
+        node.decorator_list = []
+
         return node
 
     def visit_For(self, node):

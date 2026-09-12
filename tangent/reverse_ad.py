@@ -294,6 +294,13 @@ class ReverseAD(object):
         func = anno.getanno(node, 'func')
         node.name = naming.primal_name(func, self.wrt)
 
+        # Drop any decorators the original carried: the generated primal is a
+        # free-standing module-level function, so method decorators like
+        # @staticmethod / @classmethod (or any user decorator) do not belong on
+        # it. Left in place, `@staticmethod def pri_...` binds a staticmethod
+        # object at module scope, which is not callable before Python 3.10.
+        node.decorator_list = []
+
         # The new body is the primal body plus the return statement
         node.body = body + node.body[-1:]
 
