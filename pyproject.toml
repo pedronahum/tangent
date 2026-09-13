@@ -78,6 +78,10 @@ docs = [
     "mkdocstrings[python]>=0.24",
     "pymdown-extensions>=10.0",
 ]
+# Developer tooling: the pinned ruff the CI lint job uses (ruff format output
+# can change between releases, so the version is pinned to match CI) plus
+# pre-commit for the local git hooks. See the Makefile and .pre-commit-config.yaml.
+dev = ["ruff==0.16.6", "pre-commit>=3.5"]
 all = [
     "autograd>=1.2",
     "hypothesis>=6.0",

@@ -19,6 +19,31 @@ tests skip cleanly when their library is absent. To exercise a backend, install
 it (e.g. `pip install jax`) and rerun; `tests/test_backend_coverage.py` picks up
 every installed backend automatically.
 
+## Formatting and linting
+
+CI enforces two [ruff](https://docs.astral.sh/ruff/) gates: `ruff check .`
+(lint) and `ruff format --check .` (formatting). Run both locally with:
+
+```bash
+make check      # exactly what CI runs: ruff check + ruff format --check
+make fmt        # auto-format and auto-fix before committing
+```
+
+ruff is version-sensitive (formatter output can change between releases), so
+CI pins `ruff==0.16.6`; `make install-dev` installs that pinned version along
+with pre-commit. To catch the gates automatically on every commit, install the
+git hooks once:
+
+```bash
+make install-dev   # pip install -e ".[dev,test]"
+make hooks         # pre-commit install
+```
+
+Scope and rules live in `[tool.ruff]` in `pyproject.toml` (the library and
+tests are formatted; `docs/`, `examples/` and `benchmarks/` keep their
+hand-laid layout), so the Makefile targets and the pre-commit hook stay in sync
+with CI.
+
 ## Adding new derivatives
 
 To add a derivative for a primitive operation:

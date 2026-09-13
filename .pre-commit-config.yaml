@@ -1,0 +1,20 @@
+# Pre-commit hooks that run the same ruff gates as CI on staged files, so a
+# formatting/lint problem is caught before the commit rather than in CI.
+#
+#   pip install pre-commit   (or: make install-dev)
+#   pre-commit install       (or: make hooks)
+#
+# The ruff version is pinned to match CI (.github/workflows/ci.yml) and the
+# version the tree was formatted with; `ruff format` output can change between
+# releases. Scope and rules come from [tool.ruff] in pyproject.toml, so these
+# hooks stay in sync with `make check`.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff
+        name: ruff check
+        args: [--fix, --force-exclude]
+      - id: ruff-format
+        name: ruff format
+        args: [--force-exclude]
