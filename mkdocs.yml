@@ -79,6 +79,7 @@ nav:
       - Installation: installation.md
       - Quickstart: quickstart.md
       - How Tangent Works: how-it-works.md
+  - Notebook Gallery: gallery.md
   - User Guide:
       - Python Language Support: features/PYTHON_FEATURE_SUPPORT.md
       - Higher-Order Derivatives: higher-order.md
