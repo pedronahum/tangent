@@ -142,6 +142,30 @@ class TestExplain:
         assert mapped
         assert mapped[0]['primal_line'] is not None
 
+    def test_dataflow_graph_and_static_dead_input(self):
+        # `unused` never reaches the output; explain reports it statically.
+        lines = []
+        r = tangent.explain(explained, 2.0, 5.0, wrt=(0, 1), out=lines.append)
+        assert r['dataflow'] is not None
+        assert r['dead_inputs'] == [1]
+        assert 'y' in r['dataflow']['influential']  # y feeds the output
+        text = '\n'.join(lines)
+        assert 'DATA FLOW' in text
+        assert 'y <- x' in text  # a real data-flow edge is rendered
+        assert 'does not affect the output' in text
+
+    def test_dataflow_absent_for_control_flow(self):
+        # Control flow is not statically analyzed - no graph, no false claims.
+        def loopy(x):
+            s = 0.0
+            for _ in range(3):
+                s = s + x * x
+            return s
+
+        r = tangent.explain(loopy, 2.0, out=lambda s: None)
+        assert r['dataflow'] is None
+        assert r['dead_inputs'] == []
+
 
 # --- custom_vjp / defjvp / stop_gradient ------------------------------------
 

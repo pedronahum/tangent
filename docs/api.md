@@ -44,6 +44,36 @@ to use each of these.
 
 ::: tangent.explain.source_map
 
+### Gradient surgery: `insert_grad_of`
+
+`with tangent.insert_grad_of(x) as dx:` splices arbitrary code into the
+generated backward pass, with `dx` bound to the gradient of `x` at that point -
+Tangent's original killer feature for inspecting or modifying a gradient
+mid-flow. It survives the optimization passes (DCE/CSE), so the injected code
+is not eliminated:
+
+```python
+import tangent
+
+def f(x):
+    y = x * x
+    with tangent.insert_grad_of(y) as dy:
+        print('gradient flowing into y:', dy)
+        dy = dy * 0.9            # scale the gradient (surgery)
+    return y * 3.0
+
+df = tangent.grad(f)            # the `with` block runs during the backward pass
+```
+
+To call `f` directly (without differentiating) the block must be removed; the
+`tangent` decorator does that:
+
+```python
+run_f = tangent.tangent(f)     # strips the insert_grad_of block so f runs normally
+```
+
+::: tangent.utils.insert_grad_of
+
 ## Extending Tangent
 
 ### Registering gradient templates
