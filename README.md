@@ -489,6 +489,8 @@ python examples/recent_features.py
 - [Tangent Tutorial](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/tangent_tutorial.ipynb) — general introduction
 - [Gradient Surgery](https://colab.research.google.com/github/pedronahum/tangent/blob/master/notebooks/gradient_surgery.ipynb) — read *and edit* the generated backward pass (`insert_grad_of`), the demo no tracing AD can copy
 - [LIBOR Market Model greeks](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/LIBOR_Market_Model_Greeks_with_Tangent.ipynb) — case study: differentiate a messy NumPy Monte-Carlo rate simulator for exact deltas/vegas in one reverse pass
+- [Projectile with drag](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Projectile_with_Drag_Sensitivities_with_Tangent.ipynb) — case study: sensitivities of a nonlinear ODE integrator, and optimizing the launch by gradient descent
+- [SIR epidemic calibration](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/SIR_Epidemic_Calibration_with_Tangent.ipynb) — case study: differentiate *through a data-dependent branch* to fit an epidemic model
 - [Gallery of Gradients](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Gallery_of_Gradients.ipynb) — readable-code showcase
 - [Building Energy Optimization](https://colab.research.google.com/github/pedronahum/tangent/blob/master/examples/Building_Energy_Optimization_with_Tangent.ipynb) — real-world application
 
