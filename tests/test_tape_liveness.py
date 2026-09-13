@@ -105,7 +105,8 @@ def cond_in_loop(x):
 
 
 @pytest.mark.parametrize(
-    'fn', [array_loop, value_needed_loop, nested_loop, cond_in_loop],
+    'fn',
+    [array_loop, value_needed_loop, nested_loop, cond_in_loop],
     ids=['array_loop', 'value_needed', 'nested', 'cond'],
 )
 def test_gradient_matches_with_and_without(fn):

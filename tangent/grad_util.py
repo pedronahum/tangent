@@ -330,8 +330,19 @@ def jvp(func, wrt=(0,), optimized=True, check_dims=True, preserve_result=False, 
 # the *primal* uses. inverse-trig names carry both spellings (NumPy/JAX's
 # arcsin, PyTorch's asin) so a single resolver serves every backend.
 _COARSEN_BARE_NAMES = (
-    'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'abs', 'sinh', 'cosh', 'tanh',
-    'asin', 'acos', 'atan',
+    'sin',
+    'cos',
+    'tan',
+    'exp',
+    'log',
+    'sqrt',
+    'abs',
+    'sinh',
+    'cosh',
+    'tanh',
+    'asin',
+    'acos',
+    'atan',
 )
 _COARSEN_NAME_ALIASES = {
     'asin': ('arcsin', 'asin'),
@@ -454,8 +465,10 @@ def _try_coarsened_grad(func, wrt, verbose=0):
 
     if verbose >= 1:
         backend_name = getattr(backend_module, '__name__', str(backend_module))
-        print('[Coarsening] Using straight-line coarsening for %s (backend: %s)'
-              % (func.__name__, backend_name))
+        print(
+            '[Coarsening] Using straight-line coarsening for %s (backend: %s)'
+            % (func.__name__, backend_name)
+        )
         print(quoting.to_source(adj_ast))
 
     module = compile_.compile_file(gast.Module(body=[adj_ast]), namespace)

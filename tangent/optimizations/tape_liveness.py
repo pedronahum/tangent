@@ -133,16 +133,23 @@ def _dead_targets(func, used):
 
 def _use_is_shape_only(parent, name_node, dead_targets):
     if isinstance(parent, gast.Call):
-        if (_is_call_to(parent, 'unbroadcast') and len(parent.args) >= 2
-                and parent.args[1] is name_node):
+        if (
+            _is_call_to(parent, 'unbroadcast')
+            and len(parent.args) >= 2
+            and parent.args[1] is name_node
+        ):
             return True
         if _is_call_to(parent, 'init_grad') and parent.args and parent.args[0] is name_node:
             return True
         return False
     # A dead self-copy `t = v` (t never used) does not need v's value.
-    if (isinstance(parent, gast.Assign) and parent.value is name_node
-            and len(parent.targets) == 1 and isinstance(parent.targets[0], gast.Name)
-            and parent.targets[0].id in dead_targets):
+    if (
+        isinstance(parent, gast.Assign)
+        and parent.value is name_node
+        and len(parent.targets) == 1
+        and isinstance(parent.targets[0], gast.Name)
+        and parent.targets[0].id in dead_targets
+    ):
         return True
     return False
 
@@ -152,9 +159,10 @@ def _stmt_uses_shape_only(stmt, name, store_ids, dead_targets):
     saw = False
     for parent in gast.walk(stmt):
         for _field, child in gast.iter_fields(parent):
-            for item in (child if isinstance(child, list) else [child]):
-                if not (isinstance(item, gast.Name) and item.id == name
-                        and id(item) not in store_ids):
+            for item in child if isinstance(child, list) else [child]:
+                if not (
+                    isinstance(item, gast.Name) and item.id == name and id(item) not in store_ids
+                ):
                     continue
                 saw = True
                 if not _use_is_shape_only(parent, item, dead_targets):
@@ -186,8 +194,9 @@ def _convertible_names(func):
         if not anno.hasanno(stmt, 'definitions_in'):
             continue
         reaching = anno.getanno(stmt, 'definitions_in')
-        pop_reached = {name for (name, def_stmt) in reaching
-                       if name in popped and _is_pop_assign(def_stmt)}
+        pop_reached = {
+            name for (name, def_stmt) in reaching if name in popped and _is_pop_assign(def_stmt)
+        }
         for name in pop_reached:
             if name in rejected:
                 continue
@@ -220,14 +229,21 @@ def store_shapes_only(module):
     changed = False
     for func in funcs:
         for node in gast.walk(func):
-            if (_is_call_to(node, 'push') and len(node.args) >= 2
-                    and isinstance(node.args[1], gast.Name) and node.args[1].id in convertible):
+            if (
+                _is_call_to(node, 'push')
+                and len(node.args) >= 2
+                and isinstance(node.args[1], gast.Name)
+                and node.args[1].id in convertible
+            ):
                 v = node.args[1]
                 node.args[1] = gast.Call(
                     func=gast.Attribute(
-                        value=gast.Name(id='tangent', ctx=gast.Load(), annotation=None,
-                                        type_comment=None),
-                        attr='taped_shape', ctx=gast.Load()),
+                        value=gast.Name(
+                            id='tangent', ctx=gast.Load(), annotation=None, type_comment=None
+                        ),
+                        attr='taped_shape',
+                        ctx=gast.Load(),
+                    ),
                     args=[gast.Name(id=v.id, ctx=gast.Load(), annotation=None, type_comment=None)],
                     keywords=[],
                 )
