@@ -61,7 +61,7 @@ Upstream = "https://github.com/google/tangent"
 # autograd is the reference oracle for the gradient test suite (and a niche
 # runtime interop); it is not required to use tangent itself. pytest-cov powers
 # the line-coverage report (see [tool.coverage] below).
-test = ["pytest>=6.0", "autograd>=1.2", "pytest-cov>=4.0", "hypothesis>=6.0"]
+test = ["pytest>=6.0", "autograd>=1.2", "pytest-cov>=4.0", "hypothesis>=6.0", "mypy>=1.8"]
 tf = ["tensorflow>=2.16"]
 jax = ["jax>=0.4.30"]
 torch = ["torch>=2.0"]
@@ -88,6 +88,7 @@ all = [
     "jax>=0.4.30",
     "keras>=3.0",
     "matplotlib>=3.7",
+    "mypy>=1.8",
     "networkx>=3.0",
     "pytest>=6.0",
     "pytest-cov>=4.0",
@@ -111,6 +112,18 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "*" = ["README.md", "LICENSE"]
+# PEP 561 marker: ship tangent's inline type annotations so downstream
+# mypy/pyright pick up the typed public API (grad/vjp/jvp/autodiff).
+"tangent" = ["py.typed"]
+
+[tool.mypy]
+# tangent ships inline types for its public API (grad / vjp / jvp / autodiff),
+# marked with tangent/py.typed, so downstream code type-checks against real
+# signatures - `df = tangent.grad(f)` is a typed callable whose result carries
+# the differentiated function's type. The internal source-transformation
+# modules are largely untyped and are checked leniently rather than annotated
+# wholesale; missing optional-backend stubs are ignored.
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 filterwarnings = [

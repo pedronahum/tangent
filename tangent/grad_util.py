@@ -51,9 +51,11 @@ bX = bF(X, Y, bZ)
 
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, annotations
 
 import enum
+from typing import TYPE_CHECKING
+
 import gast
 import numpy
 from tangent import annotations as anno
@@ -73,6 +75,55 @@ INPUT_DERIVATIVE = enum.Enum('InputDerivative', ('Required', 'DefaultOne', 'Defa
 
 # Import caching utilities
 from tangent.function_cache import cached_autodiff, cached_grad
+
+
+if TYPE_CHECKING:
+    # Static types for the public entry points. `grad`/`autodiff` are produced
+    # by caching decorators at runtime (so their concrete type is Any); these
+    # Protocols give type checkers a real signature and, for grad, preserve the
+    # differentiated function's argument type. Runtime is unaffected - the
+    # annotations below are lazy strings (`from __future__ import annotations`)
+    # and these names exist only under TYPE_CHECKING. A `tangent/py.typed`
+    # marker opts the package into type checking.
+    from typing import Any, Callable, Optional, Protocol, Tuple, TypeVar, Union, overload
+
+    _In = TypeVar('_In')
+
+    class _GradFn(Protocol):
+        """Type of ``tangent.grad``.
+
+        Differentiating ``f: (T) -> Any`` with the default single argument
+        yields a gradient function typed as returning ``T`` (the gradient has
+        the input's type/shape). Requesting several arguments (a tuple ``wrt``)
+        yields a callable returning a tuple.
+        """
+
+        @overload
+        def __call__(
+            self,
+            func: Callable[[_In], Any],
+            wrt: int = ...,
+            optimized: bool = ...,
+            preserve_result: bool = ...,
+            check_dims: bool = ...,
+            verbose: int = ...,
+            compile: str = ...,
+            source: Optional[str] = ...,
+            **kwargs: Any,
+        ) -> Callable[..., _In]: ...
+
+        @overload
+        def __call__(
+            self,
+            func: Callable[..., Any],
+            wrt: Union[int, Tuple[int, ...]] = ...,
+            **kwargs: Any,
+        ) -> Callable[..., Any]: ...
+
+    class _AutodiffFn(Protocol):
+        """Type of ``tangent.autodiff`` (forward or reverse mode)."""
+
+        def __call__(self, func: Callable[..., Any], **kwargs: Any) -> Callable[..., Any]: ...
 
 
 def unwrap_function(func):
@@ -286,7 +337,14 @@ def autodiff_tree(
     return final, namespace
 
 
-def vjp(func, wrt=(0,), optimized=True, check_dims=True, preserve_result=False, verbose=0):
+def vjp(
+    func: Callable[..., Any],
+    wrt: Union[int, Tuple[int, ...]] = (0,),
+    optimized: bool = True,
+    check_dims: bool = True,
+    preserve_result: bool = False,
+    verbose: int = 0,
+) -> Callable[..., Any]:
     """Convenience function to produce vector-Jacobian products.
 
     See `autodiff` for function arguments.
@@ -305,7 +363,14 @@ def vjp(func, wrt=(0,), optimized=True, check_dims=True, preserve_result=False, 
     )
 
 
-def jvp(func, wrt=(0,), optimized=True, check_dims=True, preserve_result=False, verbose=0):
+def jvp(
+    func: Callable[..., Any],
+    wrt: Union[int, Tuple[int, ...]] = (0,),
+    optimized: bool = True,
+    check_dims: bool = True,
+    preserve_result: bool = False,
+    verbose: int = 0,
+) -> Callable[..., Any]:
     """Convenience function to produce Jacobian-vector products.
 
     See `autodiff` for function arguments.
@@ -1018,5 +1083,5 @@ def _create_forward(out_node):
 
 
 # Apply caching decorators to create the public API functions
-autodiff = cached_autodiff(_autodiff_uncached)
-grad = cached_grad(_grad_uncached)
+autodiff = cached_autodiff(_autodiff_uncached)  # type: _AutodiffFn
+grad = cached_grad(_grad_uncached)  # type: _GradFn
