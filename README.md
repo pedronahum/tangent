@@ -24,15 +24,16 @@ Originally developed by Google Research, now maintained and enhanced by [@pedron
 Tangent performs **source-to-source** automatic differentiation: it transforms your Python code directly into gradient code that you can read, debug, and understand. Unlike black-box autodiff libraries:
 
 - **📖 Readable**: Generated gradient code is pure Python you can inspect
-- **🔍 Debuggable**: Step through gradient computation line by line
-- **🎨 Visual**: Interactive computation graphs and gradient flow diagrams
+- **🔍 Debuggable**: `tangent.explain(f, x)` shows the primal, the generated adjoint, a finite-difference check, the data-flow graph, and which inputs never affect the output — and `tangent.source_map` traces each adjoint line back to your code
+- **✂️ Gradient surgery**: read **and edit** the backward pass with `with tangent.insert_grad_of(y) as dy:` — scale, clip, log, or guard gradients mid-flow, stable across optimization passes (the demo no tracing AD can copy)
+- **⌨️ Typed**: ships `py.typed` (PEP 561), so `df = tangent.grad(f)` is a typed callable — mypy/pyright infer the gradient's signature, and for a single-argument function the gradient carries the input's type
 - **🔧 Flexible**: One API across NumPy, JAX, TensorFlow, PyTorch, Keras 3, and tinygrad
 - **🐍 Pythonic**: Control flow (`break`/`continue`/early `return`), closures, classes, list building, comprehensions, and second and third derivatives
 - **⚡ Compilable**: `grad(f, compile='jax')` runs the readable adjoint at `jax.grad`+`jit` speed; a persistent disk cache amortizes compilation across processes
-- **🧩 Extensible**: `@tangent.custom_vjp`, `stop_gradient`, `with tangent.checkpoint():`, and `tangent.explain()` for gradient forensics
+- **🧩 Extensible**: register custom gradients for your own functions or black-box ops (`@tangent.custom_vjp`, `tangent.register_adjoint`/`register_tangent`), plus `stop_gradient` and `with tangent.checkpoint():`
 - **🔬 Differentiable simulators**: `tangent.odeint` differentiates ODE solutions via the adjoint method (constant memory in step count)
 - **🛡️ Shape-checked**: `tangent.check_shapes(f, x)` catches rank/broadcast/matmul bugs at compile time, pointing at the offending line
-- **📓 Works anywhere**: `@tangent.function` captures source so gradients work in notebooks, the REPL, and `exec`-defined code; `python -m tangent doctor` diagnoses setup
+- **📓 Works anywhere**: `@tangent.function` captures source so gradients work in notebooks, the REPL, and `exec`-defined code; `python -m tangent doctor` diagnoses setup (and detects the dead 2017 `tangent` package)
 
 ![Autodiff Tool Space](docs/toolspace.png "Autodiff Tool Space")
 
@@ -262,20 +263,23 @@ Supported: `break`/`continue` (lowered into guard flags with exact gradients). N
 `tangent.grad(f, optimized=True)` runs a multi-pass optimization pipeline that produces production-grade gradient code:
 
 1. **Constant folding** — evaluate constant expressions at compile time
-2. **Dead code elimination** — activity analysis + backward slicing remove unused computation (typically 30–50% of generated code)
+2. **Dead code elimination** — activity analysis + backward slicing remove unused computation (typically 30–50% of generated code); tape-aware, so push/pop pairs are only removed together
 3. **Assignment propagation** — inline single-use variables
-4. **Strength reduction** — `x ** 2` → `x * x`, `x / c` → `x * (1/c)`
-5. **Common subexpression elimination** — reuse repeated subexpressions
-6. **Algebraic simplification** — SymPy-based identities (`sin² + cos² → 1`)
+4. **Strength reduction** *(opt-in)* — `x ** 2` → `x * x`, `x / c` → `x * (1/c)`
+5. **Common subexpression elimination** *(opt-in)* — reuse repeated subexpressions
+6. **Algebraic simplification** *(opt-in)* — SymPy-based identities (`sin² + cos² → 1`)
 7. **Fixed-point iteration** — repeat until stable
 
-**Measured impact** on the building-energy example: **2.35×** end-to-end with the full pipeline (1.95× from DCE alone).
+**Measured impact** on the building-energy example: **~2.6× end-to-end, essentially all of it from tape-aware DCE**. On this array-dominated workload the symbolic passes (strength reduction, CSE, algebraic) add nothing measurable — they help expression-heavy scalar code, which is why they are opt-in. See the [Building Simulation Benchmark](docs/benchmarks/BUILDING_SIMULATION_BENCHMARK.md) for the reproducible numbers.
 
 ```python
-df = tangent.grad(f, optimized=True)          # production
+df = tangent.grad(f, optimized=True)          # production (constant folding + DCE + propagation)
 df = tangent.grad(f, optimized=False)         # all intermediate steps (education/debugging)
 df = tangent.grad(f, optimized=True, verbose=1)  # prints what each pass did
+df = tangent.grad(f, optimizations={'tape_liveness': True})  # store only the shape of primals the adjoint reads for shape (opt-in; big memory cut on array loops)
 ```
+
+**Tape-liveness (opt-in).** Reverse mode saves each reassigned primal on the tape, but many are read back **only for shape** (as the target of `unbroadcast`/`init_grad`). `optimizations={'tape_liveness': True}` stores a lightweight shape carrier for exactly those, shrinking that tape slot from O(size) to O(ndim) — ~90% less peak gradient memory on a 20k-element array loop, with an identical gradient (proven safe by reaching-definition analysis).
 
 **Deep dives**: [Symbolic Optimizations](docs/optimizations/SYMBOLIC_OPTIMIZATIONS_COMPLETE.md) · [Strength Reduction](docs/optimizations/STRENGTH_REDUCTION_COMPLETE.md) · [Performance Analysis](docs/optimizations/PERFORMANCE_ANALYSIS.md) · [Straight-Line Coarsening](docs/optimizations/COARSENING.md) · [DCE implementation](tangent/optimizations/dce.py)
 
@@ -305,17 +309,24 @@ def kernel(a, b, c):
 ```
 
 It currently coarsens the elementwise ops `sin, cos, tan, exp, log, sqrt,
-arcsin, arccos, arctan` (and `+ - * / **`). It is a prototype and
-deliberately conservative: it only applies to reverse-mode gradients of pure
-straight-line segments of NumPy elementwise arithmetic. Anything else —
-control flow, reductions such as `np.sum`, non-NumPy backends
-(JAX/PyTorch/TensorFlow/Keras), varargs, multi-output configurations, or
-`preserve_result` — transparently falls back to the standard pipeline, so
-enabling it never changes correctness. Requires the `symbolic` extra
-(see [Installation](#installation)). See
-[tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py),
-[docs/optimizations/COARSENING.md](docs/optimizations/COARSENING.md), and the
-worked demo in [`examples/recent_features.py`](examples/recent_features.py).
+arcsin, arccos, arctan` (and `+ - * / **`). **Backend kernel handoff:** the
+coarsened VJP is emitted in the backend the primal is written against — for a
+**JAX or PyTorch** primal it becomes one expression in that backend's ops, so
+pairing it with `compile='jax'` / `torch.compile` fuses the whole segment into
+a single kernel:
+
+```python
+df = tangent.grad(jax_kernel, optimizations={'coarsening': True}, compile='jax')
+```
+
+It is a prototype and deliberately conservative: it only applies to
+reverse-mode gradients of pure straight-line elementwise segments. Anything
+else — control flow, reductions such as `np.sum`, TensorFlow/Keras primals,
+varargs, multi-output configurations, or `preserve_result` — transparently
+falls back to the standard pipeline, so enabling it never changes correctness.
+Requires the `symbolic` extra (see [Installation](#installation)). See
+[tangent/optimizations/coarsening.py](tangent/optimizations/coarsening.py) and
+[docs/optimizations/COARSENING.md](docs/optimizations/COARSENING.md).
 
 ---
 
@@ -393,6 +404,31 @@ low-level tape API (`tangent.push`/`pop`/`Stack`) — dead-code elimination is
 tape-aware and only removes push/pop pairs together. Third derivatives
 (differentiating the second-order adjoint code again) work for ordinary
 NumPy functions in both modes. Fourth order and above is not yet reliable.
+
+### Custom gradients
+
+Supply a gradient Tangent can't (or shouldn't) derive — for a numerically
+better rule, or to wrap a black box it can't transform:
+
+```python
+@tangent.custom_vjp                 # your own function / a black box you call
+def gelu(x): ...
+@gelu.defvjp
+def gelu_vjp(g, ans, x): ...        # plain-Python reverse rule
+
+@tangent.register_adjoint(np.hypot)  # attach a rule to a library op you don't own
+def _(z, x, y):
+    d[x] = d[z] * x / z
+    d[y] = d[z] * y / z
+```
+
+See the [Custom Gradients guide](docs/custom_gradients.md).
+
+### Typed gradients
+
+Tangent ships a `py.typed` marker, so `df = tangent.grad(f)` is a typed
+callable to mypy/pyright — no `Any`. For a single-argument function the gradient
+carries the input's type (`grad(f: Callable[[T], Any]) -> Callable[..., T]`).
 
 ### Automatic caching
 
@@ -517,11 +553,12 @@ pytest tests/test_tinygrad.py        # tinygrad-specific tests
 ```
 
 Current status: **79,000+ parameterized test cases pass, with zero failures
-and zero expected-failure (`xfail`) markers** (last local measurement: 79,710
+and zero expected-failure (`xfail`) markers** (last local measurement: 79,773
 passed, 55 skipped, with NumPy, JAX, PyTorch-CPU, tinygrad, Keras 3, SymPy,
-SciPy and TensorFlow all installed). CI runs the suite on
-Python 3.9–3.13 and exercises the cross-backend catalog against every
-installed backend.
+SciPy and TensorFlow all installed). CI runs the suite on Python 3.9–3.13,
+exercises the cross-backend catalog against every installed backend, and
+enforces `ruff check` + `ruff format` (run `make check` locally, or `make fmt`
+to auto-format).
 
 ---
 
@@ -564,10 +601,11 @@ tangent/
 
 ## 📚 Documentation
 
-- **[→ Full Documentation Index](docs/INDEX.md)**
+- **[→ Documentation site](https://pedronahum.github.io/tangent/)** · [Full index](docs/INDEX.md)
+- **[Notebook Gallery](https://pedronahum.github.io/tangent/gallery/)** — every runnable Colab notebook, one entry point
 - **[Python Feature Support](docs/features/PYTHON_FEATURE_SUPPORT.md)** — the definitive feature reference
-- **[Framework Comparison](docs/benchmarks/FRAMEWORK_COMPARISON.md)** — Tangent vs TensorFlow vs PyTorch benchmarks
-- **[Optimizations](docs/optimizations/)** — CSE, strength reduction, performance analysis
+- **[Custom Gradients](docs/custom_gradients.md)** — `custom_vjp`, `register_adjoint`/`register_tangent`, `stop_gradient`
+- **[Performance & Compilation](docs/performance.md)** — `compile=`, tape-liveness, coarsening, and the honest [framework benchmarks](docs/benchmarks/FRAMEWORK_BENCHMARKS.md)
 - **[Checkpointing User Guide](docs/checkpointing_user_guide.md)** — gradient checkpointing: what works today and what doesn't
 
 ---
