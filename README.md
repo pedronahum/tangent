@@ -602,6 +602,7 @@ tangent/
 ## 📚 Documentation
 
 - **[→ Documentation site](https://pedronahum.github.io/tangent/)** · [Full index](docs/INDEX.md)
+- **[Tangent 2 writeup](paper/README.md)** — a short, **reproducible** paper (runnable notebook + `paper/reproduce.py`)
 - **[Notebook Gallery](https://pedronahum.github.io/tangent/gallery/)** — every runnable Colab notebook, one entry point
 - **[Python Feature Support](docs/features/PYTHON_FEATURE_SUPPORT.md)** — the definitive feature reference
 - **[Custom Gradients](docs/custom_gradients.md)** — `custom_vjp`, `register_adjoint`/`register_tangent`, `stop_gradient`

@@ -16,6 +16,12 @@ that are the whole point, then a **case study** in your domain.
   <br>End-to-end tour: `grad`, the NumPy/JAX/PyTorch/TensorFlow backends, control
   flow, containers, and higher-order derivatives.
 
+- **Tangent 2 — reproducible writeup**
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pedronahum/tangent/blob/master/paper/Tangent2.ipynb)
+  <br>The short paper on this fork, written so its code runs — a one-page tour of
+  everything below, with every result reproducible in the notebook or via
+  `python paper/reproduce.py`.
+
 ---
 
 ## See the readable gradients — the niche

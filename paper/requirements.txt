@@ -1,0 +1,10 @@
+# Dependencies to reproduce the Tangent 2 writeup (paper/reproduce.py and
+# paper/Tangent2.ipynb). The symbolic extra pulls in SymPy for the coarsening
+# example; JAX and PyTorch are optional and auto-detected (their checks skip
+# cleanly when absent), but installing them reproduces the multi-backend and
+# compile='jax' results too.
+tangent-ad[symbolic]
+
+# Optional, for the full multi-backend / compile='jax' results:
+# jax
+# torch
