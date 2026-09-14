@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.4.0 (2026-09-14)
+
+Debuggability, backend unification, memory, and a reproducible writeup.
+`tangent.explain` now returns a `dead_inputs` list and a data-flow graph, so
+the Tangent 2 paper notebook (which uses it) needs this release.
+
+### Added in 0.4.0
+
+- **Public custom-gradient API.** `tangent.register_adjoint` /
+  `tangent.register_tangent` register a reverse-/forward-mode template rule for
+  a library op you do not own (e.g. `numpy.hypot`), alongside the existing
+  `@tangent.custom_vjp` for your own functions and black boxes. Documented in
+  `docs/custom_gradients.md`.
+- **Typed public API (PEP 561).** Ships a `tangent/py.typed` marker and inline
+  types, so `df = tangent.grad(f)` is a typed callable to mypy/pyright; for a
+  single-argument function the gradient carries the input's type.
+- **`explain` data-flow graph + static dead-input detection.** For straight-line
+  functions `tangent.explain` prints the primal's data-flow graph and returns
+  `dead_inputs` — arguments that provably never affect the output — plus a
+  `dataflow` entry. Conservative: control flow yields no graph rather than a
+  wrong claim.
+- **Opt-in tape-liveness optimization** (`optimizations={'tape_liveness': True}`).
+  Stores only the shape of primals the adjoint reads for shape (a `TapedShape`
+  carrier), cutting peak gradient memory ~90% on array loops with an identical
+  gradient, proven safe by reaching-definition analysis.
+
+### Changed in 0.4.0
+
+- **Unified backend op catalog** (`tangent/op_catalog.py`). The six array
+  backends register their shared elementwise, binary and reduction rules through
+  one `register` / `register_reductions` entry, so no backend can silently drift.
+- **Coarsening → backend kernel handoff.** Straight-line coarsening now emits the
+  symbolic VJP in the primal's own backend for JAX and PyTorch, so pairing it
+  with `compile='jax'` / `torch.compile` fuses the segment into one kernel
+  (TensorFlow / Keras still fall back).
+- **`insert_grad_of`** is now documented as a first-class gradient-surgery API in
+  the API reference, with a gradient-surgery notebook.
+- **Honest benchmarks.** A cross-framework benchmark harness
+  (`benchmarks/vs_frameworks.py`, jax / torch.func / autograd / finite
+  differences on MLP / conv / scalar) and a single canonical building-simulation
+  benchmark page; the reconciled optimization impact is ~2.6× from tape-aware
+  DCE (the symbolic passes add nothing on that array-dominated workload).
+
+### Fixed in 0.4.0
+
+- Generated primal/tangent functions no longer carry the source method's
+  decorators, so differentiating a `@staticmethod` works on Python 3.9
+  (a module-level `staticmethod` object is not callable before 3.10).
+
+### Docs and reproducibility
+
+- A reproducible **Tangent 2 writeup** in `paper/` (runnable notebook +
+  `paper/reproduce.py`), a **Colab notebook gallery** landing page, and case
+  studies differentiating messy NumPy simulators (LIBOR Market Model greeks,
+  projectile-with-drag ODE, SIR epidemic calibration).
+- Developer tooling: `make check` / pre-commit hooks for the ruff CI gates.
+
 ## 0.3.0 (2026-09-11)
 
 Everything below shipped since the 0.2.0 release: differentiable ODEs and

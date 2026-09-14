@@ -3,7 +3,7 @@
 # example; JAX and PyTorch are optional and auto-detected (their checks skip
 # cleanly when absent), but installing them reproduces the multi-backend and
 # compile='jax' results too.
-tangent-ad[symbolic]
+tangent-ad[symbolic]>=0.4.0
 
 # Optional, for the full multi-backend / compile='jax' results:
 # jax

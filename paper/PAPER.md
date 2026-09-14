@@ -315,7 +315,7 @@ This document is executable. Two ways to reproduce every result:
 
 - **In your browser:** open `paper/Tangent2.ipynb` in Colab (badge in
   `paper/README.md`) — the first cell installs `tangent-ad`.
-- **From a shell:** `pip install "tangent-ad[symbolic]" && python paper/reproduce.py`
+- **From a shell:** `pip install "tangent-ad[symbolic]>=0.4.0" && python paper/reproduce.py`
   runs and asserts every quantitative claim in this writeup in a few seconds.
 
 ## 8. Conclusion

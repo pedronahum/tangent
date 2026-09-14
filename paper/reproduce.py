@@ -15,7 +15,7 @@
 
 Run it in ~a few seconds:
 
-    pip install "tangent-ad[symbolic]"      # jax / torch are optional (auto-skipped)
+    pip install "tangent-ad[symbolic]>=0.4.0"      # jax / torch are optional (auto-skipped)
     python paper/reproduce.py
 
 Each check prints a line and asserts its result, so a non-zero exit means a

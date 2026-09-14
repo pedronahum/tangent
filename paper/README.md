@@ -18,7 +18,7 @@ The notebook *is* the paper — prose plus runnable cells with real outputs.
 ## Reproduce from a shell (a few seconds)
 
 ```bash
-pip install "tangent-ad[symbolic]"     # JAX / PyTorch are optional, auto-detected
+pip install "tangent-ad[symbolic]>=0.4.0"     # JAX / PyTorch are optional, auto-detected
 python paper/reproduce.py              # runs and asserts every quantitative claim
 ```
 
