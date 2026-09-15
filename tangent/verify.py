@@ -218,7 +218,11 @@ EXEMPT = {
     'list_method_desugar': 'lowers .append/.pop to rebindings; covered by anf',
     'checkpoint_annotation': 'attaches an annotation and unwraps a with-block; no shape',
     'ifexp_desugar': 'forward-only; lowers ternaries to if-statements',
-    'explicit_loop_indexes': 'rewrites active for-loops to range(len()); loop shape not yet formalized',
+    'explicit_loop_indexes': (
+        'rewrites only *active* for-loops to range(len()); inactive loops keep '
+        'their original iterable, so there is no universal post-pass loop shape '
+        'to assert (a range-form invariant would wrongly reject inactive loops)'
+    ),
     'fence': 'pure validation; raises on unsupported constructs, no tree change',
 }
 

@@ -10,6 +10,7 @@ a violation (so the checks are not vacuous).
 
 import os
 
+import gast
 import numpy as np
 import pytest
 
@@ -201,6 +202,59 @@ class TestInvariantsAreNotVacuous:
         verify.check_single_return(node)
         verify.check_no_loop_exits(node)
         verify.check_single_target(node)
+
+
+class TestIRModule:
+    """run_passes returns an explicit IRModule marking the lowered frontend IR."""
+
+    def test_run_passes_returns_ir_module(self):
+        import inspect
+
+        from tangent import ir
+
+        node = quoting.parse_function(indexed_loop)
+        result = passes.run_passes(node, indexed_loop, inspect.getsource(indexed_loop), 'reverse')
+        assert isinstance(result, ir.IRModule)
+        assert isinstance(result.module, gast.Module)
+        assert result.mode == 'reverse'
+        # It records the passes that ran (which carry the invariants).
+        assert {'anf', 'resolve_calls', 'return_desugar'} <= result.satisfied
+
+    def test_function_property_returns_the_lowered_functiondef(self):
+        import inspect
+
+        node = quoting.parse_function(straight_line)
+        ir_mod = passes.run_passes(node, straight_line, inspect.getsource(straight_line), 'reverse')
+        fn = ir_mod.function
+        assert isinstance(fn, gast.FunctionDef)
+
+    def test_verify_re_checks_invariants(self):
+        import inspect
+
+        node = quoting.parse_function(branching)
+        ir_mod = passes.run_passes(node, branching, inspect.getsource(branching), 'reverse')
+        # A well-formed IR re-verifies without raising.
+        assert ir_mod.verify() is ir_mod
+
+    def test_verify_detects_a_corrupted_module(self):
+        import inspect
+
+        from tangent import ir
+        from tangent.verify import IRInvariantError
+
+        node = quoting.parse_function(straight_line)
+        ir_mod = passes.run_passes(node, straight_line, inspect.getsource(straight_line), 'reverse')
+        # Splice a non-ANF assignment in and re-verify: the anf invariant fires.
+        bad = quoting.parse_string('def _(x):\n    y = g(h(x))\n    return y\n').body[0]
+        ir_mod.function.body[:0] = bad.body[:1]
+        with pytest.raises(IRInvariantError):
+            ir_mod.verify()
+
+    def test_rejects_non_module(self):
+        from tangent import ir
+
+        with pytest.raises(TypeError):
+            ir.IRModule(module='not a module', mode='reverse')
 
 
 class TestEveryPassHasAContract:

@@ -198,7 +198,10 @@ def autodiff_ast(
     # reject them up front with a clear error, before any pass sees them.
     node = fence.validate_no_nested_functions(node, source)
 
-    node = passes.run_passes(node, func, source, mode)
+    # run_passes returns an explicit IRModule marking the lowered frontend IR;
+    # the AD transforms below consume the wrapped gast module.
+    ir = passes.run_passes(node, func, source, mode)
+    node = ir.module
     if verbose >= 2:
         print('ANF')
         print(quoting.to_source(node))

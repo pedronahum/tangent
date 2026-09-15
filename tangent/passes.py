@@ -294,15 +294,20 @@ def run_passes(node, func, source, mode, verify=None):
           Defaults to the `TANGENT_VERIFY_IR` environment variable.
 
     Returns:
-      The lowered Module.
+      An `ir.IRModule` wrapping the lowered gast Module: the frontend's output
+      type is explicit, and it records which pass invariants the payload
+      satisfies. The differentiation transforms consume `.module`.
     """
+    from tangent import ir as ir_mod
     from tangent import verify as verify_mod
 
     if verify is None:
         verify = verify_mod.enabled()
     ctx = PassContext(func=func, source=source, mode=mode)
+    ran = []
     for p in get_passes(mode):
         node = p.fn(node, ctx)
+        ran.append(p.name)
         if verify:
             verify_mod.verify_after(p.name, node)
-    return node
+    return ir_mod.IRModule(module=node, mode=mode, satisfied=frozenset(ran))

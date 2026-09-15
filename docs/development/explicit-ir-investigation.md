@@ -245,10 +245,21 @@ green.
   - Always-on in CI: a dedicated `Verify IR invariants` step runs a
     construct-diverse slice with `TANGENT_VERIFY_IR=1`, so a pass that stops
     satisfying its contract fails the build.
-  - **Still to do in Phase 1:** an invariant for `explicit_loop_indexes` (every
-    active loop is `range(len(...))`), and the thin `IRModule` marker type that
-    wraps the gast module plus its invariant level so pass and AD signatures read
-    `IRModule -> IRModule`.
+  - **`IRModule` marker (`tangent/ir.py`).** `passes.run_passes` now returns an
+    `IRModule` wrapping the lowered gast module plus the set of passes whose
+    invariants it satisfies, with a `.function` accessor and a `.verify()`
+    re-check; the AD boundary in `grad_util` consumes `.module`. The frontend's
+    output type is now explicit (`gast -> IRModule`) with the payload staying
+    gast, so the source round-trip and readable-Python codegen are unchanged.
+  - **`explicit_loop_indexes` invariant: investigated, not added.** The pass
+    rewrites only *active* loops to `range(len(...))`; inactive loops keep their
+    original iterable (verified empirically), so a universal range-form
+    invariant would wrongly reject them and activity info is gone after the pass.
+    It stays in `EXEMPT` with that reason recorded.
+  - **Still to do in Phase 1:** extend the `IRModule` type through the AD
+    transforms so their signatures read `IRModule -> IRModule` (it pairs
+    naturally with Phase 3's IR-to-IR core), rather than unwrapping to gast at
+    the boundary.
 
 - **Phase 2 — fold the side-channels into structure.** Give `d[x]` a first-class
   `GradOf` node (retiring `sentinel_rename`), and move the load-bearing
