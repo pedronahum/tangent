@@ -232,13 +232,23 @@ green.
 
 - **Phase 1 — formalize the contract that already exists (cheap, high value).**
   Make `verify.py` always-on in CI and in a debug flag; expand its invariants to
-  cover the passes that currently have none (e.g. after `loop_exit_desugar`: no
-  `Break`/`Continue`; after `return_desugar`: single trailing return; after
-  `explicit_loop_indexes`: every active loop is `range(len(...))`). Introduce a
-  thin `IRModule` marker type that *wraps* the gast module plus its invariant
-  level, so pass and AD signatures read `IRModule -> IRModule` even while the
-  payload is still gast. This buys the documentation, the type-level honesty,
-  and pass-drift protection with almost no risk.
+  cover the passes that currently have none. **Partially shipped (2026-09-15):**
+  - Added invariants: `return_desugar` → single trailing return
+    (`check_single_return`), `loop_exit_desugar` → no `Break`/`Continue`
+    (`check_no_loop_exits`), `chained_assign_desugar` → single assignment target
+    (`check_single_target`). `verify.INVARIANTS` now covers 7 passes.
+  - Exhaustiveness: `verify.EXEMPT` lists every pass with no structural
+    invariant *and a reason*, and `verify.unchecked_passes()` (asserted empty by
+    `tests/test_ir_invariants.py`) guarantees a new pass cannot ship without an
+    IR contract - the direct fix for the "works until two passes disagree"
+    failure mode.
+  - Always-on in CI: a dedicated `Verify IR invariants` step runs a
+    construct-diverse slice with `TANGENT_VERIFY_IR=1`, so a pass that stops
+    satisfying its contract fails the build.
+  - **Still to do in Phase 1:** an invariant for `explicit_loop_indexes` (every
+    active loop is `range(len(...))`), and the thin `IRModule` marker type that
+    wraps the gast module plus its invariant level so pass and AD signatures read
+    `IRModule -> IRModule`.
 
 - **Phase 2 — fold the side-channels into structure.** Give `d[x]` a first-class
   `GradOf` node (retiring `sentinel_rename`), and move the load-bearing

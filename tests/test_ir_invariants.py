@@ -8,7 +8,8 @@ raise IRInvariantError - plus unit tests that each invariant genuinely catches
 a violation (so the checks are not vacuous).
 """
 
-import gast
+import os
+
 import numpy as np
 import pytest
 
@@ -58,6 +59,44 @@ def while_loop(a):
     return a
 
 
+def early_return(x):
+    if np.sum(x) > 0.0:
+        return np.sum(x * x)
+    return -np.sum(x)
+
+
+def return_in_loop(x):
+    s = 0.0
+    for i in range(len(x)):
+        s = s + x[i]
+        if s > 100.0:
+            return s
+    return s
+
+
+def has_break(x):
+    s = 0.0
+    for i in range(len(x)):
+        if x[i] < 0.0:
+            break
+        s = s + x[i]
+    return s
+
+
+def has_continue(x):
+    s = 0.0
+    for i in range(len(x)):
+        if x[i] < 0.0:
+            continue
+        s = s + x[i]
+    return s
+
+
+def chained_assignment(x):
+    a = b = x * 2.0
+    return np.sum(a + b)
+
+
 CORPUS = [
     straight_line,
     indexed_loop,
@@ -65,6 +104,11 @@ CORPUS = [
     branching,
     uses_assigned_lambda,
     while_loop,
+    early_return,
+    return_in_loop,
+    has_break,
+    has_continue,
+    chained_assignment,
 ]
 
 
@@ -120,6 +164,62 @@ class TestInvariantsAreNotVacuous:
         node = quoting.parse_string('def f(x):\n    a = x + x\n    b = a * x\n    return b\n')
         verify.check_anf(node)
 
+    def test_single_return_catches_two_returns(self):
+        node = quoting.parse_string('def f(x):\n    return x\n    return -x\n')
+        with pytest.raises(IRInvariantError, match='exactly one return'):
+            verify.check_single_return(node)
 
+    def test_single_return_catches_non_trailing_return(self):
+        node = quoting.parse_string(
+            'def f(x):\n    if x > 0:\n        return x\n    y = -x\n    return y\n'
+        )
+        # Two returns here (the early one and the trailing one).
+        with pytest.raises(IRInvariantError):
+            verify.check_single_return(node)
+
+    def test_no_loop_exits_catches_break(self):
+        node = quoting.parse_string(
+            'def f(x):\n    for i in range(3):\n        break\n    return x\n'
+        )
+        with pytest.raises(IRInvariantError, match='break/continue'):
+            verify.check_no_loop_exits(node)
+
+    def test_no_loop_exits_catches_continue(self):
+        node = quoting.parse_string(
+            'def f(x):\n    for i in range(3):\n        continue\n    return x\n'
+        )
+        with pytest.raises(IRInvariantError, match='break/continue'):
+            verify.check_no_loop_exits(node)
+
+    def test_single_target_catches_chained_assignment(self):
+        node = quoting.parse_string('def f(x):\n    a = b = x\n    return a\n')
+        with pytest.raises(IRInvariantError, match='single assignment target'):
+            verify.check_single_target(node)
+
+    def test_valid_single_return_and_targets_pass(self):
+        node = quoting.parse_string('def f(x):\n    a = x + x\n    return a\n')
+        verify.check_single_return(node)
+        verify.check_no_loop_exits(node)
+        verify.check_single_target(node)
+
+
+class TestEveryPassHasAContract:
+    def test_no_pass_is_unaccounted_for(self):
+        # Every frontend pass must have a registered invariant or an explicit
+        # exemption; a new pass added without either fails here.
+        unchecked = verify.unchecked_passes()
+        assert unchecked == set(), (
+            'passes with no IR contract (add an invariant to verify.INVARIANTS '
+            'or list them in verify.EXEMPT with a reason): %s' % sorted(unchecked)
+        )
+
+    def test_invariants_and_exemptions_do_not_overlap(self):
+        assert set(verify.INVARIANTS) & set(verify.EXEMPT) == set()
+
+
+@pytest.mark.skipif(
+    os.environ.get('TANGENT_VERIFY_IR', '0') != '0',
+    reason='the CI verification gate sets TANGENT_VERIFY_IR=1; this asserts the default',
+)
 def test_disabled_by_default():
     assert not verify.enabled()  # off unless TANGENT_VERIFY_IR is set

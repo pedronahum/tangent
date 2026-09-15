@@ -53,6 +53,20 @@ jobs:
       # optional-backend code paths must degrade to skips, not failures.
       - name: Run test suite
         run: python -m pytest tests -q
+      # Always-on IR-invariant gate: lower a construct-diverse slice with
+      # TANGENT_VERIFY_IR=1 so any frontend pass that stops satisfying its
+      # documented contract (tangent/verify.py) fails the build here rather
+      # than causing a subtle failure downstream. See
+      # docs/development/explicit-ir-investigation.md.
+      - name: Verify IR invariants
+        env:
+          TANGENT_VERIFY_IR: '1'
+        run: >
+          python -m pytest -q
+          tests/test_ir_invariants.py
+          tests/test_break_continue.py
+          tests/test_list_building.py
+          tests/test_comprehensions.py
 
   test-full:
     # Exercises the TensorFlow, JAX, PyTorch, Keras, tinygrad, SymPy and
